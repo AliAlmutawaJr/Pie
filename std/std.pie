@@ -3,11 +3,25 @@ space std {
     print = __builtin_print;
 
     infix + = (a, b) => __builtin_add(a, b);
+    infix * = (a, b) => __builtin_mul(a, b);
+    infix - = (a, b) => __builtin_sub(a, b);
+    infix / = (a, b) => __builtin_div(a, b);
+    infix % = (a, b) => __builtin_mod(a, b);
+
     infix + = (a: String, b: String) => __builtin_concat(a, b);
 
-    infix - = (a, b) => __builtin_sub(a, b);
 
-    prefix(!) - = (x) => __builtin_neg(x);
+    prefix(!) -   = (x) => __builtin_neg(x);
+    prefix(!) not = (x) => __builtin_not(x);
 
+    infix(&&) and = (x, y) => __builtin_and(x, y);
+    infix(||) or  = (x, y) => __builtin_or (x, y);
+
+    infix == = (a, b) => __builtin_eq(a, b);
+    infix != = (a, b) => __builtin_not(__builtin_eq(a, b));
+    infix <  = (a, b) => __builtin_lt(a, b);
+
+
+    mixfix([]) : [ : ] = (cont, at) => __builtin_get(cont, at);
 };
 

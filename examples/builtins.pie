@@ -2,50 +2,50 @@
 .: Note: Pie doesn't support negative number literals; use sub(0, n)
 
 .: Arithmetic
-__builtin_print(__builtin_concat("add(10, 20) = ", __builtin_to_string(__builtin_add(10, 20))));
-__builtin_print(__builtin_concat("sub(50, 13) = ", __builtin_to_string(__builtin_sub(50, 13))));
-__builtin_print(__builtin_concat("mul(6, 7) = ", __builtin_to_string(__builtin_mul(6, 7))));
-__builtin_print(__builtin_concat("div(42, 6) = ", __builtin_to_string(__builtin_div(42, 6))));
-__builtin_print(__builtin_concat("mod(17, 5) = ", __builtin_to_string(__builtin_mod(17, 5))));
-__builtin_print(__builtin_concat("pow(2, 10) = ", __builtin_to_string(__builtin_pow(2, 10))));
+__builtin_print("add(10, 20) = ", __builtin_add(10, 20));
+__builtin_print("sub(50, 13) = ", __builtin_sub(50, 13));
+__builtin_print("mul(6, 7) = ", __builtin_mul(6, 7));
+__builtin_print("div(42, 6) = ", __builtin_div(42, 6));
+__builtin_print("mod(17, 5) = ", __builtin_mod(17, 5));
+__builtin_print("pow(2, 10) = ", __builtin_pow(2, 10));
 negFive = __builtin_sub(0, 5);
-__builtin_print(__builtin_concat("neg of -5 = ", __builtin_to_string(__builtin_neg(negFive))));
+__builtin_print("neg of -5 = ", __builtin_neg(negFive));
 
 .: Comparisons
-__builtin_print(__builtin_concat("eq(5, 5) = ", __builtin_to_string(__builtin_eq(5, 5))));
-__builtin_print(__builtin_concat("eq(5, 6) = ", __builtin_to_string(__builtin_eq(5, 6))));
-__builtin_print(__builtin_concat("gt(10, 5) = ", __builtin_to_string(__builtin_gt(10, 5))));
-__builtin_print(__builtin_concat("geq(5, 5) = ", __builtin_to_string(__builtin_geq(5, 5))));
-__builtin_print(__builtin_concat("lt(3, 7) = ", __builtin_to_string(__builtin_lt(3, 7))));
-__builtin_print(__builtin_concat("leq(7, 7) = ", __builtin_to_string(__builtin_leq(7, 7))));
+__builtin_print("eq(5, 5) = ", __builtin_eq(5, 5));
+__builtin_print("eq(5, 6) = ", __builtin_eq(5, 6));
+__builtin_print("gt(10, 5) = ", __builtin_gt(10, 5));
+__builtin_print("geq(5, 5) = ", __builtin_geq(5, 5));
+__builtin_print("lt(3, 7) = ", __builtin_lt(3, 7));
+__builtin_print("leq(7, 7) = ", __builtin_leq(7, 7));
 
 .: Logical
-__builtin_print(__builtin_concat("and(true, false) = ", __builtin_to_string(__builtin_and(true, false))));
-__builtin_print(__builtin_concat("or(true, false) = ", __builtin_to_string(__builtin_or(true, false))));
-__builtin_print(__builtin_concat("not(true) = ", __builtin_to_string(__builtin_not(true))));
-__builtin_print(__builtin_concat("not(false) = ", __builtin_to_string(__builtin_not(false))));
+__builtin_print("and(true, false) = ", __builtin_and(true, false));
+__builtin_print("or(true, false) = ", __builtin_or(true, false));
+__builtin_print("not(true) = ", __builtin_not(true));
+__builtin_print("not(false) = ", __builtin_not(false));
 
 .: Conditional
 result = __builtin_conditional(true, "yes", "no");
-__builtin_print(__builtin_concat("conditional(true) = ", result));
+__builtin_print("conditional(true) = ", result);
 result = __builtin_conditional(false, "yes", "no");
-__builtin_print(__builtin_concat("conditional(false) = ", result));
+__builtin_print("conditional(false) = ", result);
 
 .: Type checking
-__builtin_print(__builtin_concat("type_of(42) = ", __builtin_to_string(__builtin_type_of(42))));
-__builtin_print(__builtin_concat("type_of(true) = ", __builtin_to_string(__builtin_type_of(true))));
+__builtin_print("type_of(42) = ", __builtin_type_of(42));
+__builtin_print("type_of(true) = ", __builtin_type_of(true));
 
 .: Conversions
-__builtin_print(__builtin_concat("to_int(3.14) = ", __builtin_to_string(__builtin_to_int(3.14))));
-__builtin_print(__builtin_concat("to_double(42) = ", __builtin_to_string(__builtin_to_double(42))));
-__builtin_print(__builtin_concat("to_string(42) = ", __builtin_to_string(42)));
+__builtin_print("to_int(3.14) = ", __builtin_to_int(3.14));
+__builtin_print("to_double(42) = ", __builtin_to_double(42));
+__builtin_print("to_string(42) = ", 42);
 
 .: String operations
-__builtin_print(__builtin_concat("concat = ", __builtin_concat("Hello", " ", "World", "!")));
-__builtin_print(__builtin_concat("len(hello) = ", __builtin_to_string(__builtin_len("hello"))));
+__builtin_print("concat = ", "Hello", " ", "World", "!");
+__builtin_print("len(hello) = ", __builtin_len("hello"));
 
 .: String slicing (str, start, end, stride)
 x = __builtin_str_slice("hello world", 0, 5, 1);
-__builtin_print(__builtin_concat("slice(0,5) = ", x));
+__builtin_print("slice(0,5) = ", x);
 x = __builtin_str_slice("hello world", 6, 11, 1);
-__builtin_print(__builtin_concat("slice(6,11) = ", x));
+__builtin_print("slice(6,11) = ", x);

@@ -3319,7 +3319,11 @@ public:
 
 
             //* File IO
-            // "read_whole", "read_line", "read_lines",
+            "open_file",
+            "read_word",
+            "read_line",
+            "read_file",
+            "close_file",
 
 
             //* FFI shit
@@ -3498,18 +3502,18 @@ public:
         }
 
 
-        if (name == "type_of"  ) return execute<1>(stdx::get<S<"type_of"   >>(functions).value, {value1}, this);
-        if (name == "len"      ) return execute<1>(stdx::get<S<"len"       >>(functions).value, {value1}, this);
-        if (name == "eval"     ) return execute<1>(stdx::get<S<"eval"      >>(functions).value, {value1}, this);
-        if (name == "abs"      ) return execute<1>(stdx::get<S<"abs"       >>(functions).value, {value1}, this);
-        if (name == "neg"      ) return execute<1>(stdx::get<S<"neg"       >>(functions).value, {value1}, this);
-        if (name == "not"      ) return execute<1>(stdx::get<S<"not"       >>(functions).value, {value1}, this);
-        if (name == "pop"      ) return execute<1>(stdx::get<S<"pop"       >>(functions).value, {value1}, this);
+        if (name == "type_of"  ) return execute<1>(stdx::get<S<"type_of"  >>(functions).value, {value1}, this);
+        if (name == "len"      ) return execute<1>(stdx::get<S<"len"      >>(functions).value, {value1}, this);
+        if (name == "eval"     ) return execute<1>(stdx::get<S<"eval"     >>(functions).value, {value1}, this);
+        if (name == "abs"      ) return execute<1>(stdx::get<S<"abs"      >>(functions).value, {value1}, this);
+        if (name == "neg"      ) return execute<1>(stdx::get<S<"neg"      >>(functions).value, {value1}, this);
+        if (name == "not"      ) return execute<1>(stdx::get<S<"not"      >>(functions).value, {value1}, this);
+        if (name == "pop"      ) return execute<1>(stdx::get<S<"pop"      >>(functions).value, {value1}, this);
         if (name == "pop_front") return execute<1>(stdx::get<S<"pop_front">>(functions).value, {value1}, this);
-        if (name == "to_int"   ) return execute<1>(stdx::get<S<"to_int"    >>(functions).value, {value1}, this);
-        if (name == "to_double") return execute<1>(stdx::get<S<"to_double" >>(functions).value, {value1}, this);
-        if (name == "to_string") return execute<1>(stdx::get<S<"to_string" >>(functions).value, {value1}, this);
-        if (name == "dlopen"   ) return execute<1>(stdx::get<S<"dlopen"    >>(functions).value, {value1}, this);
+        if (name == "to_int"   ) return execute<1>(stdx::get<S<"to_int"   >>(functions).value, {value1}, this);
+        if (name == "to_double") return execute<1>(stdx::get<S<"to_double">>(functions).value, {value1}, this);
+        if (name == "to_string") return execute<1>(stdx::get<S<"to_string">>(functions).value, {value1}, this);
+        if (name == "dlopen"   ) return execute<1>(stdx::get<S<"dlopen"   >>(functions).value, {value1}, this);
 
         // all the rest of those funcs expect 2 arguments
 

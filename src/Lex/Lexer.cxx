@@ -173,7 +173,7 @@ bool validNameChar(const char c) noexcept {
                     const auto beginning = index++;
                     for (; src.at(index + 1) == '='; ++index);
 
-                    lines.back().push_back({NAME, src.substr(beginning, index - beginning)});
+                    lines.back().push_back({NAME, src.substr(beginning, index - beginning + 1)});
                 }
                 else
                     lines.back().push_back({ASSIGN, {src[index]}});
@@ -236,14 +236,15 @@ bool validNameChar(const char c) noexcept {
                     if (c == '\\') {
                         switch (src[++index]) {
                             case '\\': str.push_back('\\'); break;
-                            case '"': str.push_back('"'); break;
-                            case 'n': str.push_back('\n'); break;
-                            case 't': str.push_back('\t'); break;
-                            case 'v': str.push_back('\v'); break;
-                            case 'b': str.push_back('\b'); break;
-                            case 'r': str.push_back('\r'); break;
-                            case 'f': str.push_back('\f'); break;
-                            case 'a': str.push_back('\a'); break;
+                            case '"' : str.push_back('"' ); break;
+                            case 'n' : str.push_back('\n'); break;
+                            case 't' : str.push_back('\t'); break;
+                            case 'v' : str.push_back('\v'); break;
+                            case 'b' : str.push_back('\b'); break;
+                            case 'r' : str.push_back('\r'); break;
+                            case 'f' : str.push_back('\f'); break;
+                            case 'a' : str.push_back('\a'); break;
+
                             default:
                                 util::error<except::LexerError>(std::string{"Invalid escape character: \\"} + src[index]);
                             // case '\0': str.push_back('\0');

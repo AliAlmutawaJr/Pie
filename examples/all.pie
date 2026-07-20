@@ -4,25 +4,25 @@
 __builtin_print("=== Basic Test ===");
 x = 42;
 y = x;
-__builtin_print(__builtin_concat("x = ", __builtin_to_string(x)));
-__builtin_print(__builtin_concat("y = ", __builtin_to_string(y)));
+__builtin_print("x =", x);
+__builtin_print("y =", y);
 
 __builtin_print("=== Function ===");
 add = (a, b) => __builtin_add(a, b);
-__builtin_print(__builtin_concat("add(3, 4) = ", __builtin_to_string(add(3, 4))));
+__builtin_print("add(3, 4) =", add(3, 4));
 
 __builtin_print("=== Class ===");
 Point = class { x = 0; y = 0; };
 p = Point(3, 4);
-__builtin_print(__builtin_concat("p.x = ", __builtin_to_string(p.x)));
-__builtin_print(__builtin_concat("p.y = ", __builtin_to_string(p.y)));
+__builtin_print("p.x =", p.x);
+__builtin_print("p.y =", p.y);
 
 __builtin_print("=== Loop ===");
-loop 3 => i __builtin_print(__builtin_concat("i = ", __builtin_to_string(i)));
+loop 3 => i __builtin_print("i =", i);
 
 __builtin_print("=== List ===");
 lst = {1, 2, 3};
-__builtin_print(__builtin_concat("lst[0] = ", __builtin_to_string(__builtin_get(lst, 0))));
+__builtin_print("lst[0] =", __builtin_get(lst, 0));
 
 __builtin_print("=== Match ===");
 match 42 {

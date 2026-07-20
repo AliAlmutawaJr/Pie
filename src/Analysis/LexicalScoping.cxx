@@ -67,12 +67,14 @@ LexicalScoping::LexicalScoping(const size_t index) : variable_index(index) {
         "__builtin_set",
         "__builtin_conditional",
         "__builtin_str_slice",
-            "__builtin_str_split",
+        "__builtin_str_split",
+
         // //* File IO
-        // "__builtin_read_file",
-        // "__builtin_read_whole",
-        // "__builtin_read_line",
-        // "__builtin_read_lines"
+        "__builtin_open_file",
+        "__builtin_read_word",
+        "__builtin_read_line",
+        "__builtin_read_file",
+        "__builtin_close_file",
 
         //* FFI shit
         "__builtin_dlopen"          ,

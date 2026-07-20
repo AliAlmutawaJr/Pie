@@ -1,5 +1,6 @@
 #pragma once
 
+#include <fstream>
 #include <cmath>
 
 #include <dlfcn.h>
@@ -170,6 +171,21 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             TypeList<std::string, std::string>
         >
     >{},
+
+    
+    // MapEntry<
+    //     S<"open_file">,
+    //     Func<"open_file",
+    //         decltype([](const auto& fname, const auto& mode, const auto&) -> BigInt {
+    //             // if (mode)
+    //             return 0;
+    //         }),
+    //         TypeList<std::string, std::string>
+    //     >
+    // >{},
+
+
+
 
     MapEntry<
         S<"eval">,

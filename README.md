@@ -802,10 +802,26 @@ make
 
 #### in order of priority
 
-- [ ] Importing Operators
-- [ ] Fix variadic expansion
+
 - [ ] File IO
+- [ ] Zen of Pie (with the pie ascii art):
+<!-- 
+           .-.           
+   .-..   ( __)   .--.   
+  /    \  (''")  /    \  
+ ' .-,  ;  | |  |  .-. ; 
+ | |  . |  | |  |  | | | 
+ | |  | |  | |  |  |/  | 
+ | |  | |  | |  |  ' _.' 
+ | |  ' |  | |  |  .'.-. 
+ | `-'  '  | |  '  `-' / 
+ | \__.'  (___)  `.__.'  
+ | |                     
+(___)                    
+ -->
 - [ ] Cascade operator `..`
+- [ ] Fix variadic expansion
+- [ ] Breaking Out of Nested Loops
 - [ ] Use Big Int instead of `int64_t`
 - [ ] Add default values to function parameters
 - [ ] Make `=` and `=>` overloadable
@@ -820,6 +836,7 @@ make
 ---
 
 ### Done
+- [x] Importing Operators
 - [x] Compile to WASM & a web interface (YAAAY)
 - [x] Remove preprocessor
 - [x] Add `Syntax` literals instead of relying on receiver's type
