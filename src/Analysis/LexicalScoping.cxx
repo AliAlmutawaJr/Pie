@@ -94,7 +94,10 @@ LexicalScoping::LexicalScoping(const size_t index) : variable_index(index) {
         "__builtin_ffi_type_sint64" ,
         "__builtin_ffi_type_struct" ,
         "__builtin_ffi_type_pointer",
+        "__builtin_ffi_type_cstring",
         "__builtin_ffi_type_complex",
+
+        "__builtin_ptr_to_string",
     };
 
 

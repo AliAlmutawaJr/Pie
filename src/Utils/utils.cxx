@@ -51,6 +51,9 @@ std::filesystem::path getPiePath() {
         return std::filesystem::path(buffer).parent_path();
     }
 
+#else
+// `-path` not supported yet!
+#error "Unsupported Platform. Couldn't find executable's path!\nPass it manually by providing -path \"path/to/Pie\""
 #endif
 
     error();

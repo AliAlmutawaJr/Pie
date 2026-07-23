@@ -803,6 +803,7 @@ make
 #### in order of priority
 
 
+- [ ] Capture Environment on Closure Creation
 - [ ] File IO
 - [ ] Zen of Pie (with the pie ascii art):
 <!-- 

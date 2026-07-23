@@ -13,6 +13,11 @@
 #include "../Utils/Exceptions.hxx"
 
 
+#ifndef FFI_TYPE_CSTRING 
+#define FFI_TYPE_CSTRING 100
+#endif
+
+
 inline namespace pie {
 
 
@@ -172,7 +177,6 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         >
     >{},
 
-    
     // MapEntry<
     //     S<"open_file">,
     //     Func<"open_file",
@@ -490,7 +494,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_float">,
-        Func<"ffi_type_void",
+        Func<"ffi_type_float",
             decltype([](const auto&) { return FFI_TYPE_FLOAT; }),
             void
         >
@@ -498,7 +502,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_double">,
-        Func<"ffi_type_void",
+        Func<"ffi_type_double",
             decltype([](const auto&) { return FFI_TYPE_DOUBLE; }),
             void
         >
@@ -506,7 +510,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_long_double">,
-        Func<"ffi_type_void",
+        Func<"ffi_type_long_double",
             decltype([](const auto&) { return FFI_TYPE_LONGDOUBLE; }),
             void
         >
@@ -514,7 +518,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_uint8">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_uint8",
             decltype([](const auto&) { return FFI_TYPE_UINT8; }),
             void
         >
@@ -522,7 +526,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_sint8">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_sint8",
             decltype([](const auto&) { return FFI_TYPE_SINT8; }),
             void
         >
@@ -530,7 +534,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_uint16">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_uint16",
             decltype([](const auto&) { return FFI_TYPE_UINT16; }),
             void
         >
@@ -538,7 +542,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_sint16">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_sint16",
             decltype([](const auto&) { return FFI_TYPE_SINT16; }),
             void
         >
@@ -546,7 +550,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_uint32">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_uint32",
             decltype([](const auto&) { return FFI_TYPE_UINT32; }),
             void
         >
@@ -554,7 +558,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_sint32">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_sint32",
             decltype([](const auto&) { return FFI_TYPE_SINT32; }),
             void
         >
@@ -562,7 +566,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_uint64">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_uint64",
             decltype([](const auto&) { return FFI_TYPE_UINT64; }),
             void
         >
@@ -570,7 +574,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_sint64">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_sint64",
             decltype([](const auto&) { return FFI_TYPE_SINT64; }),
             void
         >
@@ -578,7 +582,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_struct">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_struct",
             decltype([](const auto&) { return FFI_TYPE_STRUCT; }),
             void
         >
@@ -586,17 +590,40 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_pointer">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_pointer",
             decltype([](const auto&) { return FFI_TYPE_POINTER; }),
             void
         >
     >{},
 
     MapEntry<
+        S<"ffi_type_cstring">,
+        Func<"ffi_type_cstring",
+            // any arbitrary sentinel value that is different from any FFI_TYPE_*
+            decltype([](const auto&) { return FFI_TYPE_CSTRING; }),
+            void
+        >
+    >{},
+
+    MapEntry<
         S<"ffi_type_complex">,
-        Func<"ffi_type_int",
+        Func<"ffi_type_complex",
             decltype([](const auto&) { return FFI_TYPE_COMPLEX; }),
             void
+        >
+    >{},
+
+    // Pointers are just addresses jammed into a BigInt in Pie. A C function
+    // that hands back a `const char*` (e.g. raylib's TextFormat) returns
+    // that raw address; this reads the NUL-terminated string living there.
+    MapEntry<
+        S<"ptr_to_string">,
+        Func<"ptr_to_string",
+            decltype([](const auto& ptr, const auto&) -> std::string {
+                if (ptr == 0) util::error("`ptr_to_string` received a null pointer!");
+                return std::string{reinterpret_cast<const char*>(ptr)};
+            }),
+            TypeList<BigInt>
         >
     >{}
 

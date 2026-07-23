@@ -167,8 +167,10 @@ public:
             case STRING: return std::make_shared<expr::String>(std::move(token).text);
 
             case NAME:
+                if (prefixOpsContain(token.text)) return parsePrefixOperator(std::move(token));
+
                 if constexpr (not PARSE_TYPE) return std::make_shared<expr::Name>(std::move(token).text);
-                return prefixName(std::move(token));
+                return name(std::move(token));
 
             case CLASS: return klass();
             case UNION: return onion();
@@ -1309,11 +1311,7 @@ public:
     }
 
 
-    expr::ExprPtr prefixName(Token token) {
-        // if (opsContain(token.text)) return parseOperator(std::move(token));
-        if (prefixOpsContain(token.text)) return parsePrefixOperator(std::move(token));
-
-
+    expr::ExprPtr name(Token token) {
         if (match(TokenKind::COLON)){ // exprs preceeded by `:` are parsed as type
             // consume(/* COLON */);
             auto type = parseType();

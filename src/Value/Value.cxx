@@ -4,35 +4,12 @@
 
 
 
-
 inline namespace pie {
 namespace value {
 
 struct Members;
 using Object = std::pair<type::TypePtr, std::shared_ptr<Members>>;
 
-// * Struct defined in Declarations
-// using Value = std::variant<
-//     ssize_t,
-//     double,
-//     bool,
-//     std::string,
-//     expr::Closure,
-//     type::TypePtr,
-//     NameSpace,
-//     Object,
-//     expr::Node,
-//     PackList,
-//     ListValue,
-//     MapValue
-// >;
-}
-}
-
-
-inline namespace pie {
-
-namespace value {
 
 std::string stringify(const Value& value, const size_t indent) {
     std::string s;
@@ -138,10 +115,6 @@ std::string stringify(const Value& value, const size_t indent) {
         s += '}';
     }
 
-    // else if (std::holds_alternative<Pointer>(value)) {
-    //     s = std::format("{}", get<Pointer>(value));
-    // }
-
 
     else util::error("Type not found! Index: " + std::to_string(value.index()));
 
@@ -235,10 +208,6 @@ inline std::ostream& operator<<(std::ostream& os, const Environment& env) {
 
     if (std::holds_alternative<MapValue>(lhs) and std::holds_alternative<MapValue>(rhs))
         return get<MapValue>(lhs).items->map == get<MapValue>(rhs).items->map;
-
-
-    // if (std::holds_alternative<Pointer>(lhs) and std::holds_alternative<Pointer>(rhs))
-    //     return get<Pointer>(lhs) == get<Pointer>(rhs);
 
 
     // error();

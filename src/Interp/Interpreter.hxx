@@ -866,14 +866,23 @@ public:
         if (const auto& var = getVar(cls->ID); var) return var->first;
 
 
+        value::Env captured;
+        for (const auto& e : env) {
+            for (const auto& [key, value] : e.env) captured.env[key] = value;
+            for (const auto& [key, value] : e.op_env) captured.op_env[key] = value;
+            for (const auto& [key, value] : e.prefix_op_env) captured.prefix_op_env[key] = value;
+        }
+
         return // getting lispy :sob: fuck this memory ass shit
             std::make_shared<type::LiteralType>(
                 std::make_shared<value::ClassValue>(
                     std::make_shared<value::Fields>(
                         cls->fields
-                    )
+                    ),
+                    std::move(captured)
                 )
             );
+
 
         // std::vector<std::tuple<expr::Name, type::TypePtr, value::ValuePtr>> members;
 
@@ -3079,9 +3088,10 @@ public:
             std::vector<std::tuple<expr::Name, type::TypePtr, value::ValuePtr>>() // reserve fields.size() elements
         )};
 
+
         // I woulda used a range for-loop but I need `arg` to be a reference and `value` cannot be a regular ref
         // const auto& [arg, value] : std::views::zip(call->args, obj->members)
-
+        ScopeGuard sg{this, cls->env.env};
         size_t field_idx{};
         for (const auto& arg : call->args) {
 
@@ -3335,6 +3345,7 @@ public:
             "ffi_type_int"    ,
             "ffi_type_float"  ,
             "ffi_type_double" ,
+            "ffi_type_long_double",
             "ffi_type_uint8"  ,
             "ffi_type_sint8"  ,
             "ffi_type_uint16" ,
@@ -3345,7 +3356,9 @@ public:
             "ffi_type_sint64" ,
             "ffi_type_struct" ,
             "ffi_type_pointer",
+            "ffi_type_cstring",
             "ffi_type_complex",
+            "ptr_to_string",
         })
             if (make_builtin(builtin) == func) return true;
 
@@ -3377,6 +3390,7 @@ public:
             "ffi_type_int"sv    ,
             "ffi_type_float"sv  ,
             "ffi_type_double"sv ,
+            "ffi_type_long_double"sv,
             "ffi_type_uint8"sv  ,
             "ffi_type_sint8"sv  ,
             "ffi_type_uint16"sv ,
@@ -3387,6 +3401,7 @@ public:
             "ffi_type_sint64"sv ,
             "ffi_type_struct"sv ,
             "ffi_type_pointer"sv,
+            "ffi_type_cstring"sv,
             "ffi_type_complex"sv,
         };
 
@@ -3396,9 +3411,11 @@ public:
             if (name == "input_int"       ) return execute<0>(stdx::get<S<"input_int"       >>(functions).value, {}, this);
             if (name == "ffi_type_int"    ) return execute<0>(stdx::get<S<"ffi_type_int"    >>(functions).value, {}, this);
             if (name == "ffi_type_pointer") return execute<0>(stdx::get<S<"ffi_type_pointer">>(functions).value, {}, this);
+            if (name == "ffi_type_cstring") return execute<0>(stdx::get<S<"ffi_type_cstring">>(functions).value, {}, this);
             if (name == "ffi_type_void"   ) return execute<0>(stdx::get<S<"ffi_type_void"   >>(functions).value, {}, this);
             if (name == "ffi_type_float"  ) return execute<0>(stdx::get<S<"ffi_type_float"  >>(functions).value, {}, this);
             if (name == "ffi_type_double" ) return execute<0>(stdx::get<S<"ffi_type_double" >>(functions).value, {}, this);
+            if (name == "ffi_type_long_double") return execute<0>(stdx::get<S<"ffi_type_long_double">>(functions).value, {}, this);
             if (name == "ffi_type_uint8"  ) return execute<0>(stdx::get<S<"ffi_type_uint8"  >>(functions).value, {}, this);
             if (name == "ffi_type_sint8"  ) return execute<0>(stdx::get<S<"ffi_type_sint8"  >>(functions).value, {}, this);
             if (name == "ffi_type_uint16" ) return execute<0>(stdx::get<S<"ffi_type_uint16" >>(functions).value, {}, this);
@@ -3483,6 +3500,7 @@ public:
             "to_double",
             "to_string",
             "dlopen"   ,
+            "ptr_to_string",
         };
 
         if (std::ranges::find(unary_funcs, name) != unary_funcs.end()) arity_check(1); // just for now..
@@ -3502,18 +3520,19 @@ public:
         }
 
 
-        if (name == "type_of"  ) return execute<1>(stdx::get<S<"type_of"  >>(functions).value, {value1}, this);
-        if (name == "len"      ) return execute<1>(stdx::get<S<"len"      >>(functions).value, {value1}, this);
-        if (name == "eval"     ) return execute<1>(stdx::get<S<"eval"     >>(functions).value, {value1}, this);
-        if (name == "abs"      ) return execute<1>(stdx::get<S<"abs"      >>(functions).value, {value1}, this);
-        if (name == "neg"      ) return execute<1>(stdx::get<S<"neg"      >>(functions).value, {value1}, this);
-        if (name == "not"      ) return execute<1>(stdx::get<S<"not"      >>(functions).value, {value1}, this);
-        if (name == "pop"      ) return execute<1>(stdx::get<S<"pop"      >>(functions).value, {value1}, this);
-        if (name == "pop_front") return execute<1>(stdx::get<S<"pop_front">>(functions).value, {value1}, this);
-        if (name == "to_int"   ) return execute<1>(stdx::get<S<"to_int"   >>(functions).value, {value1}, this);
-        if (name == "to_double") return execute<1>(stdx::get<S<"to_double">>(functions).value, {value1}, this);
-        if (name == "to_string") return execute<1>(stdx::get<S<"to_string">>(functions).value, {value1}, this);
-        if (name == "dlopen"   ) return execute<1>(stdx::get<S<"dlopen"   >>(functions).value, {value1}, this);
+        if (name == "type_of"      ) return execute<1>(stdx::get<S<"type_of"      >>(functions).value, {value1}, this);
+        if (name == "len"          ) return execute<1>(stdx::get<S<"len"          >>(functions).value, {value1}, this);
+        if (name == "eval"         ) return execute<1>(stdx::get<S<"eval"         >>(functions).value, {value1}, this);
+        if (name == "abs"          ) return execute<1>(stdx::get<S<"abs"          >>(functions).value, {value1}, this);
+        if (name == "neg"          ) return execute<1>(stdx::get<S<"neg"          >>(functions).value, {value1}, this);
+        if (name == "not"          ) return execute<1>(stdx::get<S<"not"          >>(functions).value, {value1}, this);
+        if (name == "pop"          ) return execute<1>(stdx::get<S<"pop"          >>(functions).value, {value1}, this);
+        if (name == "pop_front"    ) return execute<1>(stdx::get<S<"pop_front"    >>(functions).value, {value1}, this);
+        if (name == "to_int"       ) return execute<1>(stdx::get<S<"to_int"       >>(functions).value, {value1}, this);
+        if (name == "to_double"    ) return execute<1>(stdx::get<S<"to_double"    >>(functions).value, {value1}, this);
+        if (name == "to_string"    ) return execute<1>(stdx::get<S<"to_string"    >>(functions).value, {value1}, this);
+        if (name == "dlopen"       ) return execute<1>(stdx::get<S<"dlopen"       >>(functions).value, {value1}, this);
+        if (name == "ptr_to_string") return execute<1>(stdx::get<S<"ptr_to_string">>(functions).value, {value1}, this);
 
         // all the rest of those funcs expect 2 arguments
 
@@ -3720,27 +3739,40 @@ public:
         const auto sym = reinterpret_cast<void*>(get<BigInt>(std::visit(*this, args[0]->variant())));
         const auto pie_cif = get<value::Object>(std::visit(*this, args[1]->variant()));
 
-        ffi_type* return_type;
-        BigInt r_type;
-
         const auto reserve_size = args_size - 2;
+
         std::vector<ffi_type*> param_types;
         param_types.reserve(reserve_size);
-
-        std::vector<value::Value> values;
-        values.reserve(reserve_size);
-
-        std::deque<void*> pointer_values;
 
         std::vector<void*> values_pointers;
         values_pointers.reserve(reserve_size);
 
-        std::vector<std::vector<void*>> struct_values;
-        struct_values.reserve(reserve_size);
-
+        // to keep the bytes "alive" for the duration of the call
         std::deque<std::vector<std::byte>> payloads;
 
-        std::vector<std::unique_ptr<ffi::FFI>> structs_ffis;
+
+        // Owns the ffi_type shape (for structs, the heap-allocated ffi_type tree)
+        // for every argument for the lifetime of the call
+        std::vector<std::unique_ptr<ffi::FFI>> arg_ffis;
+
+
+        // Pie has no pointer type: a `T*` parameter that receives an Object
+        // (or a List of Objects) is understood as "pass this struct (or
+        // contiguous array of structs) by reference" - the interpreter
+        // builds the C-side buffer(s), and after the call writes any
+        // changes the C function made back into the same Pie object(s).
+        struct PointerWriteback {
+            std::byte* buffer;
+            ffi::FFI* elem_shape;
+            value::Value target; // Object, or ListValue - both carry a shared_ptr, so mutating through them reaches the caller's original value
+            bool is_array;
+            size_t count;
+        };
+        std::vector<PointerWriteback> writebacks;
+
+        // `__return_type` is either a plain C type id (BigInt) for scalars,
+        // or a Pie Object "template" describing a struct return value.
+        value::Value return_type_desc;
 
         // look for `param_types` and `return_types`
         bool found_params{}, found_return{};
@@ -3792,154 +3824,168 @@ public:
 
                     const auto type_id = get<BigInt>(type);
 
-                    if (type_id < 0 or type_id > FFI_TYPE_LAST)
+                    if (not (type_id >= 0 or type_id <= FFI_TYPE_LAST) and type_id != FFI_TYPE_CSTRING)
                         util::error("Invalid C Type: " + std::to_string(type_id));
 
+                    // Pointer-to-struct(s): inferred from the shape of the
+                    // Pie value actually passed, not from anything declared
+                    // in the CIF. An Object means "pointer to one struct";
+                    // a List means "pointer to a contiguous array of
+                    // structs", sized and shaped by its elements. Either
+                    // way the caller just passes the object/list like any
+                    // other argument.
+                    if (type_id == FFI_TYPE_POINTER and
+                        (std::holds_alternative<value::Object>(value) or std::holds_alternative<value::ListValue>(value)))
+                    {
+                        const bool is_array = std::holds_alternative<value::ListValue>(value);
+                        size_t count = 1;
+                        const value::Value* template_elem = &value;
 
-                    switch (type_id) {
-                        case FFI_TYPE_SINT32:
-                        case FFI_TYPE_INT   : {
-                            if (not std::holds_alternative<BigInt>(value)) util::error();
+                        if (is_array) {
+                            const auto& arr_list = get<value::ListValue>(value);
+                            count = arr_list.elts->values.size();
 
-                            param_types.push_back(&ffi_type_sint32);
-                            values.push_back(std::move(value));
-                            values_pointers.push_back(&get<BigInt>(values.back()));
+                            if (count == 0) {
+                                // nothing to point at - pass a NULL pointer, nothing to write back
+                                payloads.emplace_back(sizeof(void*));
+                                std::memset(payloads.back().data(), 0, sizeof(void*));
 
-                        } break;
-
-                        case FFI_TYPE_UINT8   : {
-                            param_types.push_back(&ffi_type_uint8);
-                            values.push_back(std::move(value));
-
-                            //! potential bug!
-                            if (std::holds_alternative<BigInt>(values.back())) {
-                                values_pointers.push_back(&get<BigInt>(values.back()));
+                                param_types.push_back(&ffi_type_pointer);
+                                values_pointers.push_back(payloads.back().data());
+                                continue;
                             }
-                            else if (std::holds_alternative<bool>(values.back())) {
-                                values_pointers.push_back(&get<bool>(values.back()));
-                            }
-                            else util::error();
 
-                        } break;
-
-                        case FFI_TYPE_POINTER: {
-                            param_types.push_back(&ffi_type_pointer);
-                            values.push_back(std::move(value));
-                            if (not std::holds_alternative<std::string>(values.back())) util::error();
-
-                            pointer_values .push_back(get<std::string>(values.back()).data());
-                            values_pointers.push_back(&pointer_values.back());
-
-                        } break;
-
-                        case FFI_TYPE_STRUCT: {
-
-                            auto ffi = ffi::prepareFFI(std::move(value), type_id);
-                            param_types.push_back(ffi->type);
-
-                            payloads.emplace_back(ffi->type->size);
-
-                            auto payload = payloads.back().data();
-
-                            ffi::pack(payload, ffi.get());
-
-                            // pointer_values.push_back();
-                            values_pointers.push_back(payload);
-                            structs_ffis.push_back(std::move(ffi));
-
-                        } break;
-
-                        default:
-                            util::error();
+                            template_elem = &arr_list.elts->values[0];
                         }
+
+                        if (not std::holds_alternative<value::Object>(*template_elem))
+                            util::error(
+                                "A `pointer` argument was given a List, but its elements aren't structs - "
+                                "pointers to arrays of raw numbers aren't supported yet: " + value::stringify(value)
+                            );
+
+                        auto elem_shape = ffi::prepareFFI(*template_elem, FFI_TYPE_STRUCT);
+                        const size_t elem_size = elem_shape->type->size;
+                        auto* elem_shape_ptr = elem_shape.get();
+
+                        payloads.emplace_back(elem_size * count);
+                        auto* array_buf = payloads.back().data();
+
+                        if (is_array) {
+                            const auto& arr_list = get<value::ListValue>(value);
+                            for (size_t elt{}; elt < count; ++elt)
+                                ffi::pack(array_buf + elt * elem_size, elem_shape_ptr, arr_list.elts->values[elt], payloads);
+                        }
+                        else {
+                            ffi::pack(array_buf, elem_shape_ptr, value, payloads);
+                        }
+
+                        payloads.emplace_back(sizeof(void*)); // the actual pointer slot libffi dereferences
+                        *reinterpret_cast<std::byte**>(payloads.back().data()) = array_buf;
+
+                        param_types.push_back(&ffi_type_pointer);
+                        values_pointers.push_back(payloads.back().data());
+
+                        writebacks.push_back({array_buf, elem_shape_ptr, value, is_array, count});
+                        arg_ffis.push_back(std::move(elem_shape));
+
+                        continue;
+                    }
+
+                    // Build the C-level shape for this argument (scalar or
+                    // struct, uniformly), pack the Pie value into raw bytes
+                    // according to that shape, and hand libffi a pointer to
+                    // those bytes. Every int width/signedness and both float
+                    // widths are derived here purely from `type_id` - Pie
+                    // itself only ever deals in BigInt/double.
+                    auto node = ffi::prepareFFI(value, type_id);
+                    param_types.push_back(node->type);
+
+                    payloads.emplace_back(node->type->size);
+                    auto* payload = payloads.back().data();
+                    ffi::pack(payload, node.get(), value, payloads);
+
+                    values_pointers.push_back(payload);
+                    arg_ffis.push_back(std::move(node));
                 }
             }
             else if (name.name == "__return_type") {
                 found_return = true;
+                return_type_desc = *value_ptr;
 
-                if (not std::holds_alternative<BigInt>(*value_ptr)) util::error();
-
-
-                switch (r_type = get<BigInt>(*value_ptr)) {
-                    case FFI_TYPE_SINT32 :
-                    case FFI_TYPE_INT    : return_type = &ffi_type_sint32 ; break;
-                    case FFI_TYPE_UINT8  : return_type = &ffi_type_uint8  ; break;
-
-                    case FFI_TYPE_POINTER: return_type = &ffi_type_pointer; break;
-                    case FFI_TYPE_VOID   : return_type = &ffi_type_void   ; break;
-
-                    default:
-                        util::error();
-                }
+                if (not std::holds_alternative<BigInt>(return_type_desc) and
+                    not std::holds_alternative<value::Object>(return_type_desc))
+                    util::error("`__return_type` must be a C Type or a struct template Object: " + value::stringify(return_type_desc));
             }
         }
 
         if (not found_params or not found_return) util::error();
+
+        const auto return_type_id = std::holds_alternative<value::Object>(return_type_desc)
+            ? BigInt{FFI_TYPE_STRUCT}
+            : get<BigInt>(return_type_desc);
+
+        auto return_shape = ffi::prepareFFI(return_type_desc, return_type_id);
 
         ffi_cif cif{};
         const auto result = ffi_prep_cif(
             &cif,
             FFI_DEFAULT_ABI,
             values_pointers.size(),
-            return_type,
+            return_shape->type,
             param_types.data()
         );
 
-        if (result != FFI_OK) util::error();
+        if (result != FFI_OK) util::error("Failed to prepare the FFI call for: " + call->stringify());
 
-
-        value::Value ret_value;
-        switch (r_type) {
-            case FFI_TYPE_SINT32:
-            case FFI_TYPE_INT   : {
-                BigInt return_value;
-                ffi_call(
-                    &cif,
-                    reinterpret_cast<void(*)()>(sym),
-                    &return_value,
-                    values_pointers.data()
-                );
-                ret_value = return_value;
-            } break;
-
-            case FFI_TYPE_UINT8: {
-                BigInt return_value;
-                ffi_call(
-                    &cif,
-                    reinterpret_cast<void(*)()>(sym),
-                    &return_value,
-                    values_pointers.data()
-                );
-                if (return_value == 0 or return_value == 1)
-                    ret_value = bool(return_value);
-                else
-                    ret_value = return_value;
-            } break;
-
-            case FFI_TYPE_POINTER: {
-                char *return_value;
-                ffi_call(
-                    &cif,
-                    reinterpret_cast<void(*)()>(sym),
-                    &return_value,
-                    values_pointers.data()
-                );
-
-                ret_value = std::string{return_value};
-            } break;
-
-            case FFI_TYPE_VOID: {
-                ffi_call(
-                    &cif,
-                    reinterpret_cast<void(*)()>(sym),
-                    nullptr,
-                    values_pointers.data()
-                );
+        const auto applyWritebacks = [&writebacks] {
+            for (auto& wb : writebacks) {
+                if (wb.is_array) {
+                    auto& list = get<value::ListValue>(wb.target);
+                    for (size_t i{}; i < wb.count; ++i)
+                        ffi::unpackInto(wb.buffer + i * wb.elem_shape->type->size, wb.elem_shape, list.elts->values[i]);
+                }
+                else {
+                    ffi::unpackInto(wb.buffer, wb.elem_shape, wb.target);
+                }
             }
+        };
 
-            [[fallthrough]];
-            default: // not gonna happend. Already checked up there
-                ret_value = 0;
+        if (return_shape->type->type == FFI_TYPE_VOID) {
+            ffi_call(&cif, reinterpret_cast<void(*)()>(sym), nullptr, values_pointers.data());
+            applyWritebacks();
+            return BigInt{0};
+        }
+
+        // libffi requires the return buffer to be at least `sizeof(ffi_arg)`
+        // for any integer type narrower than that (it always widens small
+        // integer returns internally); struct/float/double returns are
+        // unaffected by the requirement but sizing generously is harmless.
+        std::vector<std::byte> ret_buffer(std::max(return_shape->type->size, sizeof(ffi_arg)), std::byte{0});
+
+        ffi_call(&cif, reinterpret_cast<void(*)()>(sym), ret_buffer.data(), values_pointers.data());
+        applyWritebacks();
+
+        // `STR` is declared distinctly from `PTR` specifically so this can happen automatically
+        // A function declared to return `STR` hands back a Pie String directly (read from the returned address)
+        // while `PTR` keeps returning the raw address as a BigInt.
+        // The binding author picks per-function once and every call site is seamless either way.
+        if (return_type_id == FFI_TYPE_CSTRING) {
+            void *cstr;
+            std::memcpy(&cstr, ret_buffer.data(), sizeof cstr);
+
+            if (not cstr) return "";
+
+            return std::string{reinterpret_cast<const char*>(cstr)};
+        }
+
+        auto ret_value = ffi::unpack(ret_buffer.data(), return_shape.get(), return_type_desc);
+
+        // convenience carried over from before: a `BYTE` (uint8) return of
+        // exactly 0 or 1 is treated as a Pie Bool.
+        if (return_shape->type->type == FFI_TYPE_UINT8 and std::holds_alternative<BigInt>(ret_value)) {
+            const auto v = get<BigInt>(ret_value);
+            if (v == 0 or v == 1) ret_value = bool(v);
         }
 
         return ret_value;
@@ -4180,8 +4226,6 @@ public:
             // return type::MapOf(type::UnionOf(std::move(keys)), type::UnionOf(std::move(values)));
         }
 
-        // if (std::holds_alternative<value::Pointer>(value)) return type::builtins::Int();
-
 
         util::error("Unknown Type for value: " + stringify(value));
     }
@@ -4382,15 +4426,21 @@ public:
     }
 
 
-    // static void printEnv(const value::Environment& e) noexcept {
-    //     // const auto& e = envStackToEnvMap();
 
-    //     for (const auto& [ID, v] : e) {
-    //         const auto& [name, value, type] = v;
+    static void printEnv(const value::Environment& e) noexcept {
+        // const auto& e = envStackToEnvMap();
 
-    //         std::println("[{}] {}::{}: {} = {}", ID, name.space->name, name.name, type->text(), stringify(*value));
-    //     }
-    // }
+        for (const auto& [ID, v] : e) {
+            const auto& [name, value, type] = v;
+
+            if (name.isRef()) {
+                std::println("[{}] {}::{}: {} = {}", ID, name.space->name, name.name, type->text(), stringify(*value));
+            }
+            else {
+                std::println("[{}] {}: {} = {}", ID, name.name, type->text(), stringify(*value));
+            }
+        }
+    }
 
 
     // static void printEnv(const std::vector<std::pair<value::Environment, EnvTag>>& env) noexcept {

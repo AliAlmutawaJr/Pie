@@ -20,6 +20,20 @@
 
 
 
+
+
+TEST_CASE("Prefix Operators as Parameters", "[Param]") {
+    const auto src1 = R"(
+prefix(!) not = (x) => __builtin_not(x);
+f = (not true) => __builtin_print(not true);
+f("meow");
+)";
+
+    REQUIRE(pie::test::run(src1) == "meow");
+}
+
+
+
 TEST_CASE("Dylib & FFI Calls!", "[FFI][DYLIB]") {
     const auto src1 = R"(
 V = __builtin_ffi_type_void();
