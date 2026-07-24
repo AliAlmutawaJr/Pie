@@ -1038,7 +1038,7 @@ public:
 
 
 
-        util::error();
+        util::error("Namespace `" + stringify(names) + "` not found!");
 
         // auto fixed_spaces = current_space;
 
@@ -3319,6 +3319,8 @@ public:
             "and", "or",  
             "bit_and", "bit_or", "xor",
 
+            "rand_int",
+
             //* trinary
             "set",
             "conditional",
@@ -3407,25 +3409,25 @@ public:
 
         if (std::ranges::find(nullary_funcs, name) != nullary_funcs.end()) {
             arity_check(0);
-            if (name == "input_str"       ) return execute<0>(stdx::get<S<"input_str"       >>(functions).value, {}, this);
-            if (name == "input_int"       ) return execute<0>(stdx::get<S<"input_int"       >>(functions).value, {}, this);
-            if (name == "ffi_type_int"    ) return execute<0>(stdx::get<S<"ffi_type_int"    >>(functions).value, {}, this);
-            if (name == "ffi_type_pointer") return execute<0>(stdx::get<S<"ffi_type_pointer">>(functions).value, {}, this);
-            if (name == "ffi_type_cstring") return execute<0>(stdx::get<S<"ffi_type_cstring">>(functions).value, {}, this);
-            if (name == "ffi_type_void"   ) return execute<0>(stdx::get<S<"ffi_type_void"   >>(functions).value, {}, this);
-            if (name == "ffi_type_float"  ) return execute<0>(stdx::get<S<"ffi_type_float"  >>(functions).value, {}, this);
-            if (name == "ffi_type_double" ) return execute<0>(stdx::get<S<"ffi_type_double" >>(functions).value, {}, this);
+            if (name == "input_str"           ) return execute<0>(stdx::get<S<"input_str"       >>(functions).value, {}, this);
+            if (name == "input_int"           ) return execute<0>(stdx::get<S<"input_int"       >>(functions).value, {}, this);
+            if (name == "ffi_type_int"        ) return execute<0>(stdx::get<S<"ffi_type_int"    >>(functions).value, {}, this);
+            if (name == "ffi_type_pointer"    ) return execute<0>(stdx::get<S<"ffi_type_pointer">>(functions).value, {}, this);
+            if (name == "ffi_type_cstring"    ) return execute<0>(stdx::get<S<"ffi_type_cstring">>(functions).value, {}, this);
+            if (name == "ffi_type_void"       ) return execute<0>(stdx::get<S<"ffi_type_void"   >>(functions).value, {}, this);
+            if (name == "ffi_type_float"      ) return execute<0>(stdx::get<S<"ffi_type_float"  >>(functions).value, {}, this);
+            if (name == "ffi_type_double"     ) return execute<0>(stdx::get<S<"ffi_type_double" >>(functions).value, {}, this);
             if (name == "ffi_type_long_double") return execute<0>(stdx::get<S<"ffi_type_long_double">>(functions).value, {}, this);
-            if (name == "ffi_type_uint8"  ) return execute<0>(stdx::get<S<"ffi_type_uint8"  >>(functions).value, {}, this);
-            if (name == "ffi_type_sint8"  ) return execute<0>(stdx::get<S<"ffi_type_sint8"  >>(functions).value, {}, this);
-            if (name == "ffi_type_uint16" ) return execute<0>(stdx::get<S<"ffi_type_uint16" >>(functions).value, {}, this);
-            if (name == "ffi_type_sint16" ) return execute<0>(stdx::get<S<"ffi_type_sint16" >>(functions).value, {}, this);
-            if (name == "ffi_type_uint32" ) return execute<0>(stdx::get<S<"ffi_type_uint32" >>(functions).value, {}, this);
-            if (name == "ffi_type_sint32" ) return execute<0>(stdx::get<S<"ffi_type_sint32" >>(functions).value, {}, this);
-            if (name == "ffi_type_uint64" ) return execute<0>(stdx::get<S<"ffi_type_uint64" >>(functions).value, {}, this);
-            if (name == "ffi_type_sint64" ) return execute<0>(stdx::get<S<"ffi_type_sint64" >>(functions).value, {}, this);
-            if (name == "ffi_type_struct" ) return execute<0>(stdx::get<S<"ffi_type_struct" >>(functions).value, {}, this);
-            if (name == "ffi_type_complex") return execute<0>(stdx::get<S<"ffi_type_complex">>(functions).value, {}, this);
+            if (name == "ffi_type_uint8"      ) return execute<0>(stdx::get<S<"ffi_type_uint8"  >>(functions).value, {}, this);
+            if (name == "ffi_type_sint8"      ) return execute<0>(stdx::get<S<"ffi_type_sint8"  >>(functions).value, {}, this);
+            if (name == "ffi_type_uint16"     ) return execute<0>(stdx::get<S<"ffi_type_uint16" >>(functions).value, {}, this);
+            if (name == "ffi_type_sint16"     ) return execute<0>(stdx::get<S<"ffi_type_sint16" >>(functions).value, {}, this);
+            if (name == "ffi_type_uint32"     ) return execute<0>(stdx::get<S<"ffi_type_uint32" >>(functions).value, {}, this);
+            if (name == "ffi_type_sint32"     ) return execute<0>(stdx::get<S<"ffi_type_sint32" >>(functions).value, {}, this);
+            if (name == "ffi_type_uint64"     ) return execute<0>(stdx::get<S<"ffi_type_uint64" >>(functions).value, {}, this);
+            if (name == "ffi_type_sint64"     ) return execute<0>(stdx::get<S<"ffi_type_sint64" >>(functions).value, {}, this);
+            if (name == "ffi_type_struct"     ) return execute<0>(stdx::get<S<"ffi_type_struct" >>(functions).value, {}, this);
+            if (name == "ffi_type_complex"    ) return execute<0>(stdx::get<S<"ffi_type_complex">>(functions).value, {}, this);
         }
 
         if (name == "panic") {
@@ -3483,7 +3485,6 @@ public:
         if (name == "ffi_call") {
             return ffiCall(call, std::move(args), std::move(expand_at));
         }
-
 
 
 
@@ -3547,6 +3548,7 @@ public:
             "bit_and"sv,
             "bit_or"sv,
             "xor"sv,
+            "rand_int"sv,
             "mod"sv,
             "pow"sv,
             "gt"sv,
@@ -3566,21 +3568,22 @@ public:
             if (name == "push"     ) return execute<2>(stdx::get<S<"push"     >>(functions).value, {value1, value2}, this);
             if (name == "str_split") return execute<2>(stdx::get<S<"str_split">>(functions).value, {value1, value2}, this);
 
-            if (name == "add"    ) return execute<2>(stdx::get<S<"add"    >>(functions).value, {value1, value2}, this);
-            if (name == "sub"    ) return execute<2>(stdx::get<S<"sub"    >>(functions).value, {value1, value2}, this);
-            if (name == "mul"    ) return execute<2>(stdx::get<S<"mul"    >>(functions).value, {value1, value2}, this);
-            if (name == "div"    ) return execute<2>(stdx::get<S<"div"    >>(functions).value, {value1, value2}, this);
-            if (name == "mod"    ) return execute<2>(stdx::get<S<"mod"    >>(functions).value, {value1, value2}, this);
-            if (name == "pow"    ) return execute<2>(stdx::get<S<"pow"    >>(functions).value, {value1, value2}, this);
-            if (name == "bit_and") return execute<2>(stdx::get<S<"bit_and">>(functions).value, {value1, value2}, this);
-            if (name == "bit_or" ) return execute<2>(stdx::get<S<"bit_or" >>(functions).value, {value1, value2}, this);
-            if (name == "xor"    ) return execute<2>(stdx::get<S<"xor"    >>(functions).value, {value1, value2}, this);
-            if (name == "gt"     ) return execute<2>(stdx::get<S<"gt"     >>(functions).value, {value1, value2}, this);
-            if (name == "geq"    ) return execute<2>(stdx::get<S<"geq"    >>(functions).value, {value1, value2}, this);
-            if (name == "eq"     ) return execute<2>(stdx::get<S<"eq"     >>(functions).value, {value1, value2}, this);
-            if (name == "leq"    ) return execute<2>(stdx::get<S<"leq"    >>(functions).value, {value1, value2}, this);
-            if (name == "lt"     ) return execute<2>(stdx::get<S<"lt"     >>(functions).value, {value1, value2}, this);
-            if (name == "dlsym"  ) return execute<2>(stdx::get<S<"dlsym"  >>(functions).value, {value1, value2}, this);
+            if (name == "add"     ) return execute<2>(stdx::get<S<"add"     >>(functions).value, {value1, value2}, this);
+            if (name == "sub"     ) return execute<2>(stdx::get<S<"sub"     >>(functions).value, {value1, value2}, this);
+            if (name == "mul"     ) return execute<2>(stdx::get<S<"mul"     >>(functions).value, {value1, value2}, this);
+            if (name == "div"     ) return execute<2>(stdx::get<S<"div"     >>(functions).value, {value1, value2}, this);
+            if (name == "mod"     ) return execute<2>(stdx::get<S<"mod"     >>(functions).value, {value1, value2}, this);
+            if (name == "pow"     ) return execute<2>(stdx::get<S<"pow"     >>(functions).value, {value1, value2}, this);
+            if (name == "bit_and" ) return execute<2>(stdx::get<S<"bit_and" >>(functions).value, {value1, value2}, this);
+            if (name == "bit_or"  ) return execute<2>(stdx::get<S<"bit_or"  >>(functions).value, {value1, value2}, this);
+            if (name == "xor"     ) return execute<2>(stdx::get<S<"xor"     >>(functions).value, {value1, value2}, this);
+            if (name == "rand_int") return execute<2>(stdx::get<S<"rand_int">>(functions).value, {value1, value2}, this);
+            if (name == "gt"      ) return execute<2>(stdx::get<S<"gt"      >>(functions).value, {value1, value2}, this);
+            if (name == "geq"     ) return execute<2>(stdx::get<S<"geq"     >>(functions).value, {value1, value2}, this);
+            if (name == "eq"      ) return execute<2>(stdx::get<S<"eq"      >>(functions).value, {value1, value2}, this);
+            if (name == "leq"     ) return execute<2>(stdx::get<S<"leq"     >>(functions).value, {value1, value2}, this);
+            if (name == "lt"      ) return execute<2>(stdx::get<S<"lt"      >>(functions).value, {value1, value2}, this);
+            if (name == "dlsym"   ) return execute<2>(stdx::get<S<"dlsym"   >>(functions).value, {value1, value2}, this);
 
             util::error();
         }
@@ -3764,7 +3767,8 @@ public:
         struct PointerWriteback {
             std::byte* buffer;
             ffi::FFI* elem_shape;
-            value::Value target; // Object, or ListValue - both carry a shared_ptr, so mutating through them reaches the caller's original value
+            // Pie Object, or ListValue, either carry a shared_ptr, so mutating through them reaches the caller's original value
+            value::Value target;
             bool is_array;
             size_t count;
         };
@@ -3919,7 +3923,8 @@ public:
             }
         }
 
-        if (not found_params or not found_return) util::error();
+        if (not found_params) util::error("Pie CIF must have member named `__param_types`: " + value::stringify(pie_cif));
+        if (not found_return) util::error("Pie CIF must have member named `__return_type`: " + value::stringify(pie_cif));
 
         const auto return_type_id = std::holds_alternative<value::Object>(return_type_desc)
             ? BigInt{FFI_TYPE_STRUCT}
@@ -3972,7 +3977,7 @@ public:
         // The binding author picks per-function once and every call site is seamless either way.
         if (return_type_id == FFI_TYPE_CSTRING) {
             void *cstr;
-            std::memcpy(&cstr, ret_buffer.data(), sizeof cstr);
+            memcpy(&cstr, ret_buffer.data(), sizeof cstr);
 
             if (not cstr) return "";
 
