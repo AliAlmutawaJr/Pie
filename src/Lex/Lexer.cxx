@@ -2,6 +2,7 @@
 
 #include "../Utils/utils.hxx"
 #include "../Utils/Exceptions.hxx"
+#include "Token.hxx"
 
 
 inline namespace pie {
@@ -203,8 +204,9 @@ bool validNameChar(const char c) noexcept {
                 break;
 
             case ':': 
-                if (src.at(index + 1) == ':') lines.back().push_back({SCOPE_RESOLVE, {':', src[++index]}});
-                else                          lines.back().push_back({COLON, ":"});
+                if      (src.at(index + 1) == ':') lines.back().push_back({SCOPE_RESOLVE, "::"}), ++index;
+                else if (src      [index + 1] == '=') lines.back().push_back({WALRUS       , ":="}), ++index;
+                else                                  lines.back().push_back({COLON, ":"});
                 break;
 
             case ';':
@@ -264,7 +266,7 @@ bool validNameChar(const char c) noexcept {
             throw;
         }
         catch(const std::exception& err) {
-            util::error("Lexing Error!");
+            util::error();
         }
 
     }

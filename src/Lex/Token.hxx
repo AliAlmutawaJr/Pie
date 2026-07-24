@@ -11,10 +11,17 @@ inline namespace token {
 enum class TokenKind {
     NONE = 0,
 
+
+
+    SEMI,
+    SCOPE_RESOLVE,
+    COLON,
+    WALRUS, // :=
     ASSIGN,
     FAT_ARROW,
 
     COMMA,
+
     BACKTICK,
     DOT,
     CASCADE, // for future support
@@ -49,9 +56,6 @@ enum class TokenKind {
     NAMESPACE,
     USE,
 
-    SEMI,
-    COLON,
-    SCOPE_RESOLVE,
 
     END,
 };
@@ -79,6 +83,7 @@ constexpr const char* stringify(const TokenKind token) noexcept {
         case DOT     :      return "DOT";
         case SEMI    :      return "SEMI";
         case COLON   :      return "COLON";
+        case WALRUS  :      return "WALRUS";
         case SCOPE_RESOLVE: return "SCOPE_RESOLVE";
 
         // should make them weak keywords
