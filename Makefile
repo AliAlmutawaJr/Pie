@@ -11,10 +11,11 @@ ARGS = -Wall -Wextra -Wpedantic -Wno-missing-braces #-Wnrvo
 WEB_ARGS = -sWASM=1 -sFORCE_FILESYSTEM -sEXPORTED_RUNTIME_METHODS='["callMain"]' \
 	 -sASSERTIONS -sENVIRONMENT=web -INVOKE_RUN_AT_START=0 -sEXIT_RUNTIME=0 -sNO_DISABLE_EXCEPTION_CATCHING
 
-CPP = $(wildcard src/Lex/*.cxx src/Parser/*.cxx src/Analysis/*.cxx src/Interp/*.cxx src/Utils/*.cxx src/Preprocessor/*.cxx src/Type/*.cxx src/Value/*.cxx)
+CPP = $(wildcard src/Lex/*.cxx src/Parser/*.cxx src/Analysis/*.cxx src/Interp/*.cxx src/Utils/*.cxx src/CLI/*.cxx src/Preprocessor/*.cxx src/Type/*.cxx src/Value/*.cxx)
 SAN = -fsanitize=undefined -fsanitize=address # -g3
 
 OUTPUT_NAME = Pie
+DEBUG_OUTPUT_NAME = Pie_debug
 WEB_OUTPUT_NAME = Pie.js
 
 ## Library directories
@@ -44,7 +45,7 @@ main: checklibs src/main.cc
 	$(CC) $(CPP) $(ARGS) $(VER) $(INCLUDE) $(OPT) -DNO_ERR_LOC src/main.cc -o $(OUTPUT_NAME)
 
 debug: checklibs src/main.cc
-	$(CC) $(CPP) $(ARGS) $(VER) $(INCLUDE) -O0 src/main.cc -o $(OUTPUT_NAME) $(SAN)
+	$(CC) $(CPP) $(ARGS) $(VER) $(INCLUDE) -O0 src/main.cc -o $(DEBUG_OUTPUT_NAME) $(SAN)
 
 test: checklibs Tests/Test.cc
 	$(CC) $(CPP) $(ARGS) $(VER) $(INCLUDE) -O0 Tests/Test.cc Tests/catch.cpp -o run_tests $(SAN) -DNO_ERR_LOC && ./run_tests && rm run_tests
