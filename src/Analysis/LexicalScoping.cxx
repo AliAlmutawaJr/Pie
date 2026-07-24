@@ -31,6 +31,8 @@ LexicalScoping::LexicalScoping(const size_t index) : variable_index(index) {
         "Syntax",
         "Type",
 
+        "__builtin_rand_int",
+
         "__builtin_print",
         "__builtin_concat", 
         "__builtin_print_env",
@@ -42,6 +44,7 @@ LexicalScoping::LexicalScoping(const size_t index) : variable_index(index) {
         "__builtin_reset",
         "__builtin_eval",
         "__builtin_neg",
+        "__builtin_abs",
         "__builtin_not",
         "__builtin_to_int",
         "__builtin_to_double",
