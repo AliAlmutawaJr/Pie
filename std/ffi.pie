@@ -7,18 +7,20 @@ space ctypes {
     FLOAT   = __builtin_ffi_type_float  ();
     DOUBLE  = __builtin_ffi_type_double ();
     UINT8   = __builtin_ffi_type_uint8  ();
+    BYTE    = UINT8;
+    BOOL    = UINT8;
     SINT8   = __builtin_ffi_type_sint8  ();
     UINT16  = __builtin_ffi_type_uint16 ();
     SINT16  = __builtin_ffi_type_sint16 ();
     UINT32  = __builtin_ffi_type_uint32 ();
+    UINT    = UINT32;
     SINT32  = __builtin_ffi_type_sint32 ();
     UINT64  = __builtin_ffi_type_uint64 ();
     SINT64  = __builtin_ffi_type_sint64 ();
     STRUCT  = __builtin_ffi_type_struct ();
     POINTER = __builtin_ffi_type_pointer();
+    CSTRING = __builtin_ffi_type_cstring();
     COMPLEX = __builtin_ffi_type_complex();
-    UINT128 = __builtin_ffi_type_uint128();
-    SINT128 = __builtin_ffi_type_sint128();
 };
 
 ctype = union {
@@ -36,14 +38,13 @@ ctype = union {
     ctypes::SINT64 ;
     ctypes::STRUCT ;
     ctypes::POINTER;
+    ctypes::CSTRING;
     ctypes::COMPLEX;
-    ctypes::UINT128;
-    ctypes::SINT128;
 };
 
 CIF = class {
-    param_types: {ctype} = {};
-    return_type: ctype = ctype::VOID;
+    __param_types: {ctype} = {};
+    __return_type = ffi::ctypes::VOID;
 };
 
 

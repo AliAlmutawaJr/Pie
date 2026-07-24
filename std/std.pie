@@ -20,6 +20,9 @@ space std {
     infix == = (a, b) => __builtin_eq(a, b);
     infix != = (a, b) => __builtin_not(__builtin_eq(a, b));
     infix <  = (a, b) => __builtin_lt(a, b);
+    infix <= = (a, b) => __builtin_leq(a, b);
+    infix >  = (a, b) => __builtin_gt(a, b);
+    infix >= = (a, b) => __builtin_geq(a, b);
 
 
 
