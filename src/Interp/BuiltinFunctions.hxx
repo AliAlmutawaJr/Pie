@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <random>
 #include <cmath>
 
 #include <dlfcn.h>
@@ -19,6 +20,8 @@
 
 
 inline namespace pie {
+inline namespace funcs {
+inline namespace builtins {
 
 
 //* ============================ FUNCTIONS ============================
@@ -26,7 +29,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     //* NULLARY FUNCTIONS
     MapEntry<
         S<"input_str">,
-        Func<"input_str",
+        Func<
             decltype([](const auto&) {
                 std::string out;
                 std::getline(std::cin, out);
@@ -37,7 +40,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     >{},
     MapEntry<
         S<"input_int">,
-        Func<"input_int",
+        Func<
             decltype([](const auto&) {
                 std::string out;
                 std::getline(std::cin, out);
@@ -53,7 +56,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"len">,
-        Func<"len",
+        Func<
             decltype([](const auto& x, const auto&) {
                 if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, std::string>)
                         return static_cast<BigInt>(x.length());
@@ -76,7 +79,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"type_of">,
-        Func<"type_of",
+        Func<
             decltype([](const auto& x, const auto& that) {
                 return that->typeOf(x);
             }),
@@ -86,7 +89,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"neg">,
-        Func<"neg",
+        Func<
             decltype([](const auto& x, const auto&) { return -x; }),
             TypeList<BigInt>,
             TypeList<double>
@@ -95,7 +98,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"abs">,
-        Func<"abs",
+        Func<
             decltype([](const auto& x, const auto&) { return std::abs(x); }),
             TypeList<BigInt>,
             TypeList<double>
@@ -104,7 +107,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"not">,
-        Func<"not",
+        Func<
             decltype([](const auto& x, const auto&) { return not x; }),
             TypeList<bool>
         >
@@ -112,7 +115,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"to_int">,
-        Func<"to_int",
+        Func<
             decltype([](const auto& x, const auto&) -> BigInt {
                 if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, std::string>)
                     return std::stoll(x);
@@ -133,7 +136,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"to_double">,
-        Func<"to_double",
+        Func<
             decltype([](const auto& x, const auto&) -> double {
                 if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, std::string>)
                     return std::stod(x);
@@ -154,7 +157,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"to_string">,
-        Func<"to_string",
+        Func<
             decltype([](const auto& x, const auto&) { return stringify(x); }),
             TypeList<Any>
         >
@@ -162,7 +165,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"str_split">,
-        Func<"str_split",
+        Func<
             decltype([](const auto& input, const auto& delim, const auto&) {
                 return value::makeList(
                     input
@@ -193,7 +196,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"eval">,
-        Func<"eval",
+        Func<
             decltype([](const auto& x, const auto& that) {
                 return std::visit(*that, x);
             }),
@@ -203,7 +206,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"pop">,
-        Func<"pop",
+        Func<
             decltype([](const auto& cont, const auto&) -> value::Value {
                 const auto back = cont.elts->values.back();
                 cont.elts->values.pop_back();
@@ -215,7 +218,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"pop_front">,
-        Func<"pop_front",
+        Func<
             decltype([](const auto& cont, const auto&) -> value::Value {
                 const auto front = cont.elts->values.front();
                 cont.elts->values.erase(cont.elts->values.begin());
@@ -229,7 +232,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     //* BINARY FUNCTIONS
     MapEntry<
         S<"get">,
-        Func<"get",
+        Func<
             decltype([](const auto& a, const auto& ind, const auto&) -> value::Value {
                 using T = std::remove_cvref_t<decltype(a)>;
 
@@ -262,7 +265,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"set">,
-        Func<"set",
+        Func<
             decltype([](const auto& cont, const auto& at, const auto& elt, const auto& that) -> value::Value {
                 using T = std::remove_cvref_t<decltype(cont)>;
 
@@ -289,7 +292,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"push">,
-        Func<"push",
+        Func<
             decltype([](const auto& cont, const auto& elt, const auto& that) -> value::Value {
                 // added type checking step since
                 // the interpreter only type checks on assignments
@@ -308,7 +311,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"add">,
-        Func<"add",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a + b; }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
@@ -319,7 +322,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"sub">,
-        Func<"sub",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a - b; }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
@@ -330,7 +333,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"mul">,
-        Func<"mul",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a * b; }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
@@ -341,7 +344,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"div">,
-        Func<"div",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a / b; }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
@@ -352,7 +355,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"mod">,
-        Func<"mod",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a % b; }),
             TypeList<BigInt, BigInt>
         >
@@ -360,7 +363,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"bit_and">,
-        Func<"bit_and",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a & b; }),
             TypeList<BigInt, BigInt>
         >
@@ -368,7 +371,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"bit_or">,
-        Func<"bit_or",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a | b; }),
             TypeList<BigInt, BigInt>
         >
@@ -376,15 +379,31 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"xor">,
-        Func<"xor",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a ^ b; }),
             TypeList<BigInt, BigInt>
         >
     >{},
 
     MapEntry<
+        S<"rand_int">,
+        Func<
+            decltype([](const auto& min, const auto& max, const auto&) {
+                static std::random_device rd{};
+                static std::mt19937 gen{rd()};
+
+                std::uniform_int_distribution<BigInt> dist{min, max};
+
+                return dist(gen);
+
+            }),
+            TypeList<BigInt, BigInt>
+        >
+    >{},
+
+    MapEntry<
         S<"pow">,
-        Func<"pow",
+        Func<
             decltype(
                 [](const auto& a, const auto& b, const auto&) -> std::common_type_t<decltype(a), decltype(b)> { return std::pow(a, b); }
             ),
@@ -397,7 +416,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"gt">,
-        Func<"gt",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a > b; }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
@@ -408,7 +427,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"geq">,
-        Func<"geq",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a >= b; }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
@@ -419,7 +438,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"eq">,
-        Func<"eq",
+        Func<
             decltype([](auto a, auto b, const auto&) { return a == b; }),
             TypeList<Any, Any>
         >
@@ -427,7 +446,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"leq">,
-        Func<"leq",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a <= b; }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
@@ -438,7 +457,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"lt">,
-        Func<"lt",
+        Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a < b; }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
@@ -450,7 +469,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     //* FFI 
     MapEntry<
         S<"dlopen">,
-        Func<"dlopen",
+        Func<
             decltype([](const auto& path, const auto&) {
                 auto dll = dlopen(path.data(), RTLD_NOW);
                 if (not dll) util::error<except::OpeningDyLib>(dlerror());
@@ -463,7 +482,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"dlsym">,
-        Func<"dlsym",
+        Func<
             decltype([](const auto& dll, const auto& func_name, const auto&) {
                 auto handle = reinterpret_cast<void*>(dll);
 
@@ -478,7 +497,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_void">,
-        Func<"ffi_type_void",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_VOID; }),
             void
         >
@@ -486,7 +505,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_int">,
-        Func<"ffi_type_int",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_INT; }),
             void
         >
@@ -494,7 +513,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_float">,
-        Func<"ffi_type_float",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_FLOAT; }),
             void
         >
@@ -502,7 +521,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_double">,
-        Func<"ffi_type_double",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_DOUBLE; }),
             void
         >
@@ -510,7 +529,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_long_double">,
-        Func<"ffi_type_long_double",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_LONGDOUBLE; }),
             void
         >
@@ -518,7 +537,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_uint8">,
-        Func<"ffi_type_uint8",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_UINT8; }),
             void
         >
@@ -526,7 +545,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_sint8">,
-        Func<"ffi_type_sint8",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_SINT8; }),
             void
         >
@@ -534,7 +553,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_uint16">,
-        Func<"ffi_type_uint16",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_UINT16; }),
             void
         >
@@ -542,7 +561,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_sint16">,
-        Func<"ffi_type_sint16",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_SINT16; }),
             void
         >
@@ -550,7 +569,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_uint32">,
-        Func<"ffi_type_uint32",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_UINT32; }),
             void
         >
@@ -558,7 +577,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_sint32">,
-        Func<"ffi_type_sint32",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_SINT32; }),
             void
         >
@@ -566,7 +585,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_uint64">,
-        Func<"ffi_type_uint64",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_UINT64; }),
             void
         >
@@ -574,7 +593,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_sint64">,
-        Func<"ffi_type_sint64",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_SINT64; }),
             void
         >
@@ -582,7 +601,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_struct">,
-        Func<"ffi_type_struct",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_STRUCT; }),
             void
         >
@@ -590,7 +609,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_pointer">,
-        Func<"ffi_type_pointer",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_POINTER; }),
             void
         >
@@ -598,7 +617,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_cstring">,
-        Func<"ffi_type_cstring",
+        Func<
             // any arbitrary sentinel value that is different from any FFI_TYPE_*
             decltype([](const auto&) { return FFI_TYPE_CSTRING; }),
             void
@@ -607,7 +626,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     MapEntry<
         S<"ffi_type_complex">,
-        Func<"ffi_type_complex",
+        Func<
             decltype([](const auto&) { return FFI_TYPE_COMPLEX; }),
             void
         >
@@ -618,7 +637,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     // that raw address; this reads the NUL-terminated string living there.
     MapEntry<
         S<"ptr_to_string">,
-        Func<"ptr_to_string",
+        Func<
             decltype([](const auto& ptr, const auto&) -> std::string {
                 if (ptr == 0) util::error("`ptr_to_string` received a null pointer!");
                 return std::string{reinterpret_cast<const char*>(ptr)};
@@ -626,23 +645,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             TypeList<BigInt>
         >
     >{}
-
-    // ,MapEntry<
-    //     S<"ffi_type_uint128">,
-    //     Func<"ffi_type_int",
-    //         decltype([](const auto&) { return FFI_TYPE_UINT128; }),
-    //         void
-    //     >
-    // >{},
-
-    // MapEntry<
-    //     S<"ffi_type_sint128">,
-    //     Func<"ffi_type_int",
-    //         decltype([](const auto&) { return FFI_TYPE_SINT128; }),
-    //         void
-    //     >
-    // >{}
 );
 
 
+} // namespace builtins
+} // namespace funcs
 } // namespace pie

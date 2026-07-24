@@ -6,6 +6,10 @@
 #include "../Value/Value.hxx"
 
 
+inline namespace pie {
+inline namespace funcs {
+
+
 template<size_t Sz>
 struct ConstexprString
 {
@@ -62,9 +66,8 @@ auto getHelper2() {
 
 
 
-template <ConstexprString s, typename Lambda, typename First, typename... Ts>
+template <typename Lambda, typename First, typename... Ts>
 struct Func {
-    inline static constexpr ConstexprString name = s;
     Lambda func;
     inline static constexpr size_t count = sizeof...(Ts) + not std::is_same_v<First, void>; // + 1 for First
 
@@ -82,17 +85,17 @@ struct Func {
 struct Any {};
 
 
-template <size_t SIZE, size_t N = 0, ConstexprString NAME, typename... Ts>
+template <size_t SIZE, size_t N = 0, typename... Ts>
 requires (SIZE == 0)
-static value::Value execute(Func<NAME, Ts...> func, const std::vector<value::Value>&, const auto& that) {
+static value::Value execute(Func<Ts...> func, const std::vector<value::Value>&, const auto& that) {
     static_assert(SIZE == decltype(func)::count);
 
     return func.func(that);
 }
 
-template <size_t SIZE, size_t N = 0, ConstexprString NAME, typename... Ts>
+template <size_t SIZE, size_t N = 0, typename... Ts>
 requires (SIZE == 1)
-value::Value execute(Func<NAME, Ts...> func, const std::vector<value::Value>& args, const auto& that) {
+value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, const auto& that) {
     if constexpr (N < decltype(func)::count) {
         using T = decltype(func.template get2<N, 0>());
 
@@ -110,17 +113,19 @@ value::Value execute(Func<NAME, Ts...> func, const std::vector<value::Value>& ar
         return func.func(v1, that);
     }
 
-    std::clog << "Function: ";
-    for (const char c: NAME)
-        std::clog << c;
-    puts("\nArgs:");
-    that->print(args[0]);
-    pie::util::error("Wrong type passed to function!");
+    // std::clog << "Function: ";
+    // for (const char c: NAME)
+    //     std::clog << c;
+    // puts("\nArgs:");
+    // that->print(args[0]);
+    // pie::util::error("Wrong type passed to function!");
+
+    pie::util::error();
 }
 
-template <size_t SIZE, size_t N = 0, ConstexprString NAME, typename... Ts>
+template <size_t SIZE, size_t N = 0, typename... Ts>
 requires (SIZE == 2)
-value::Value execute(Func<NAME, Ts...> func, const std::vector<value::Value>& args, const auto& that) {
+value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, const auto& that) {
     if constexpr (N < decltype(func)::count) {
         using T1 = decltype(func.template get2<N, 0>());
         using T2 = decltype(func.template get2<N, 1>());
@@ -150,16 +155,18 @@ value::Value execute(Func<NAME, Ts...> func, const std::vector<value::Value>& ar
     }
 
     else {
-        std::string msg = "Wrong type passed to function: ";
-        for (const auto c : NAME)
-            msg += c;
-        pie::util::error(msg);
+        // std::string msg = "Wrong type passed to function: ";
+        // for (const auto c : NAME)
+        //     msg += c;
+        // pie::util::error(msg);
+
+        pie::util::error();
     }
 }
 
-template <size_t SIZE, size_t N = 0, ConstexprString NAME, typename... Ts>
+template <size_t SIZE, size_t N = 0, typename... Ts>
 requires (SIZE == 3)
-value::Value execute(Func<NAME, Ts...> func, const std::vector<value::Value>& args, const auto& that) {
+value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, const auto& that) {
     if constexpr (N < decltype(func)::count) {
         using T1 = decltype(func.template get2<N, 0>());
         using T2 = decltype(func.template get2<N, 1>());
@@ -202,3 +209,8 @@ value::Value execute(Func<NAME, Ts...> func, const std::vector<value::Value>& ar
 
     else pie::util::error("Wrong type passed to function!");
 }
+
+
+
+} // namespace funcs
+} // namespace pie
