@@ -1129,11 +1129,15 @@ struct Closure : Expr {
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "(";
 
-        if (not params.empty()) s += params[0].name + ": " + type.params[0]->text(indent);
-        for(size_t i{1}; i < params.size(); ++i)
-            s += ", " + params[i].name + ": " + type.params[i]->text();
+        if (not params.empty())
+            s += params[0].name + (type::shouldReassign(type.params[0]) ? "" : ": " + type.params[0]->text(indent));
 
-        return s + "): " + type.ret->text() + " => " + body->stringify(indent);
+
+
+        for(const auto& [name, type] : std::views::zip(params, type.params) | std::views::drop(1))
+            s += ", " + name.name + (type::shouldReassign(type) ? "" : ": " + type->text());
+
+        return s + ")" + (type::shouldReassign(type.ret)? + "" : ": " + type.ret->text()) + " => " + body->stringify(indent);
     }
 
     bool involvesName(const std::string_view sv) const override {
