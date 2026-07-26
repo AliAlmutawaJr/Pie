@@ -803,8 +803,9 @@ make
 #### in order of priority
 
 
-- [ ] Capture Environment on Closure Creation
 - [ ] File IO
+- [ ] Simplify Closure Captures without performance penalty (internal)
+- [ ] Simplify Pack Expansion (internal)
 - [ ] Zen of Pie (with the pie ascii art):
 <!-- 
            .-.           
@@ -891,6 +892,7 @@ make
 
 ### Discarded
 
+- ~~Capture Environment on Closure Creation~~
 - ~~Allow variadics of Syntax type~~
 - ~~Add collections~~
 - ~~Add iterators~~
