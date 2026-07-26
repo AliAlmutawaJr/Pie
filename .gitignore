@@ -8,3 +8,4 @@ remote_includes/
 *.txt
 testing/
 Tests/dylib
+build
