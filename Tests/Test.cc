@@ -17,8 +17,23 @@
 // std::print((makeC(1, 2, 3).pack + ...));
 
 
+// !!!!!!!!! ADD FFI TEST CASES !!!!!!!!!
 
 
+TEST_CASE("Assigning to Closures in Operators", "[Operator]") {
+    const auto src1 = R"(
+((a, b) => __builtin_add(a, b)) = "tf!";
+__builtin_add(a, b) = "ok?";
+
+infix + = (a, b) => __builtin_add(a, b);
+
+__builtin_print(5 + 2);
+__builtin_print((a, b) => __builtin_add(a, b));
+)";
+
+    REQUIRE(pie::test::run(src1) == R"(ok?
+tf!)");
+}
 
 
 
