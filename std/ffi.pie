@@ -44,7 +44,7 @@ ctype = union {
 
 CIF = class {
     __param_types: {ctype} = {};
-    __return_type = ffi::ctypes::VOID;
+    __return_type = ctypes::VOID;
 };
 
 
