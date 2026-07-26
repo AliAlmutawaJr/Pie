@@ -17,7 +17,11 @@ inline namespace pie {
 namespace value {
 
 struct Fields;
-struct ClassValue { std::shared_ptr<Fields> blueprint; value::Env env; };
+struct ClassValue {
+    std::shared_ptr<Fields> blueprint;
+    value::Env env;
+    std::vector<interp::NameSpace*> spaces;
+};
 
 struct Members;
 // struct NameSpace  { std::shared_ptr<Members> members  ; };
