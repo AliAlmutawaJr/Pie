@@ -1069,7 +1069,7 @@ public:
                 if (match(COLON))
                     params_types.push_back(parseType());
                 else 
-                    params_types.push_back(type::builtins::_());
+                    params_types.push_back(type::builtins::_()); // not `Any`, but `_` in case `Any` was assigned to
             }
             while (match(COMMA));
 
