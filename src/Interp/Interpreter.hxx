@@ -879,7 +879,8 @@ public:
                     std::make_shared<value::Fields>(
                         cls->fields
                     ),
-                    std::move(captured)
+                    std::move(captured),
+                    current_space
                 )
             );
 
@@ -2607,11 +2608,10 @@ public:
         // // func.type.ret = validateType(std::move(func).type.ret); // is this better?
 
         if (func.self) selves.push_back(*func.self);
+        util::Deferred d1{[this, cond = static_cast<bool>(func.self)] { if (cond) selves.pop_back(); }};
 
         auto old_spaces = std::move(current_space);
-        current_space = func.spaces;
-
-        util::Deferred d1{[this, cond = static_cast<bool>(func.self)] { if (cond) selves.pop_back(); }};
+        current_space = std::move(func.spaces);
         util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
 
 
@@ -3078,7 +3078,7 @@ public:
 
         if (not type::isClass(type)) return handleNonClasses(call, std::move(type));
 
-        const auto *cls = dynamic_cast<const type::LiteralType*>(type.get())->cls.get();
+        auto *cls = dynamic_cast<const type::LiteralType*>(type.get())->cls.get();
 
         if (call->args.size() > cls->blueprint->fields.size())
             util::error("Too many arguments passed to constructor of class: " + value::stringify(type) + "\nin constructor call:\n" + call->stringify());
@@ -3087,6 +3087,14 @@ public:
         value::Object obj{type, std::make_shared<value::Members>(
             std::vector<std::tuple<expr::Name, type::TypePtr, value::ValuePtr>>() // reserve fields.size() elements
         )};
+
+
+        auto old_spaces = std::move(current_space);
+        current_space = std::move(cls)->spaces;
+        util::Deferred d2{[this, &old_spaces, cls] {
+            cls->spaces = std::move(current_space);
+            current_space = std::move(old_spaces);
+        }};
 
 
         // I woulda used a range for-loop but I need `arg` to be a reference and `value` cannot be a regular ref
@@ -3182,6 +3190,12 @@ public:
         for (const auto& [_, ops, __, ___] : env)
             closure.capturePrefixOps(ops);
 
+
+        // THIS LINE HERE causes FPS to drop from around 4K to 250..
+        // What gives???
+        // for (const auto& [e, _, __, ___] : env)
+        //     closure.capture(e);
+
         return closure;
     }
 
@@ -3217,6 +3231,9 @@ public:
     value::Value operator()(const expr::Fix *fix) {
         if (const auto& var = getVar(fix->ID); var) return var->first;
         // return std::visit(*this, fix->func->variant());
+
+        if (const auto& var = getVar(fix->funcs[0]->ID); var)
+            util::error("Can only assign operators to closure literals: " + fix->stringify());
 
         auto func = dynamic_cast<expr::Closure*>(fix->funcs[0].get());
 
