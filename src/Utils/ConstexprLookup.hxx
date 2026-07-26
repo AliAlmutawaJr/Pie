@@ -113,13 +113,6 @@ value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, co
         return func.func(v1, that);
     }
 
-    // std::clog << "Function: ";
-    // for (const char c: NAME)
-    //     std::clog << c;
-    // puts("\nArgs:");
-    // that->print(args[0]);
-    // pie::util::error("Wrong type passed to function!");
-
     pie::util::error();
 }
 
