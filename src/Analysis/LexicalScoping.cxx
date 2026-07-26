@@ -140,7 +140,10 @@ void LexicalScoping::operator()(expr::Fix *f) {
         return;
     }
 
-    std::visit(*this, f->funcs[0]->variant());
+    // std::visit(*this, f->funcs[0]->variant());
+    auto func = dynamic_cast<expr::Closure*>(f->funcs[0].get());
+    // std::visit(*this, func->body->variant());
+    std::visit(*this, func->variant());
 }
 
 
@@ -262,7 +265,6 @@ void LexicalScoping::operator()(expr::Closure *c) {
     }
 
     std::visit(*this, expr::Type{c->type.ret}.variant());
-
     std::visit(*this, c->body->variant());
 }
 
