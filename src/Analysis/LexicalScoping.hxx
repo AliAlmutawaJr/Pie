@@ -70,6 +70,7 @@ public:
     void spaceAccessAssign(expr::SpaceAccess *acc, expr::Assignment *ass);
 
     void operator()(expr::Assignment *ass);
+    void operator()(expr::InferredAssignment *inf);
 
 
     void operator()(expr::Name *name);

@@ -276,6 +276,8 @@ namespace type {
         inline TypePtr Syntax () { return std::make_shared<BuiltinType>("Syntax"); }
         inline TypePtr Type   () { return std::make_shared<BuiltinType>("Type"  ); }
 
+        inline TypePtr BuiltinFunction() { return std::make_shared<BuiltinFunctionType>(); }
+
         inline TypePtr _      () { return std::make_shared<TryReassign>(); };
     }
 

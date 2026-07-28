@@ -98,7 +98,7 @@ namespace type {
         });
 
 
-        auto ret = visitor->checkReturnType(std::visit(*visitor, f.body->variant()), f.type.ret);
+        auto ret = visitor->checkReturnType(std::visit(*visitor, f.body->variant()).value, f.type.ret);
         if (std::holds_alternative<bool>(ret)) return get<bool>(ret);
 
         throw except::TypeMismatch{"Concept didn't return a boolean: " + stringify(*func)};

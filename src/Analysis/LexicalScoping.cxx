@@ -39,7 +39,8 @@ LexicalScoping::LexicalScoping(const size_t index) : variable_index(index) {
         "__builtin_panic",
         "__builtin_input_str",
         "__builtin_input_int",
-        "__builtin_type_of",
+        "__builtin_decltype",
+        "__builtin_type",
         "__builtin_len",
         "__builtin_reset",
         "__builtin_eval",
@@ -207,18 +208,39 @@ void LexicalScoping::operator()(expr::Assignment *ass) {
     else std::visit(*this, expr::Type{ass->type}.variant());
 
 
-    // if there is a type explicitly stated, then a new variable should be create no matter what
-    if (not type::shouldReassign(ass->type)) {
-        ass->lhs->ID = variable_index++;
-        addVar(ass->lhs->stringify(), ass->lhs->ID);
+    if (not is_closure) {
+        // if there is a type explicitly stated, then a new variable should be create no matter what
+        if (not type::shouldReassign(ass->type)) {
+            ass->lhs->ID = variable_index++;
+            addVar(ass->lhs->stringify(), ass->lhs->ID);
+        }
+        else if (const auto id = findVar(ass->lhs->stringify()); id) {
+            ass->lhs->ID = *id;
+        }
+        else { // I could probably shorten this to only use an "if-else" and not "if-elif-else"
+            ass->lhs->ID = variable_index++;
+            addVar(ass->lhs->stringify(), ass->lhs->ID);
+        }
     }
-    else if (const auto id = findVar(ass->lhs->stringify()); id) {
-        ass->lhs->ID = *id;
+}
+
+void LexicalScoping::operator()(expr::InferredAssignment *inf) {
+    // Inferred Assignment always declares a new variable
+
+    // allows for recursion
+    const bool is_closure = dynamic_cast<expr::Closure*>(inf->rhs.get());
+    if (is_closure) {
+        inf->name.ID = variable_index++;
+        addVar(inf->name.name, inf->name.ID);
     }
-    else { // I could probably shorten this to only use an "if-else" and not "if-elif-else"
-        ass->lhs->ID = variable_index++;
-        addVar(ass->lhs->stringify(), ass->lhs->ID);
+
+    std::visit(*this, inf->rhs->variant());
+
+    if (not is_closure) {
+        inf->name.ID = variable_index++;
+        addVar(inf->name.name, inf->name.ID);
     }
+
 }
 
 

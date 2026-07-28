@@ -30,12 +30,12 @@ namespace util {
 
 template <typename Except = std::runtime_error, bool print_loc = true>
 [[noreturn]] inline void error(
-    std::string_view msg = "",
+    std::string_view msg = " ",
     [[maybe_unused]] const std::source_location& location = std::source_location::current()
 )
 {
     // if the err msg is empty, print the location no matter what
-    if (msg.empty()) {
+    if (msg == " ") {
         std::print(std::cerr, "\033[1m{}:{}:{}: \033[31merror:\033[0m ", location.file_name(), location.line(), location.column());
         throw Except{std::string{"[no diagnostic]. If you see this, please file a bug report!"}};
     }

@@ -53,7 +53,7 @@ namespace cli {
             if (run) {
                 if (not exprs.empty()) {
                     value::Value value;
-                    for (auto& expr : exprs) value = std::visit(visitor, std::move(expr)->variant());
+                    for (auto& expr : exprs) value = std::visit(visitor, std::move(expr)->variant()).value;
 
                     std::println("{}", stringify(value));
                 }

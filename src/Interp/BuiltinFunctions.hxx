@@ -78,7 +78,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     >{},
 
     MapEntry<
-        S<"type_of">,
+        S<"type">,
         Func<
             decltype([](const auto& x, const auto& that) {
                 return that->typeOf(x);
@@ -198,7 +198,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"eval">,
         Func<
             decltype([](const auto& x, const auto& that) {
-                return std::visit(*that, x);
+                return std::visit(*that, x).value;
             }),
             TypeList<expr::Node>
         >

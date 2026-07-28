@@ -82,6 +82,7 @@ using Node = std::variant<
     struct SeparatedUnaryFold*,
     struct BinaryFold        *,
     struct Assignment        *,
+    struct InferredAssignment*,
     struct Class             *,
     struct Union             *,
     struct Match             *,
@@ -124,7 +125,6 @@ struct Expr {
     virtual ~Expr() = default;
     virtual std::string stringify(const size_t = 0) const = 0;
     virtual bool involvesName(const std::string_view) const = 0;
-    virtual ExprPtr left() const = 0;
     virtual Node variant() = 0;
 };
 

@@ -301,8 +301,14 @@ public:
                     std::move(type),
                     parseExpr(prec::ASSIGNMENT_VALUE - 1)
                 );
-
             };
+
+            case WALRUS: {
+                return std::make_shared<expr::InferredAssignment>(
+                    std::move(left)->stringify(),
+                    parseExpr(prec::ASSIGNMENT_VALUE - 1)
+                );
+            }
 
 
             case ASSIGN:
@@ -1862,6 +1868,7 @@ public:
             using enum TokenKind;
 
             // right associative
+            case WALRUS:
             case ASSIGN: return prec::ASSIGNMENT_VALUE;
 
             // case COLON : return prec::SCOPE_RESOLUTION_VALUE;
