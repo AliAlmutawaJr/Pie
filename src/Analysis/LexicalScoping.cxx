@@ -186,7 +186,8 @@ void LexicalScoping::operator()(expr::Assignment *ass) {
 
     // this allows for recursion
     const bool is_closure = dynamic_cast<expr::Closure*>(ass->rhs.get());
-    if (is_closure) {
+    const bool is_class   = dynamic_cast<expr::Class  *>(ass->rhs.get());
+    if (is_closure or is_class) {
         // if there is a type explicitly stated, then a new variable should be create no matter what
         if (not type::shouldReassign(ass->type)) {
             ass->lhs->ID = variable_index++;
@@ -208,7 +209,7 @@ void LexicalScoping::operator()(expr::Assignment *ass) {
     else std::visit(*this, expr::Type{ass->type}.variant());
 
 
-    if (not is_closure) {
+    if (not is_closure and not is_class) {
         // if there is a type explicitly stated, then a new variable should be create no matter what
         if (not type::shouldReassign(ass->type)) {
             ass->lhs->ID = variable_index++;
@@ -229,14 +230,15 @@ void LexicalScoping::operator()(expr::InferredAssignment *inf) {
 
     // allows for recursion
     const bool is_closure = dynamic_cast<expr::Closure*>(inf->rhs.get());
-    if (is_closure) {
+    const bool is_class   = dynamic_cast<expr::Class  *>(inf->rhs.get());
+    if (is_closure or is_class) {
         inf->name.ID = variable_index++;
         addVar(inf->name.name, inf->name.ID);
     }
 
     std::visit(*this, inf->rhs->variant());
 
-    if (not is_closure) {
+    if (not is_closure and not is_class) {
         inf->name.ID = variable_index++;
         addVar(inf->name.name, inf->name.ID);
     }
