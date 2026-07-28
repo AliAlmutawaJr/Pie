@@ -887,10 +887,6 @@ public:
 
 
     ValueType operator()(const expr::InferredAssignment *infr) {
-        if (const auto* call = dynamic_cast<const expr::Call*>(infr->rhs.get())) {
-
-        }
-
         const auto [value, type] = std::visit(*this, infr->rhs->variant());
 
         addVar(
@@ -4471,7 +4467,7 @@ public:
 
 
     void scope(const value::EnvTag tag = value::EnvTag::NONE) {
-        env.push_back({.tag = tag});
+        env.push_back({{}, {}, {}, tag});
     }
 
     void unscope() { env.pop_back(); }

@@ -242,11 +242,9 @@ inline std::unique_ptr<FFI> prepareFFI(const value::Value& value, const BigInt t
 }
 
 
-// ----------------------------------------------------------------------------
 // pack: Pie value -> raw C bytes, according to an already-built FFI shape.
-// Used for every argument (scalars and structs alike) and for the "template"
-// object used to describe a struct return type.
-// ----------------------------------------------------------------------------
+// Used for every argument (scalars and structs alike)
+// and for the "template" object used to describe a struct return type.
 inline void packScalar(std::byte* dst, const int ffi_type_tag, const value::Value& value, std::deque<std::vector<std::byte>>& scratch) {
     switch (ffi_type_tag) {
         case FFI_TYPE_SINT8  : *reinterpret_cast<int8_t  *>(dst) =      narrowTo<  int8_t>(asInt(value, ffi_type_tag), ffi_type_tag); return;
@@ -293,12 +291,12 @@ inline void pack(std::byte *buffer, const FFI *ffi, const value::Value& value, s
 }
 
 
-// ----------------------------------------------------------------------------
-// unpack: raw C bytes -> Pie value, the mirror image of pack(). For structs,
-// `shape_template` is a Pie Object (usually the class the caller declared as
-// the return type) used purely as a mold: same member names/order/nested
+
+// unpack: raw C bytes -> Pie value, the mirror image of pack().
+// For structs, `shape_template` is a Pie Object (usually the class the caller declared as the return type)
+// used purely as a mold: same member names/order/nested
 // struct shapes, with fresh values filled in from `buffer`.
-// ----------------------------------------------------------------------------
+// ..I should probably ask the user to pass the class, not the object
 inline value::Value unpackScalar(const std::byte *src, const int ffi_type_tag) {
     switch (ffi_type_tag) {
         case FFI_TYPE_SINT8  : return static_cast<BigInt>(*reinterpret_cast<const std::int8_t  *>(src));
