@@ -30,9 +30,15 @@ jobs:
 
       - name: Install compiler (macOS)
         if: startsWith(matrix.os, 'macos')
-        run: brew install llvm && brew install libffi
+        run: brew install llvm && brew install libffi pkg-config
 
       - name: Build
+        env:
+          # Dynamically grabs the correct homebrew path
+          CPATH: ${{ steps.setup-homebrew.outputs.prefix || '/opt/homebrew' }}/opt/libffi/include
+          LIBRARY_PATH: ${{ steps.setup-homebrew.outputs.prefix || '/opt/homebrew' }}/opt/libffi/lib
+          PKG_CONFIG_PATH: ${{ steps.setup-homebrew.outputs.prefix || '/opt/homebrew' }}/opt/libffi/lib/pkgconfig
+
         run: |
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             make test_dylib_lnx CC=g++-14
