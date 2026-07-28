@@ -31,4 +31,27 @@ extern "C" {
         std::println("a: {}, Nested.x: {}", s.a, s.n.x);
     }
 
+
+    S2 getS2() {
+        return {1, {2}};
+    }
+
+    void modifyS1(S1 s) {
+        s.x = 9;
+    }
+
+    void modifyS1Ref(S1& s) {
+        s.x = 10;
+    }
+
+    void modifyS1Ptr(S1 *s) {
+        s->x = 12;
+    }
+
+
+    const char* getStr() { return "Hello!"; }
+
+    void printText(const char *s) {
+        std::println("{}", s);
+    }
 }

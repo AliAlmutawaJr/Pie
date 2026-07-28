@@ -20,6 +20,224 @@
 // !!!!!!!!! ADD FFI TEST CASES !!!!!!!!!
 
 
+    // const char* getStr() { return "Hello!"; }
+
+    // void printText(const char *s) {
+    //     std::println("{}", s);
+    // }
+
+TEST_CASE("Dylib & FFI Calls with Pointers!", "[FFI][DYLIB]") {
+    const auto src1 = R"(
+V = __builtin_ffi_type_void();
+I = __builtin_ffi_type_int();
+S = __builtin_ffi_type_struct();
+
+CIF = class {
+    __param_types = {};
+    __return_type = V;
+};
+
+S1 = class {
+    x = 0;
+    __types = {I};
+};
+
+S2 = class {
+    a = 0;
+    n = S1();
+    __types = {I, S};
+};
+
+getS2_cif = CIF({}, S2());
+
+dylib = __builtin_dlopen("Tests/dylib");
+
+getS2_handle = __builtin_dlsym(dylib, "getS2");
+
+
+result = __builtin_ffi_call(getS2_handle, getS2_cif);
+
+__builtin_print(result.a);
+__builtin_print(result.n.x);
+)";
+
+    REQUIRE(pie::test::run(src1) == "1\n2");
+
+
+    const auto src2 = R"(
+V = __builtin_ffi_type_void();
+I = __builtin_ffi_type_int();
+S = __builtin_ffi_type_struct();
+P = __builtin_ffi_type_pointer();
+
+CIF = class {
+    __param_types = {};
+    __return_type = V;
+};
+
+S1 = class {
+    x = 0;
+    __types = {I};
+};
+
+S2 = class {
+    a = 0;
+    n = S1();
+    __types = {I, S};
+};
+
+
+modify_cif = CIF({S});
+modifyS1_cif = CIF({P});
+
+dylib = __builtin_dlopen("Tests/dylib");
+
+modifyS1_handle    = __builtin_dlsym(dylib, "modifyS1"   );
+modifyS1Ref_handle = __builtin_dlsym(dylib, "modifyS1Ref");
+modifyS1Ptr_handle = __builtin_dlsym(dylib, "modifyS1Ptr");
+
+
+s = S1(7);
+__builtin_print(s.x);
+__builtin_ffi_call(modifyS1_handle, modify_cif, s);
+__builtin_print(s.x);
+
+s = S1(5);
+__builtin_print(s.x);
+__builtin_ffi_call(modifyS1Ref_handle, modifyS1_cif, s);
+__builtin_print(s.x);
+
+s = S1(3);
+__builtin_print(s.x);
+__builtin_ffi_call(modifyS1Ptr_handle, modifyS1_cif, s);
+__builtin_print(s.x);
+)";
+
+    REQUIRE(pie::test::run(src2) == "7\n7\n5\n10\n3\n12");
+
+
+    const auto src3 = R"(
+V = __builtin_ffi_type_void();
+C = __builtin_ffi_type_cstring();
+
+CIF = class {
+    __param_types = {};
+    __return_type = V;
+};
+
+
+getStr_cif = CIF({}, C);
+
+dylib = __builtin_dlopen("Tests/dylib");
+
+getStr_handle = __builtin_dlsym(dylib, "getStr");
+
+
+s = __builtin_ffi_call(getStr_handle, getStr_cif);
+
+__builtin_print(s);
+)";
+
+    REQUIRE(pie::test::run(src3) == R"(Hello!)");
+
+
+    const auto src4 = R"(
+V = __builtin_ffi_type_void();
+C = __builtin_ffi_type_cstring();
+
+CIF = class {
+    __param_types = {};
+    __return_type = V;
+};
+
+
+printText_cif = CIF({C});
+
+dylib = __builtin_dlopen("Tests/dylib");
+
+printText_handle = __builtin_dlsym(dylib, "printText");
+
+
+__builtin_ffi_call(printText_handle, printText_cif, "Meow :3");
+)";
+
+    REQUIRE(pie::test::run(src4) == R"(Meow :3)");
+}
+
+
+
+TEST_CASE("Walrus Operator with Fold Expression", "[Assign][Fold]") {
+    const auto src1 = R"(
+infix + = (a, b) => __builtin_add(a, b);
+
+func = (ints: ...) => {
+    x := (0 + ints + ...);
+
+    __builtin_print(__builtin_decltype(x));
+};
+
+func();
+)";
+
+    REQUIRE(pie::test::run(src1) == R"(Int)");
+
+
+    const auto src2 = R"(
+infix + = (a, b) => __builtin_add(a, b);
+
+func = (ints: ...) => {
+    x := (0 + ints + ...);
+
+    __builtin_print(__builtin_decltype(x));
+};
+
+func(1);
+)";
+
+    REQUIRE(pie::test::run(src2) == R"(Any)");
+}
+
+
+TEST_CASE("Walrus Operator (inferred assignment)", "[Assign]") {
+    const auto src1 = R"(
+x = 1;
+y := 1;
+__builtin_print(__builtin_decltype(x));
+__builtin_print(__builtin_decltype(y));
+)";
+
+    REQUIRE(pie::test::run(src1) == R"(Any
+Int)");
+
+
+    const auto src2 = R"(
+func = (): union { Int; String; } => "hi";
+
+y := func();
+
+__builtin_print(__builtin_type(y));
+__builtin_print(__builtin_decltype(y));
+)";
+
+    REQUIRE(pie::test::run(src2) == R"(String
+union { Int; String; })");
+
+
+    const auto src3 = R"(
+infix(+) add1 = (a, b): Int => __builtin_add(a, b);
+infix(+) add2 = (a, b) => __builtin_add(a, b);
+
+a := 1 add1 2;
+b := 1 add2 2;
+__builtin_print(__builtin_decltype(a));
+__builtin_print(__builtin_decltype(b));
+)";
+
+    REQUIRE(pie::test::run(src3) == R"(Int
+Any)");
+}
+
+
 TEST_CASE("Assigning to Closures in Operators", "[Operator]") {
     const auto src1 = R"(
 ((a, b) => __builtin_add(a, b)) = "tf!";
@@ -31,8 +249,10 @@ __builtin_print(5 + 2);
 __builtin_print((a, b) => __builtin_add(a, b));
 )";
 
-    REQUIRE(pie::test::run(src1) == R"(ok?
-tf!)");
+//     REQUIRE(pie::test::run(src1) == R"(ok?
+// tf!)");
+
+    REQUIRE_THROWS(pie::test::run(src1));
 }
 
 
@@ -49,7 +269,7 @@ f("meow");
 
 
 
-TEST_CASE("Dylib & FFI Calls!", "[FFI][DYLIB]") {
+TEST_CASE("Dylib & FFI Calls!", "[FFI]") {
     const auto src1 = R"(
 V = __builtin_ffi_type_void();
 
@@ -1612,7 +1832,7 @@ __builtin_print(U);
 
 TEST_CASE("Type Of", "[Type][Builtin]") {
     const auto src1 = R"(
-type = __builtin_type_of;
+type = __builtin_type;
 
 f = (x, y: type(x), z: type(y)) => 1;
 f("1", "2", "3");
@@ -1625,7 +1845,7 @@ f(1, 2, 3);
     REQUIRE_NOTHROW(pie::test::run(src1));
 
     const auto src2 = R"(
-type = __builtin_type_of;
+type = __builtin_type;
 
 f = (x, y: type(x), z: type(y)) => 3;
 f("1", "2", 3);
@@ -2698,7 +2918,7 @@ printList(list);
 }
 
 
-TEST_CASE("unary separated left fold", "[Fold Exprs]") {
+TEST_CASE("unary separated left fold", "[Fold]") {
     const auto src = R"(
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
@@ -2711,7 +2931,7 @@ print(func(1, 2, 3, 4));
 }
 
 
-TEST_CASE("unary separated right fold", "[Fold Exprs]") {
+TEST_CASE("unary separated right fold", "[Fold]") {
     const auto src = R"(
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
@@ -2724,7 +2944,7 @@ print(func(1, 2, 3, 4));
 }
 
 
-TEST_CASE("binary separated left fold", "[Fold Exprs]") {
+TEST_CASE("binary separated left fold", "[Fold]") {
     const auto src = R"(
 print = __builtin_print;
 infix + = (a: Int, b: Int) => __builtin_add(a, b);
@@ -2739,7 +2959,7 @@ print(greet("Hello ", "Ali", "Ben", "Byt", ", "));
 }
 
 
-TEST_CASE("binary left fold", "[Fold Exprs]") {
+TEST_CASE("binary left fold", "[Fold]") {
     const auto src = R"(
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
@@ -2754,7 +2974,7 @@ print(func(1, 2, 3, 4));
 
 
 
-TEST_CASE("unary right fold", "[Fold Exprs]") {
+TEST_CASE("unary right fold", "[Fold]") {
     const auto src = R"(
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
@@ -2769,7 +2989,7 @@ print(func(1, 2, 3, 4));
 
 
 
-TEST_CASE("binary right fold", "[Fold Exprs]") {
+TEST_CASE("binary right fold", "[Fold]") {
     const auto src = R"(
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
@@ -2783,7 +3003,7 @@ print(func(1, 2, 3, 4));
 }
 
 
-TEST_CASE("left fold", "[Fold Exprs]") {
+TEST_CASE("left fold", "[Fold]") {
     const auto src = R"(
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
