@@ -1,6 +1,9 @@
 
 space std {
     print = __builtin_print;
+    type = __builtin_type;
+    decltype = __builtin_decltype;
+    reset = __builtin_reset;
 
     infix + = (a, b) => __builtin_add(a, b);
     infix * = (a, b) => __builtin_mul(a, b);
