@@ -825,6 +825,7 @@ make
 - [ ] Fix variadic expansion
 - [ ] Breaking Out of Nested Loops
 - [ ] Use Big Int instead of `int64_t`
+- [ ] `Expr::involveName()` seems to be not exhastive, espacially with Closure. Check it.
 - [ ] Add default values to function parameters
 - [ ] Make `=` and `=>` overloadable
 - [ ] Fix builtin reset (value-reset, reset/name-reset) 
