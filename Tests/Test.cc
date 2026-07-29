@@ -17,14 +17,6 @@
 // std::print((makeC(1, 2, 3).pack + ...));
 
 
-// !!!!!!!!! ADD FFI TEST CASES !!!!!!!!!
-
-
-    // const char* getStr() { return "Hello!"; }
-
-    // void printText(const char *s) {
-    //     std::println("{}", s);
-    // }
 
 TEST_CASE("Dylib & FFI Calls with Pointers!", "[FFI][DYLIB]") {
     const auto src1 = R"(
