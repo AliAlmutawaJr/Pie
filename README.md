@@ -45,6 +45,13 @@ Define variables using assignment with an optional type:
 x = 5;
 y: Int = 5;
 ```
+Variables without type annotations will be given type `Any`.
+
+For type inference, use the walrus operator `:=`:
+```pie
+x := 1;
+```
+`x` has type `Int`.
 
 ## Closures
 
