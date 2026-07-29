@@ -349,7 +349,7 @@ inline value::Value unpack(const std::byte *buffer, const FFI *ffi, const value:
     }
 
 
-    return value::Object{tmpl.first, out_members};
+    return value::Object{tmpl.first, std::move(out_members)};
 }
 
 
