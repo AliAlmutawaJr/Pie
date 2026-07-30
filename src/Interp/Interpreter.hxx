@@ -193,12 +193,24 @@ public:
     }
 
 
-    std::optional<ValueType> checkMemberInThisObject(const std::string& name) {
+    std::optional<ValueType> checkMemberInThisObject(const std::string& name) const {
         if (selves.empty()) return {};
 
         for (const auto& self : std::views::reverse(selves)) {
             for (const auto& [member, type, value] : self.second->members) {
                 if (member.name == name) return {{*value, type}};
+            }
+        }
+
+        return {};
+    }
+
+    std::optional<ValueType> checkMemberInThisObject(const ssize_t ID) const {
+        if (selves.empty()) return {};
+
+        for (const auto& self : std::views::reverse(selves)) {
+            for (const auto& [member, type, value] : self.second->members) {
+                if (member.ID == ID) return {{*value, type}};
             }
         }
 
@@ -798,8 +810,13 @@ public:
 
 
     ValueType nameAssign(const expr::Assignment *ass, const expr::Name* name) {
-        // * walrus assignment may need to propogate the type here
 
+        if (checkMemberInThisObject(name->ID)) {
+            const value::Value val = std::visit(*this, ass->rhs->variant()).value;
+            return changeThis(name->name, val);
+        }
+
+        // * walrus assignment may need to propogate the type here
         type::TypePtr type = ass->type;
         bool change{};
 
@@ -813,10 +830,10 @@ public:
                 change = true;
             }
         }
-        else if (checkMemberInThisObject(name->name)) {
-            const value::Value val = std::visit(*this, ass->rhs->variant()).value;
-            return changeThis(name->name, val);
-        }
+        // if (checkMemberInThisObject(name->name)) {
+        //     const value::Value val = std::visit(*this, ass->rhs->variant()).value;
+        //     return changeThis(name->name, val);
+        // }
         else { // New var
             type = type::shouldReassign(type) ? type::builtins::Any() : validateType(std::move(type));
         }
@@ -1020,10 +1037,12 @@ public:
         }
 
         const value::Value left = std::visit(*this, acc->var->variant()).value;
-        if (std::holds_alternative<value::Object>(left)) return objectAccess(get<value::Object>(left), acc->name);
 
+        if (not std::holds_alternative<value::Object>(left))
+            util::error("Can't access a non-class type!");
+        
 
-        util::error("Can't access a non-class type!");
+        return objectAccess(get<value::Object>(left), acc->name);
     }
 
 
@@ -4535,6 +4554,9 @@ public:
                 return {{*value_ptr, type_ptr}};
             }
         }
+
+        
+        if (const auto var = checkMemberInThisObject(ID); var) return *var;
 
 
         for (const auto& ns : std::views::reverse(current_space)) {
