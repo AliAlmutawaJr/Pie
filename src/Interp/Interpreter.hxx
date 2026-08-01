@@ -308,7 +308,7 @@ public:
 
 
     ValueType operator()(const expr::Map *map) {
-        value::MapValue map_value{std::make_shared<value::Items>()};
+        value::Map map_value{std::make_shared<value::Items>()};
 
         for (auto [key, expr] : map->items) {
             // evaluating key here first instead of inside the call to .insert_or_assign()
@@ -361,9 +361,9 @@ public:
 
         value::Value pack = std::visit(*this, fold->pack->variant()).value;
 
-        if (not std::holds_alternative<value::PackList>(pack)) util::error("Folding over a non-pack: " + stringify(pack));
+        if (not std::holds_alternative<value::Pack>(pack)) util::error("Folding over a non-pack: " + stringify(pack));
 
-        auto& packlist = get<value::PackList>(pack);
+        auto& packlist = get<value::Pack>(pack);
 
         if (packlist->values.empty()) util::error("Folding over an empty pack: " + fold->stringify());
         if (packlist->values.size() == 1) return {packlist->values[0], typeOf(packlist->values[0])};
@@ -464,8 +464,8 @@ public:
         value::Value rhs = std::visit(*this, fold->rhs->variant()).value;
 
 
-        const auto l_pack = std::holds_alternative<value::PackList>(lhs), l2r = l_pack;
-        const auto r_pack = std::holds_alternative<value::PackList>(rhs);
+        const auto l_pack = std::holds_alternative<value::Pack>(lhs), l2r = l_pack;
+        const auto r_pack = std::holds_alternative<value::Pack>(rhs);
 
 
         if (l_pack == r_pack) {
@@ -476,7 +476,7 @@ public:
         value::Value pack = l_pack? std::move(lhs) : std::move(rhs);
         value::Value sep  = r_pack? std::move(lhs) : std::move(rhs);
 
-        auto& packlist = get<value::PackList>(pack);
+        auto& packlist = get<value::Pack>(pack);
 
         if (packlist->values.empty()) util::error("Folding over an empty pack: " + fold->stringify());
         if (packlist->values.size() == 1) return {packlist->values[0], typeOf(packlist->values[0])};
@@ -593,7 +593,7 @@ public:
 
 
         value::Value pack = std::visit(*this, fold->pack->variant()).value;
-        auto& packlist = get<value::PackList>(pack);
+        auto& packlist = get<value::Pack>(pack);
 
 
         if (packlist->values.empty()) return std::visit(*this, fold->init->variant());
@@ -726,10 +726,10 @@ public:
         );
         if (found == obj.second->members.end()) util::error("In assignment '" + ass->stringify() + "', Name '" + acc->name + "' doesn't exist in object: " + stringify(obj));
 
-        const value::Value value = std::visit(*this, ass->rhs->variant()).value;
+        value::Value value = std::visit(*this, ass->rhs->variant()).value;
         const type::TypePtr& type = get<type::TypePtr>(*found);
 
-        typeCheck(value, type,
+        value = typeCheck(value, type,
             "In assignment: " + ass->stringify() +
             "\nType mis-match! Expected: " + type->text() + ", got: " + typeOf(value)->text()
         );
@@ -811,11 +811,6 @@ public:
 
     ValueType nameAssign(const expr::Assignment *ass, const expr::Name* name) {
 
-        if (checkMemberInThisObject(name->ID)) {
-            const value::Value val = std::visit(*this, ass->rhs->variant()).value;
-            return changeThis(name->name, val);
-        }
-
         // * walrus assignment may need to propogate the type here
         type::TypePtr type = ass->type;
         bool change{};
@@ -874,6 +869,11 @@ public:
 
 
     ValueType operator()(const expr::Assignment *ass) {
+        if (checkMemberInThisObject(ass->lhs->ID)) {
+            const value::Value val = std::visit(*this, ass->rhs->variant()).value;
+            return changeThis(ass->lhs->stringify(), val);
+        }
+
         // assigning to x.y should never create a variable "x.y" bu access x and change y;
         if (auto *acc = dynamic_cast<expr::Access*>(ass->lhs.get())) return accessAssign(ass, acc);
 
@@ -903,7 +903,7 @@ public:
 
 
     ValueType operator()(const expr::InferredAssignment *infr) {
-        const auto [value, type] = std::visit(*this, infr->rhs->variant());
+        auto [value, type] = std::visit(*this, infr->rhs->variant());
 
         addVar(
             infr->name.name,
@@ -912,7 +912,254 @@ public:
             type
         );
 
+        return {std::move(value), std::move(type)};
+    }
+
+
+
+    ValueType accessUnpackment(const expr::Unpackment *unpack, expr::Access *acc, value::Value value) {
+
+        if (auto name = dynamic_cast<const expr::Name*>(acc->var.get()); name and name->name == "self") {
+            if (selves.empty())
+                util::error("Can't use 'self' outside of class scope: " + unpack->stringify()); // shouldn't happen anyway
+
+            if (not checkMemberInThisObject(acc->name))
+                util::error("Name '" + acc->name + "' not found in object '" + acc->var->stringify() + "' in assignment: " + unpack->stringify());
+
+            return changeThis(acc->name, value);
+        }
+
+
+        const value::Value left = std::visit(*this, acc->var->variant()).value;
+
+        if (not std::holds_alternative<value::Object>(left)) util::error("Can't access a non-class type!");
+
+        const auto& obj = get<value::Object>(left);
+
+        const auto& found = std::ranges::find_if(obj.second->members,
+            [name = acc->name] (const auto& member) { return get<expr::Name>(member).stringify() == name; }
+        );
+        if (found == obj.second->members.end()) util::error("In unpackment '" + unpack->stringify() + "', Name '" + acc->name + "' doesn't exist in object: " + stringify(obj));
+
+
+        const type::TypePtr& type = get<type::TypePtr>(*found);
+
+        value = typeCheck(value, type,
+            "In unpackment: " + unpack->stringify() +
+            "\nType mis-match! Variable `" + acc->stringify() + "` expected: " + type->text() + ", got: " + typeOf(value)->text()
+        );
+
+
+        // get<value::Value>(*found) = value;
+        *get<value::ValuePtr>(*found) = value;
+
         return {value, type};
+    }
+
+
+
+    ValueType spaceAccessUnpackment(const expr::Unpackment *unpack, expr::SpaceAccess *sa, const value::Value& value) {
+        const auto space = findNS(sa->spaces, sa->global);
+
+        auto [_, __, type] = space->members[sa->name.ID];
+
+        *get<value::ValuePtr>(space->members[sa->name.ID]) = typeCheck(value, type,
+            "In unpackment: " + unpack->stringify() +
+            "\nType mis-match! Variable `" + sa->stringify() + "` expected: " + type->text() + ", got: " + typeOf(value)->text()
+        );
+
+        return {*get<value::ValuePtr>(space->members[sa->name.ID]), type};
+    }
+
+
+
+    ValueType refUnpackment(const expr::Unpackment *unpack, const expr::Name* name, const value::Value& value) {
+        for (const auto& [e, _, __, ___] : std::views::reverse(env)) {
+            if (e.contains(name->ID)) {
+                const auto& [named_ref, value_ptr, type_ptr] = e.at(name->ID);
+                const auto& [_, space] = named_ref;
+
+                if (not space or not space->members.contains(name->ID)) 
+                    util::error();
+
+
+                // should never happen now that there is lexical analysis
+                // if (not namespaces.contains(space)) util::error("Namespace `" + space + "` not found!");
+                // if (not namespaces[space].contains(name->ID)) util::error("Name `" + name->name + "` with ID [" + std::to_string(name->ID) + "] not found in space " + space);
+
+                auto [__, ___, type] = space->members[name->ID];
+
+
+                *get<value::ValuePtr>(space->members[name->ID]) = typeCheck(value, type,
+                    "In unpackment: " + unpack->stringify() +
+                    "\nType mis-match! Variable `" + name->name + "` expected: " + type->text() + ", got: " + typeOf(value)->text()
+                );
+
+                // again, was this a bug??
+                // *get<value::ValuePtr>(space->members[name->ID]) = std::move(value);
+
+                return {*get<value::ValuePtr>(space->members[name->ID]), type};
+            }
+        }
+
+        util::error();
+    }
+
+
+    // newly introduced vars here will always be `Any`
+    ValueType nameUnpackment(const expr::Unpackment *unpack, const expr::Name* name, value::Value value) {
+        type::TypePtr type = type::builtins::Any();
+        bool change{};
+
+        // variable already exists. Check that type matches the rhs type
+        if (const auto& var = getVar(name->ID); var) {
+            if (isRef(name->ID)) return refUnpackment(unpack, name, std::move(value));
+
+            type = var->type;
+            change = true;
+        }
+
+
+        value = typeCheck(value, type,
+            "In unpackment: " + unpack->stringify() +
+            "\nType mis-match! Variable `" +  name->name + "` expected: " + type->text() + ", got: " + typeOf(value)->text()
+        );
+
+
+        // casting the function type in case assigning a function to our variable
+        if (std::holds_alternative<expr::Closure>(value)) {
+            auto& closure = get<expr::Closure>(value);
+            // we verified types are compatible so this is fine..should be...I hope
+            if (const auto* t = dynamic_cast<type::FuncType*>(type.get()))
+                closure.type = *t;
+            else if (const auto* t = dynamic_cast<type::BuiltinType*>(type.get()); t and t->text() != "Any")
+                    util::error();
+        }
+
+
+        if (change) {
+            if (not changeVar(name->ID, value)) util::error();
+        }
+        else addVar(name->stringify(), name->ID, std::make_shared<value::Value>(value), type);
+
+        return {value, type};
+    }
+
+
+
+
+    // @pre-condition: values.reserve(n)
+    void unpackInto(
+        const expr::Unpackment *unpack, // passed for better error messages!
+        std::vector<ValueType>& valuetypes,
+        const value::Value& value
+    ) {
+
+        if (std::holds_alternative<value::Object>(value)) {
+            const auto& object = get<value::Object>(value);
+
+            if (object.second->members.size() < valuetypes.capacity())
+                util::error("Unpacking more members than available: " + unpack->stringify());
+
+            for (const auto& [_, type, value_ptr] : object.second->members | std::views::take(valuetypes.capacity())) {
+                valuetypes.emplace_back(*value_ptr, type);
+            }
+        }
+        else if (std::holds_alternative<value::List>(value)) {
+            const auto& list = get<value::List>(value);
+
+            if (list.elts->values.size() < valuetypes.capacity())
+                util::error("Unpacking more elements than available: " + unpack->stringify());
+
+            for (const auto& value : list.elts->values | std::views::take(valuetypes.capacity())) {
+                valuetypes.emplace_back(value, typeOf(value));
+            }
+        }
+        else if (std::holds_alternative<value::Map>(value)) {
+            // const auto& map = get<value::Map>(value);
+            // not done yet
+        }
+    }
+
+
+    ValueType operator()(const expr::Unpackment *unpack) {
+        std::vector<ValueType   > valuetype;
+        std::vector<value::Value> values   ;
+        valuetype.reserve(unpack->lhs.size());
+        values   .reserve(unpack->lhs.size());
+
+        unpackInto(unpack, valuetype, std::visit(*this, unpack->rhs->variant()).value);
+
+        if (unpack->inferred) for (const auto& [expr, valuetype] : std::views::zip(unpack->lhs, valuetype)) {
+            auto& [value, type] = valuetype;
+            values.push_back(value);
+
+            if (auto name = dynamic_cast<expr::Name*>(expr.get())) {
+                // names are allowed to be typed
+                addVar(
+                    name->name,
+                    name->ID,
+                    std::make_shared<value::Value>(std::move(value)),
+                    std::move(type)
+                );
+            }
+            else {
+                if (
+                    dynamic_cast<expr::Access     *>(expr.get()) or
+                    dynamic_cast<expr::SpaceAccess*>(expr.get())
+                ) util::error("Cannot use an access inside unpackment: " + unpack->stringify());
+
+
+                addVar(
+                    expr->stringify(),
+                    expr->ID,
+                    std::make_shared<value::Value>((std::move(value)))
+                );
+            }
+        }
+        else {
+            for (const auto& [expr, valuetype] : std::views::zip(unpack->lhs, valuetype)) {
+                auto& [value, type] = valuetype;
+
+                if (auto access = dynamic_cast<expr::Access*>(expr.get())) {
+                    // I don't care about the return value 
+                    // all I care about is the side effects of this function
+                    // that it mutates the accessee
+                    accessUnpackment(unpack, access, value);
+                }
+                else if (auto access = dynamic_cast<expr::SpaceAccess*>(expr.get())) {
+                    spaceAccessUnpackment(unpack, access, value);
+                }
+                else {
+                    // if (auto var = getVar(expr->ID); var) { // variable already exists, reassign.
+                    //     value = typeCheck(var->value, var->type,
+                    //         "In unpackment: " + unpack->stringify() +
+                    //         "\nType mis-match! Variable `" + expr->stringify() + "` expected: " + var->type->text() + ", got: " + typeOf(var->value)->text()
+                    //     );
+
+                    //     changeVar(expr->ID, value);
+                    // }
+                    // else
+                    if (auto name = dynamic_cast<expr::Name*>(expr.get())) {
+                        nameUnpackment(unpack, name, value);
+                    }
+                    else addVar(
+                        expr->stringify(),
+                        expr->ID,
+                        std::make_shared<value::Value>(value)
+                    );
+                }
+
+
+                // has to be at the end in case a type truncates the value (sub type)
+                values.push_back(value);
+            }
+        }
+
+
+        auto pack = value::makePack(std::move(values));
+        auto type = typeOf(pack);
+        return {std::move(pack), std::move(type)};
     }
 
 
@@ -1599,9 +1846,9 @@ public:
         const auto classify = [](const value::Value& v) {
             if (std::holds_alternative<BigInt          >(v)) return Type::INT   ;
             if (std::holds_alternative<bool            >(v)) return Type::BOOL  ;
-            if (std::holds_alternative<value::ListValue>(v)) return Type::LIST  ;
             if (std::holds_alternative<  std::string   >(v)) return Type::STR   ;
-            if (std::holds_alternative<value::PackList >(v)) return Type::PACK  ;
+            if (std::holds_alternative<value::List     >(v)) return Type::LIST  ;
+            if (std::holds_alternative<value::Pack     >(v)) return Type::PACK  ;
             if (std::holds_alternative<value::Object   >(v)) return Type::OBJECT;
 
             return Type::NONE;
@@ -1697,7 +1944,7 @@ public:
                 } break;
 
                 case Type::LIST: {
-                    const auto& list = get<value::ListValue>(kind);
+                    const auto& list = get<value::List>(kind);
                     if (list.elts->values.empty()) {
                         if (not loop->els) util::error("Loop which didn't run doesn't have else branch: " + loop->stringify());
                         return std::visit(*this, loop->els->variant());
@@ -1770,7 +2017,7 @@ public:
                 } break;
 
                 case Type::PACK: {
-                    const auto& pack = get<value::PackList>(kind);
+                    const auto& pack = get<value::Pack>(kind);
                     if (pack->values.empty()) {
                         if (not loop->els) util::error("Loop which didn't run doesn't have else branch: " + loop->stringify());
                         return std::visit(*this, loop->els->variant());
@@ -2408,10 +2655,10 @@ public:
             if (const auto expand = dynamic_cast<const expr::Expansion*>(args[i].get())) {
                 const value::Value pack = std::visit(*this, expand->pack->variant()).value;
 
-                if (not std::holds_alternative<value::PackList>(pack))
+                if (not std::holds_alternative<value::Pack>(pack))
                     util::error("Expansion applied on a non-pack variable: " + args[i]->stringify());
 
-                expand_at.push_back({i, get<value::PackList>(pack)->values});
+                expand_at.push_back({i, get<value::Pack>(pack)->values});
             }
         }
 
@@ -3254,11 +3501,11 @@ public:
             if (const auto expand = dynamic_cast<const expr::Expansion*>(arg.get())) {
                 const value::Value pack = std::visit(*this, expand->pack->variant()).value;
 
-                if (not std::holds_alternative<value::PackList>(pack))
+                if (not std::holds_alternative<value::Pack>(pack))
                     util::error("Expansion applied on a non-pack variable: " + arg->stringify());
 
 
-                for (const auto& v : get<value::PackList>(pack)->values) {
+                for (const auto& v : get<value::Pack>(pack)->values) {
                     auto& [name, type, _] = cls->blueprint->fields[field_idx++];
                     auto new_type = validateType(type);
 
@@ -3472,9 +3719,13 @@ public:
             //* variadic
             "print", "concat", 
 
-            //* nullary
+            // debugging
             "print_env",
-            "panic", "input_str", "input_int",
+            "panic",
+            "id",
+
+            //* nullary
+            "input_str", "input_int",
 
             //* unary
             "type", "decltype", "len", "reset", "eval","neg", "abs", "not", "to_int", "to_double", "to_string", //"read_file"
@@ -3616,6 +3867,11 @@ public:
             // );
 
             util::error<std::runtime_error, false>("", {});
+        }
+
+        if (name == "id") {
+            arity_check(1);
+            return args[0]->ID;
         }
 
         if (name == "print_env") {
@@ -3966,10 +4222,10 @@ public:
             if (name.name == "__param_types") {
                 found_params = true;
 
-                if (not std::holds_alternative<value::ListValue>(*value_ptr)) util::error();
+                if (not std::holds_alternative<value::List>(*value_ptr)) util::error();
 
 
-                const auto& list = get<value::ListValue>(*value_ptr);
+                const auto& list = get<value::List>(*value_ptr);
                 if (list.elts->values.size() != reserve_size) // `reserve_size` instead of `args_size` because `-2` to exclude the sym and cif
                     util::error("Wrong number of arguments passed to function: " + call->stringify());
 
@@ -4021,14 +4277,14 @@ public:
                     // way the caller just passes the object/list like any
                     // other argument.
                     if (type_id == FFI_TYPE_POINTER and
-                        (std::holds_alternative<value::Object>(value) or std::holds_alternative<value::ListValue>(value)))
+                        (std::holds_alternative<value::Object>(value) or std::holds_alternative<value::List>(value)))
                     {
-                        const bool is_array = std::holds_alternative<value::ListValue>(value);
+                        const bool is_array = std::holds_alternative<value::List>(value);
                         size_t count = 1;
                         const value::Value* template_elem = &value;
 
                         if (is_array) {
-                            const auto& arr_list = get<value::ListValue>(value);
+                            const auto& arr_list = get<value::List>(value);
                             count = arr_list.elts->values.size();
 
                             if (count == 0) {
@@ -4058,7 +4314,7 @@ public:
                         auto* array_buf = payloads.back().data();
 
                         if (is_array) {
-                            const auto& arr_list = get<value::ListValue>(value);
+                            const auto& arr_list = get<value::List>(value);
                             for (size_t elt{}; elt < count; ++elt)
                                 ffi::pack(array_buf + elt * elem_size, elem_shape_ptr, arr_list.elts->values[elt], payloads);
                         }
@@ -4128,7 +4384,7 @@ public:
         const auto applyWritebacks = [&writebacks] {
             for (auto& wb : writebacks) {
                 if (wb.is_array) {
-                    auto& list = get<value::ListValue>(wb.target);
+                    auto& list = get<value::List>(wb.target);
                     for (size_t i{}; i < wb.count; ++i)
                         ffi::unpackInto(wb.buffer + i * wb.elem_shape->type->size, wb.elem_shape, list.elts->values[i]);
                 }
@@ -4314,9 +4570,9 @@ public:
             );
         }
 
-        if (std::holds_alternative<value::PackList>(value)) {
+        if (std::holds_alternative<value::Pack>(value)) {
             auto values = std::ranges::fold_left(
-                get<value::PackList>(value)->values,
+                get<value::Pack>(value)->values,
                 std::vector<type::TypePtr>{},
                 [this] (auto acc, const auto& elt) {
                     acc.push_back(typeOf(elt));
@@ -4337,9 +4593,9 @@ public:
             // return same ? std::make_shared<type::VariadicType>(values[0]) : non_typed_pack;
         }
 
-        if (std::holds_alternative<value::ListValue>(value)) {
+        if (std::holds_alternative<value::List>(value)) {
             auto values = std::ranges::fold_left(
-                get<value::ListValue>(value).elts->values,
+                get<value::List>(value).elts->values,
                 std::vector<type::TypePtr>{},
                 [this] (auto acc, const auto& elt) {
                     acc.push_back(typeOf(elt));
@@ -4360,7 +4616,7 @@ public:
             return type::UnionOf(std::move(values));
         }
 
-        if (std::holds_alternative<value::MapValue>(value)) {
+        if (std::holds_alternative<value::Map>(value)) {
             // auto values = std::ranges::fold_left(
             //     get<value::MapValue>(value).items->map,
             //     std::vector<std::pair<type::TypePtr, type::TypePtr>>{},
@@ -4371,7 +4627,7 @@ public:
             //     }
             // );
             auto keys = std::ranges::fold_left(
-                get<value::MapValue>(value).items->map,
+                get<value::Map>(value).items->map,
                 std::vector<type::TypePtr>{},
                 [this] (auto acc, const auto& elt) {
                     acc.push_back({typeOf(elt.first)});
@@ -4382,7 +4638,7 @@ public:
             if (keys.empty()) return std::make_shared<type::MapType>(type::builtins::_(), type::builtins::_());
 
             auto values = std::ranges::fold_left(
-                get<value::MapValue>(value).items->map,
+                get<value::Map>(value).items->map,
                 std::vector<type::TypePtr>{},
                 [this] (auto acc, const auto& elt) {
                     acc.push_back({typeOf(elt.second)});

@@ -291,9 +291,9 @@ namespace type {
 
 
     bool ListType::typeCheck(interp::Visitor *v, const value::Value& value, const TypePtr&) const {
-        if (not std::holds_alternative<value::ListValue>(value)) return false;
+        if (not std::holds_alternative<value::List>(value)) return false;
 
-        const auto& map = get<value::ListValue>(value);
+        const auto& map = get<value::List>(value);
 
         for (const auto& val : map.elts->values)
             if (not type->typeCheck(v, val, v->typeOf(val))) return false;
@@ -322,9 +322,9 @@ namespace type {
 
 
     bool MapType::typeCheck(interp::Visitor *v, const value::Value& value, const TypePtr&) const {
-        if (not std::holds_alternative<value::MapValue>(value)) return false;
+        if (not std::holds_alternative<value::Map>(value)) return false;
 
-        const auto& map = get<value::MapValue>(value);
+        const auto& map = get<value::Map>(value);
 
         for (const auto& [key, val] : map.items->map) {
             if (

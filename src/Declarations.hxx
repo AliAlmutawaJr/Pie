@@ -83,6 +83,7 @@ using Node = std::variant<
     struct BinaryFold        *,
     struct Assignment        *,
     struct InferredAssignment*,
+    struct Unpackment        *,
     struct Class             *,
     struct Union             *,
     struct Match             *,

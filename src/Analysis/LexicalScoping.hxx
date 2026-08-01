@@ -58,169 +58,113 @@ public:
 
     // void operator()(auto *node) { }
 
-    void operator()(expr::Num *n);
-    void operator()(expr::Bool *b);
-    void operator()(expr::String *s);
+    void operator()(expr::Num*);
+    void operator()(expr::Bool*);
+    void operator()(expr::String*);
 
-    void operator()(expr::Cascade *c);
-    void operator()(expr::Fix *f);
+    void operator()(expr::Cascade*);
+    void operator()(expr::Fix*);
 
 
-    void accessAssign(expr::Access *acc, expr::Assignment *ass);
-    void spaceAccessAssign(expr::SpaceAccess *acc, expr::Assignment *ass);
+    void accessAssign(expr::Access*, expr::Assignment*);
+    void spaceAccessAssign(expr::SpaceAccess*, expr::Assignment*);
 
-    void operator()(expr::Assignment *ass);
-    void operator()(expr::InferredAssignment *inf);
+    void operator()(expr::Assignment*);
+    void operator()(expr::InferredAssignment*);
+    void operator()(expr::Unpackment *);
 
 
-    void operator()(expr::Name *name);
+    void operator()(expr::Name*);
 
 
-    void operator()(expr::Block *b);
+    void operator()(expr::Block*);
 
-    void operator()(expr::Closure *c);
+    void operator()(expr::Closure*);
 
-    void operator()(expr::Call *call);
+    void operator()(expr::Call*);
 
-    void operator()(expr::List *list);
+    void operator()(expr::List*);
 
-    void operator()(expr::Map *map);
+    void operator()(expr::Map*);
 
-    void operator()(expr::Expansion *e);
+    void operator()(expr::Expansion*);
 
-    void operator()(expr::UnaryFold *fold);
+    void operator()(expr::UnaryFold*);
 
-    void operator()(expr::SeparatedUnaryFold *fold);
+    void operator()(expr::SeparatedUnaryFold*);
 
-    void operator()(expr::BinaryFold *fold);
+    void operator()(expr::BinaryFold*);
 
 
-    void operator()(expr::Class *cls);
+    void operator()(expr::Class*);
 
-    void operator()(expr::Union *onion);
+    void operator()(expr::Union*);
 
 
-    void checkPattern(expr::Match::Case::Pattern& pat);
+    void checkPattern(expr::Match::Case::Pattern&);
 
 
-    void operator()(expr::Match *match);
+    void operator()(expr::Match*);
 
 
-    void operator()(expr::Loop *loop);
+    void operator()(expr::Loop*);
 
-    void operator()(expr::Break *br);
+    void operator()(expr::Break*);
 
-    void operator()(expr::Continue *cont);
+    void operator()(expr::Continue*);
 
 
-    void operator()(const expr::Access *acc);
+    void operator()(const expr::Access*);
 
 
-    void operator()(expr::Import *import);
+    void operator()(expr::Import*);
 
+    void operator()(expr::Namespace*);
 
-    void operator()(expr::Namespace *n);
+    void operator()(expr::UseFix*);
 
+    void operator()(expr::UseSpace*);
 
-    void operator()(expr::UseFix *use);
+    void operator()(expr::Use*);
 
-    void operator()(expr::UseSpace *use);
+    void operator()(expr::SpaceAccess*);
 
-    void operator()(expr::Use *use);
 
-    void operator()(expr::SpaceAccess *acc);
+    void operator()(expr::Grouping*);
 
-    void operator()(expr::Grouping *group);
+    void operator()(expr::UnaryOp*);
 
-    void operator()(expr::UnaryOp *up);
+    void operator()(expr::BinOp*);
 
-    void operator()(expr::BinOp *bp);
+    void operator()(expr::PostOp*);
 
-    void operator()(expr::PostOp   *pp);
+    void operator()(expr::CircumOp*);
 
-    void operator()(expr::CircumOp *cp);
+    void operator()(expr::OpCall*);
 
-    void operator()(expr::OpCall *oc);
+    void visitType(const type::TypePtr&);
 
-    void visitType(const type::TypePtr& type);
+    void operator()(expr::Syntax*);
 
-    void operator()(expr::Syntax *syn);
+    void operator()(expr::Type*);
 
-    void operator()(expr::Type *type);
 
 
-
-    // size_t checkName(
-    //     const std::string& name,
-    //     const std::source_location& location = std::source_location::current()
-    // ) {
-    //     if (const auto ID = findVar(name); not ID) util::error<except::NameLookup>("Name `" + name + "` not found!", location);
-    //     else return *ID;
-    // }
-
-
-    // void checkName(
-    //     const std::string& name,
-    //     const std::string& space,
-    //     const std::source_location& location = std::source_location::current()
-    // ) {
-    //     if (not namespaces.contains(space)) util::error<except::NameLookup>("Name `" + name + "` not found!", location);
-
-    //     for (const auto& n : namespaces[space])
-    //         if (n == name) return;
-
-
-    //     util::error<except::NameLookup>("Name `" + name + "` not found!", location);
-    // }
-
-
-
-    // static NameSpace* getNamespaceAt(
-    //     const std::string& dir,
-    //     const std::unordered_map<std::string, std::shared_ptr<NameSpace>>& spaces
-    // ) {
-    //     if (dir.empty()) return nullptr;
-
-    //     const size_t ind = dir[0] - 0X30;
-
-    //     return dir.size() == 1 ?
-    //         spaces[ind].get()  :
-    //         getNamespaceAt(dir.substr(0, dir.size() - 1), spaces[ind]->children);
-    // }
-
-
-    // std::string fullName(const NameSpace* ns) const {
-    //     std::vector<std::string> spaces;
-
-    //     for (auto ptr = ns; ptr; ptr = ptr->parent)
-    //         spaces.push_back(ptr->name);
-
-    //     std::ranges::reverse(spaces);
-
-    //     std::string name = spaces[0];
-
-    //     for (const auto& s : spaces | std::views::drop(1))
-    //         name += "::" + s;
-
-    //     return name;
-    // }
-
-
-    void addSpace(const std::string& name);
+    void addSpace(const std::string&);
 
     void popSpace();
 
 
 
-    NameSpace* matchChain(const std::vector<std::string>& names, NameSpace *space);
+    NameSpace* matchChain(const std::vector<std::string>&, NameSpace*);
 
     // ideally, should be called findSpaces!
-    NameSpace* findSpace(const std::vector<std::string>& names, const bool global_search_only = false);
+    NameSpace* findSpace(const std::vector<std::string>&, const bool global_search_only = false);
 
-    void addVar(std::string name, const size_t index);
+    void addVar(std::string name, const size_t);
 
 
-    std::optional<size_t> findVarInSpace(const std::string& name) const;
+    std::optional<size_t> findVarInSpace(const std::string&) const;
 
 
     void addNamespaces(
@@ -229,13 +173,13 @@ public:
     );
 
 
-    [[nodiscard]] std::optional<size_t> findVar(const std::string& name) const;
+    [[nodiscard]] std::optional<size_t> findVar(const std::string&) const;
 
 
     void scope();
 
 
-    void scope(const std::shared_ptr<NameSpace>& space);
+    void scope(const std::shared_ptr<NameSpace>&);
 
 
     void unscope();

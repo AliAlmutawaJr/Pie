@@ -200,10 +200,10 @@ inline std::unique_ptr<FFI> prepareFFI(const value::Value& value, const BigInt t
         if (name.name != "__types") continue;
         found_types = true;
 
-        if (not std::holds_alternative<value::ListValue>(*member_value))
+        if (not std::holds_alternative<value::List>(*member_value))
             util::error("Special Member `__types` must be a list filled with C Types: " + value::stringify(value));
 
-        for (const auto& elt : get<value::ListValue>(*member_value).elts->values) {
+        for (const auto& elt : get<value::List>(*member_value).elts->values) {
             if (not std::holds_alternative<BigInt>(elt))
                 util::error("Special Member `__types` must be a list filled with C Types: " + value::stringify(value));
 

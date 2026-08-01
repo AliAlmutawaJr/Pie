@@ -83,19 +83,19 @@ std::string stringify(const Value& value, const size_t indent) {
         ) + '\n' + std::string(indent, ' ') + '}';
     }
 
-    else if (std::holds_alternative<PackList>(value)) {
+    else if (std::holds_alternative<Pack>(value)) {
         std::string comma = "";
-        for (const auto& v : get<PackList>(value)->values) {
+        for (const auto& v : get<Pack>(value)->values) {
             s += comma + stringify(v, indent + 4);
             comma = ", ";
         }
     }
 
-    else if (std::holds_alternative<ListValue>(value)) {
+    else if (std::holds_alternative<List>(value)) {
         s += '{';
 
         std::string comma = "";
-        for (const auto& v : get<ListValue>(value).elts->values) {
+        for (const auto& v : get<List>(value).elts->values) {
             s += comma + stringify(v, indent + 4);
             comma = ", ";
         }
@@ -103,11 +103,11 @@ std::string stringify(const Value& value, const size_t indent) {
         s += '}';
     }
 
-    else if (std::holds_alternative<MapValue>(value)) {
+    else if (std::holds_alternative<Map>(value)) {
         s += '{';
 
         std::string comma = "";
-        for (const auto& [key, value] : get<MapValue>(value).items->map) {
+        for (const auto& [key, value] : get<Map>(value).items->map) {
             s += comma + stringify(key, indent + 4) + ": " + stringify(value, indent + 4);
             comma = ", ";
         }
@@ -200,14 +200,14 @@ inline std::ostream& operator<<(std::ostream& os, const Environment& env) {
     if (std::holds_alternative<expr::Node>(lhs) and std::holds_alternative<expr::Node>(rhs))
         util::error("Can't check equality of a Syntax!");
 
-    if (std::holds_alternative<PackList>(lhs) and std::holds_alternative<PackList>(rhs))
-        return get<PackList>(lhs)->values == get<PackList>(rhs)->values;
+    if (std::holds_alternative<Pack>(lhs) and std::holds_alternative<Pack>(rhs))
+        return get<Pack>(lhs)->values == get<Pack>(rhs)->values;
 
-    if (std::holds_alternative<ListValue>(lhs) and std::holds_alternative<ListValue>(rhs))
-        return get<ListValue>(lhs).elts->values == get<ListValue>(rhs).elts->values;
+    if (std::holds_alternative<List>(lhs) and std::holds_alternative<List>(rhs))
+        return get<List>(lhs).elts->values == get<List>(rhs).elts->values;
 
-    if (std::holds_alternative<MapValue>(lhs) and std::holds_alternative<MapValue>(rhs))
-        return get<MapValue>(lhs).items->map == get<MapValue>(rhs).items->map;
+    if (std::holds_alternative<Map>(lhs) and std::holds_alternative<Map>(rhs))
+        return get<Map>(lhs).items->map == get<Map>(rhs).items->map;
 
 
     // error();

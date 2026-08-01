@@ -27,11 +27,11 @@ struct Members;
 
 
 struct Elements;
-struct ListValue { std::shared_ptr<Elements> elts; };
-using PackList = std::shared_ptr<Elements>;
+struct List { std::shared_ptr<Elements> elts; };
+using Pack = std::shared_ptr<Elements>;
 
 struct Items;
-struct MapValue { std::shared_ptr<Items> items; };
+struct Map { std::shared_ptr<Items> items; };
 
 struct BuiltinFunction {
     std::string func_name;
@@ -48,9 +48,9 @@ using VariantType = std::variant<
     type::TypePtr,
     Object,
     expr::Node,
-    PackList,
-    ListValue,
-    MapValue
+    Pack,
+    List,
+    Map
 >;
 
 struct Value : VariantType {
@@ -81,15 +81,20 @@ struct Items    { std::unordered_map<Value, Value> map;                         
 
 
 template <typename ...Ts>
-[[nodiscard]] inline PackList makePack(Ts&&... args) {
+[[nodiscard]] inline Pack makePack(Ts&&... args) {
     return std::make_shared<Elements>(std::forward<Ts>(args)...);
 }
 
-[[nodiscard]] inline ListValue makeList(std::vector<Value> values = {}) {
+
+[[nodiscard]] inline Pack makePack(std::vector<Value> values) {
+    return std::make_shared<Elements>(std::move(values));
+}
+
+[[nodiscard]] inline List makeList(std::vector<Value> values = {}) {
     return {std::make_shared<Elements>(std::move(values))};
 }
 
-[[nodiscard]] inline MapValue makeMap(std::unordered_map<Value, Value> items = {}) {
+[[nodiscard]] inline Map makeMap(std::unordered_map<Value, Value> items = {}) {
     return {std::make_shared<Items>(std::move(items))};
 }
 

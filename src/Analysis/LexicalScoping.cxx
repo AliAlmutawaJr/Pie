@@ -3,6 +3,7 @@
 #include "../Lex/Lexer.hxx"
 #include "../Parser/Parser.hxx"
 #include "../Utils/Exceptions.hxx"
+#include <variant>
 
 
 inline namespace pie {
@@ -37,6 +38,7 @@ LexicalScoping::LexicalScoping(const size_t index) : variable_index(index) {
         "__builtin_concat", 
         "__builtin_print_env",
         "__builtin_panic",
+        "__builtin_id",
         "__builtin_input_str",
         "__builtin_input_int",
         "__builtin_decltype",
@@ -149,11 +151,15 @@ void LexicalScoping::operator()(expr::Fix *f) {
 
 
 void LexicalScoping::accessAssign(expr::Access *acc, expr::Assignment *ass) {
-    if (const auto id = findVar(acc->var->stringify()); id) {
-        acc->var->ID = *id;
-        std::visit(*this, ass->rhs->variant());
+    if (auto name = dynamic_cast<expr::Name*>(acc->var.get())) {
+        if (const auto id = findVar(name->name); id) {
+            name->ID = *id;
+            std::visit(*this, ass->rhs->variant());
+        }
+        else util::error<except::NameLookup>("Name `" + acc->var->stringify() + "` not found in assignment: " + ass->stringify());
     }
-    else util::error<except::NameLookup>("Name `" + acc->var->stringify() + "` not found in assignment: " + ass->stringify());
+    else std::visit(*this, acc->var->variant());
+
 }
 
 
@@ -242,7 +248,37 @@ void LexicalScoping::operator()(expr::InferredAssignment *inf) {
         inf->name.ID = variable_index++;
         addVar(inf->name.name, inf->name.ID);
     }
+}
 
+
+void LexicalScoping::operator()(expr::Unpackment *unpack) {
+    if (unpack->inferred) {
+        // Inferred Assignment always declares a new variable
+
+        std::visit(*this, unpack->rhs->variant());
+
+        for (const auto& expr : unpack->lhs) {
+            expr->ID = variable_index++;
+
+            // maybe this line should go into its own for-loop
+            // actuallt maybe no since I'm not evaluating any expression
+            // just names..
+            addVar(expr->stringify(), expr->ID);
+        }
+    }
+    else {
+        std::visit(*this, unpack->rhs->variant());
+
+        for (const auto& expr : unpack->lhs) {
+            if (auto id = findVar(expr->stringify())) {
+                expr->ID = *id;
+            }
+            else {
+                expr->ID = variable_index++;
+                addVar(expr->stringify(), expr->ID);
+            }
+        }
+    }
 }
 
 

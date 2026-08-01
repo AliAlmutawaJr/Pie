@@ -313,6 +313,43 @@ struct InferredAssignment : Expr{
 };
 
 
+// Unpack Assignment
+struct Unpackment : Expr {
+    // guranteed to have at leats one element
+    std::vector<ExprPtr> lhs;
+    ExprPtr rhs;
+    bool inferred;
+
+
+    Unpackment(std::vector<ExprPtr> l, ExprPtr r, bool infer) noexcept
+    : lhs{std::move(l)}, rhs{std::move(r)}, inferred{infer} { }
+
+
+    std::string stringify(const size_t indent = 0) const override {
+        std::string s;
+
+        s += lhs[0]->stringify();
+        for (const auto& expr : lhs | std::views::drop(1)) {
+            s += ", " + expr->stringify();
+        }
+
+        s += inferred ? " := " : " = ";
+
+        return s + rhs->stringify(indent + 4);
+    }
+
+    bool involvesName(const std::string_view sv) const override {
+        if (sv == stringify()) return true;
+
+        for (const auto& expr : lhs) if (expr->involvesName(sv)) return true;
+
+        return rhs->involvesName(sv);
+    }
+
+    Node variant() override { return this; }
+};
+
+
 struct Class : Expr {
     std::vector<std::tuple<Name, type::TypePtr, ExprPtr>> fields;
 

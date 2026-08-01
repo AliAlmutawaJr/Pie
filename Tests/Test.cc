@@ -18,6 +18,120 @@
 
 
 
+
+TEST_CASE("Sub Typing a Member Variable", "[Class][Type]") {
+    const auto src1 = R"(
+Named = class { name = ""; };
+Human = class {
+    name = "";
+    age = 0;
+};
+
+
+C = class {
+    n: Named = Named("named");
+};
+
+c = C();
+__builtin_print(c.n);
+h = Human("Ali", 20);
+c.n = h;
+__builtin_print(c.n);
+c.n.name = "meow";
+__builtin_print(h);
+)";
+
+    REQUIRE(pie::test::run(src1) == R"(Object {
+    name = "named";
+}
+Object {
+    name = "Ali";
+}
+Object {
+    name = "meow";
+    age = 20;
+})");
+}
+
+
+TEST_CASE("Unpackment", "[Structured Bindings]") {
+    const auto src1 = R"(
+a = 10;
+c: Int = 20;
+
+Human = class {
+    name = "";
+    age = 0;
+    height = 100;
+    weight = 50;
+
+    p = () => __builtin_print(name, ":", age);
+};
+
+
+h = Human("Moew", 33, 57, 32);
+z, = h;
+__builtin_print(z);
+
+{
+    1;
+
+    n, a, h, w, := h;
+
+    __builtin_print(n, a, h, w);
+};
+
+__builtin_print(a, h.age);
+
+{
+    x, y, a = Human("", 0, 50);
+};
+
+__builtin_print(a);
+)";
+
+    REQUIRE(pie::test::run(src1) == R"(Moew
+Moew 33 57 32
+10 33
+50)");
+}
+
+
+
+
+TEST_CASE("Exprs (improper names) as Members", "[Class]") {
+    const auto src1 = R"(
+x = 1;
+C = class {
+    x = 2;
+
+    10 = 20;
+
+    f = () => {
+        x = 5;
+    };
+
+    p = () => __builtin_print(x, 10);
+};
+
+
+c = C();
+
+__builtin_print(x);
+c.p();
+c.f();
+c.p();
+__builtin_print(x);
+)";
+
+    REQUIRE(pie::test::run(src1) == R"(1
+2 20
+5 20
+1)");
+}
+
+
+
 TEST_CASE("Dylib & FFI Calls with Pointers!", "[FFI][DYLIB]") {
     const auto src1 = R"(
 V = __builtin_ffi_type_void();

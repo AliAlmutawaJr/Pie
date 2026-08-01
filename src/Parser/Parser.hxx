@@ -68,6 +68,7 @@ class Parser {
         MATCH,
         MAP,
         CALL,
+        PACK,
     };
 
     enum class EnvTag {
@@ -122,7 +123,6 @@ public:
         while (not atEnd()) {
             expressions.push_back(parseExpr());
 
-            // consume(TokenKind::SEMI);
             if (not match(TokenKind::SEMI)) {
                 const auto t = lookAhead();
                 if (t.kind == TokenKind::NAME) {
@@ -137,11 +137,9 @@ public:
         }
 
 
-        // Operators os;
-        // for (const auto& [name, op] : ops) os[name] = op->clone();
-
         return expressions;
     }
+
 
     template <bool PARSE_TYPE = true, Context CTX = Context::NONE>
     expr::ExprPtr parseExpr(const int precedence = 0) {
@@ -150,6 +148,10 @@ public:
 
         while (precedence < getPrecedence()) {
             if constexpr (not PARSE_TYPE or CTX == Context::MAP) if (check(TokenKind::COLON)) break;
+            // // both context's need to parse comma separated lists
+            // if constexpr (CTX == Context::CALL)
+            //     if (check(TokenKind::COMMA)) break;
+
             left = infix<CTX>(std::move(left), consume());
         }
 
@@ -179,7 +181,7 @@ public:
 
             case BREAK: 
                 // if (check(SEMI)) return std::make_shared<expr::Break>();
-                return std::make_shared<expr::Break>(parseExpr());
+                return std::make_shared<expr::Break>(parseExpr(prec::COMMA_VALUE));
 
             case CONTINUE:
                 // if (check(SEMI))
@@ -233,7 +235,7 @@ public:
 
 
             default:
-                // log(true);
+                // log();
                 util::error("Couldn't parse \"" + token.text + "\"!");
         }
     }
@@ -246,6 +248,32 @@ public:
 
             case NAME: return infixName(std::move(left), std::move(token));
 
+            // either a pack literal (not implemented) or Packment
+            case COMMA:
+                if constexpr (CTX == Context::CALL) return left;
+            {
+                std::vector exprs = {std::move(left)};
+
+                do {
+                    if (check(ASSIGN) or check(WALRUS)) break;
+                    // maybe it should be prec::COMMA_VALUE but that has other issues
+                    exprs.push_back(parseExpr<false, Context::PACK>(prec::ASSIGNMENT_VALUE));
+                }
+                while (match(COMMA));
+
+
+
+
+                const bool inferred = consume().kind == WALRUS;
+                return std::make_shared<expr::Unpackment>(
+                    std::move(exprs),
+                    parseExpr(),
+                    inferred
+                );
+
+            }
+
+
             case DOT: {
                 auto accessee = parseExpr(prec::HIGH_VALUE);
 
@@ -257,22 +285,32 @@ public:
             }
 
 
-            case CASCADE: {
+            // case CASCADE: {
 
-                util::error();
+            //     util::error();
 
-                std::vector<expr::ExprPtr> cascaders;
+            //     std::vector<expr::ExprPtr> cascaders;
 
-                do
-                    cascaders.push_back(parseExpr(prec::CASCADE_VALUE));
-                while (match(CASCADE));
+            //     do
+            //         cascaders.push_back(parseExpr(prec::CASCADE_VALUE));
+            //     while (match(CASCADE));
 
-                // // auto accessee_ptr = dynamic_cast<expr::Name*>(accessee.get());
-                // // if (not accessee_ptr) util::error("Can only follow a '.' with a name: " + accessee->stringify());
+            //     // // auto accessee_ptr = dynamic_cast<expr::Name*>(accessee.get());
+            //     // // if (not accessee_ptr) util::error("Can only follow a '.' with a name: " + accessee->stringify());
 
-                // return std::make_shared<expr::Access>(std::move(left), std::move(accessee_ptr)->name);
-            }
-            [[fallthrough]];
+            //     // return std::make_shared<expr::Access>(std::move(left), std::move(accessee_ptr)->name);
+            // }
+
+            case COLON: {
+                auto type = parseType();
+                if (not match(ASSIGN)) util::error();
+
+                return std::make_shared<expr::Assignment>(
+                    std::move(left),
+                    std::move(type),
+                    parseExpr(prec::ASSIGNMENT_VALUE - 1)
+                );
+            };
 
 
             case SCOPE_RESOLVE: {
@@ -292,17 +330,6 @@ public:
                 return std::make_shared<expr::SpaceAccess>(is_global_access, std::move(spaces), std::move(name));
             }
 
-            case COLON: {
-                auto type = parseType();
-                if (not match(ASSIGN)) util::error();
-
-                return std::make_shared<expr::Assignment>(
-                    std::move(left),
-                    std::move(type),
-                    parseExpr(prec::ASSIGNMENT_VALUE - 1)
-                );
-            };
-
             case WALRUS: {
                 return std::make_shared<expr::InferredAssignment>(
                     std::move(left)->stringify(),
@@ -313,6 +340,7 @@ public:
 
             case ASSIGN:
                 if constexpr (CTX == Context::MATCH) return left;
+                if constexpr (CTX == Context::PACK) return left;
 
                 if (auto fix = analysis::exprContains<expr::Fix>(left)) {
                     // env.back().insert(fix->stringify());
@@ -1070,7 +1098,7 @@ public:
 
         if (not match(R_PAREN)) {
             do {
-                params.push_back(parseExpr<false>()->stringify());
+                params.push_back(parseExpr<false>(prec::COMMA_VALUE)->stringify());
 
                 if (match(COLON))
                     params_types.push_back(parseType());
@@ -1096,7 +1124,7 @@ public:
         consume(FAT_ARROW);
 
         scope();
-        auto body = parseExpr();
+        auto body = parseExpr(prec::COMMA_VALUE); // allows to pass closures as parameters nicely
         unscope();
 
         return std::make_shared<expr::Closure>(
@@ -1115,7 +1143,7 @@ public:
 
             do {
                 constexpr auto PARSE_TYPE = true;
-                auto arg = parseExpr<PARSE_TYPE, Context::CALL>();
+                auto arg = parseExpr<PARSE_TYPE, Context::CALL>(prec::COMMA_VALUE);
 
                 if (auto ass = dynamic_cast<expr::Assignment*>(arg.get())) {
                     if (match(ELLIPSIS)) util::error("Cannot expand pack in named argument: " + ass->stringify());
@@ -1146,6 +1174,32 @@ public:
         }
 
         return std::make_shared<expr::Call>(std::move(left), std::move(named_args), std::move(args));
+    }
+
+
+    bool findTopLevel(const TokenKind token) {
+        return [this, token] {
+            using enum TokenKind;
+
+            for (size_t i{}; /* not atEnd(i) */; ++i) {
+                if (check(token  , i)) return true;
+                if (check(R_BRACE, i)) return false;
+                if (check(R_PAREN, i)) return false;
+
+
+                for (ssize_t balance = check(L_BRACE, i); balance;) {
+                    balance += check(L_BRACE, ++i);
+                    balance -= check(R_BRACE, i);
+                }
+
+                for (ssize_t balance = check(L_PAREN, i); balance;) {
+                    balance += check(L_PAREN, ++i);
+                    balance -= check(R_PAREN, i);
+                }
+            }
+
+            return false;
+        }();
     }
 
 
@@ -1193,16 +1247,15 @@ public:
         }();
 
         if (map_expr) {
-
-            auto key = parseExpr<false, Context::MAP>();
+            auto key = parseExpr<false, Context::MAP>(prec::COMMA_VALUE);
             consume(COLON);
-            std::vector<std::pair<expr::ExprPtr, expr::ExprPtr>> exprs = { {std::move(key), parseExpr(), }, };
+            std::vector<std::pair<expr::ExprPtr, expr::ExprPtr>> exprs = { {std::move(key), parseExpr(prec::COMMA_VALUE), }, };
             // std::unordered_map<expr::ExprPtr, expr::ExprPtr> exprs = { {parseExpr<false>(), parseExpr(), }, };
 
             while (match(COMMA)) {
-                key = parseExpr<false, Context::MAP>();
+                key = parseExpr<false, Context::MAP>(prec::COMMA_VALUE);
                 consume(COLON);
-                exprs.push_back({ std::move(key), parseExpr(), });
+                exprs.push_back({ std::move(key), parseExpr(prec::COMMA_VALUE), });
 
                 // auto key = parseExpr<false>();
                 // exprs[std::move(key)] = parseExpr();
@@ -1214,12 +1267,15 @@ public:
             return std::make_shared<expr::Map>(std::move(exprs));
         }
 
-        scope();
-        std::vector<expr::ExprPtr> exprs = { parseExpr(), };
+        // if there is at least one top-level semicolon, it's a scope!
+        const bool is_scope = findTopLevel(SEMI);
 
-        if (match(SEMI)) { // scope
+        if (is_scope) {// scope
+            scope();
+
+            std::vector<expr::ExprPtr> exprs;
             while(not match(R_BRACE)) {
-                exprs.emplace_back(parseExpr());
+                exprs.push_back(parseExpr());
                 consume(SEMI);
             }
 
@@ -1227,17 +1283,10 @@ public:
             return std::make_shared<expr::Block>(std::move(exprs));
         }
         else { // list literals
+            std::vector<expr::ExprPtr> exprs = { parseExpr(prec::COMMA_VALUE), };
 
-            // a scope was opened wrongfully. Add the operators from that new-fake scope to the previous scope!
-            for (auto& [name, op] : env.back().first.op_env) 
-                env[env.size() - 2].first.op_env[name] = std::move(op);
-
-            for (auto& [name, op] : env.back().first.prefix_op_env) 
-                env[env.size() - 2].first.prefix_op_env[name] = std::move(op);
-
-            unscope();
-
-            while (match(COMMA)) exprs.emplace_back(parseExpr()); 
+            // the `and` check allows for trailing commas..I hope
+            while (match(COMMA) /* and not check(R_BRACE) */ ) exprs.push_back(parseExpr(prec::COMMA_VALUE)); 
 
             consume(R_BRACE);
 
@@ -1257,7 +1306,7 @@ public:
 
             consume(FAT_ARROW);
             // It's a closure
-            auto body = parseExpr<PARSE_TYPE>();
+            auto body = parseExpr(prec::COMMA_VALUE);
             return std::make_shared<expr::Closure>(std::vector<std::string>{}, std::move(body), type::FuncType{{}, std::move(return_type)});
         }
 
@@ -1868,11 +1917,12 @@ public:
             using enum TokenKind;
 
             // right associative
+            case COMMA: return prec::COMMA_VALUE; 
+
             case WALRUS:
             case ASSIGN: return prec::ASSIGNMENT_VALUE;
 
-            // case COLON : return prec::SCOPE_RESOLUTION_VALUE;
-            case SCOPE_RESOLVE : return prec::SCOPE_RESOLUTION_VALUE;
+            case SCOPE_RESOLVE: return prec::SCOPE_RESOLUTION_VALUE;
 
             case DOT    : return prec::MEMBER_ACCESS_VALUE;
             case CASCADE: return prec::CASCADE_VALUE;

@@ -61,19 +61,19 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, std::string>)
                         return static_cast<BigInt>(x.length());
 
-                else if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, value::PackList>)
+                else if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, value::Pack>)
                     return static_cast<BigInt>(x->values.size());
 
-                else if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, value::ListValue>)
+                else if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, value::List>)
                     return static_cast<BigInt>(x.elts->values.size());
 
                 else // map value
                     return static_cast<BigInt>(x.items->map.size());
             }),
             TypeList<std::string>,
-            TypeList<value::PackList>,
-            TypeList<value::ListValue>,
-            TypeList<value::MapValue>
+            TypeList<value::Pack>,
+            TypeList<value::List>,
+            TypeList<value::Map>
         >
     >{},
 
@@ -212,7 +212,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 cont.elts->values.pop_back();
                 return back;
             }),
-            TypeList<value::ListValue>
+            TypeList<value::List>
         >
     >{},
 
@@ -224,7 +224,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 cont.elts->values.erase(cont.elts->values.begin());
                 return front;
             }),
-            TypeList<value::ListValue>
+            TypeList<value::List>
         >
     >{},
 
@@ -236,14 +236,14 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             decltype([](const auto& a, const auto& ind, const auto&) -> value::Value {
                 using T = std::remove_cvref_t<decltype(a)>;
 
-                if constexpr (std::is_same_v<T, value::ListValue>) {
+                if constexpr (std::is_same_v<T, value::List>) {
                     if (ind < 0 or size_t(ind) >= a.elts->values.size())
                         util::error("Accessing list '" + stringify(a) + "' at index '" + std::to_string(ind) + "' which is out of bounds!");
 
                     return a.elts->values[ind]; 
                 }
 
-                else if constexpr (std::is_same_v<T, value::MapValue>) {
+                else if constexpr (std::is_same_v<T, value::Map>) {
                     auto key = stringify(ind);
                     if (not a.items->map.contains(key))
                         util::error("Accessing Map '" + stringify(a) + "' at key '" + key + "' which doesn't exist!");
@@ -257,8 +257,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     return std::string{a[ind]};
                 }
             }),
-            TypeList<value::ListValue, BigInt>,
-            TypeList<value::MapValue, Any>,
+            TypeList<value::List, BigInt>,
+            TypeList<value::Map, Any>,
             TypeList<std::string, BigInt>
         >
     >{},
@@ -269,14 +269,14 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             decltype([](const auto& cont, const auto& at, const auto& elt, const auto& that) -> value::Value {
                 using T = std::remove_cvref_t<decltype(cont)>;
 
-                if constexpr (std::is_same_v<T, value::ListValue>) {
+                if constexpr (std::is_same_v<T, value::List>) {
                     if (at < 0 or size_t(at) >= cont.elts->values.size())
                         util::error("Accessing list '" + stringify(cont) + "' at index '" + std::to_string(at) + "' which is out of bounds!");
 
                     return cont.elts->values[at] = that->typeCheck(elt, that->typeOf(cont));
                 }
 
-                else if constexpr (std::is_same_v<T, value::MapValue>) {
+                else if constexpr (std::is_same_v<T, value::Map>) {
                     const auto type = that->typeOf(cont);
                     const auto& map_type = dynamic_cast<const type::MapType&>(*type);
 
@@ -284,8 +284,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     return cont.items->map[key] = that->typeCheck(elt, map_type.val_type);
                 }
             }),
-            TypeList<value::ListValue, BigInt, Any>,
-            TypeList<value::MapValue, Any, Any>
+            TypeList<value::List, BigInt, Any>,
+            TypeList<value::Map, Any, Any>
             // TypeList<std::string, BigInt>
         >
     >{},
@@ -305,7 +305,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
                 return elt;
             }),
-            TypeList<value::ListValue, Any>
+            TypeList<value::List, Any>
         >
     >{},
 
