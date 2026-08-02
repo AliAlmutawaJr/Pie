@@ -1052,26 +1052,27 @@ public:
     void unpackInto(
         const expr::Unpackment *unpack, // passed for better error messages!
         std::vector<ValueType>& valuetypes,
-        const value::Value& value
+        const value::Value& value,
+        const size_t at_least
     ) {
 
         if (std::holds_alternative<value::Object>(value)) {
             const auto& object = get<value::Object>(value);
 
-            if (object.second->members.size() < valuetypes.capacity())
+            if (object.second->members.size() < at_least)
                 util::error("Unpacking more members than available: " + unpack->stringify());
 
-            for (const auto& [_, type, value_ptr] : object.second->members | std::views::take(valuetypes.capacity())) {
+            for (const auto& [_, type, value_ptr] : object.second->members) {
                 valuetypes.emplace_back(*value_ptr, type);
             }
         }
         else if (std::holds_alternative<value::List>(value)) {
             const auto& list = get<value::List>(value);
 
-            if (list.elts->values.size() < valuetypes.capacity())
+            if (list.elts->values.size() < at_least)
                 util::error("Unpacking more elements than available: " + unpack->stringify());
 
-            for (const auto& value : list.elts->values | std::views::take(valuetypes.capacity())) {
+            for (const auto& value : list.elts->values) {
                 valuetypes.emplace_back(value, typeOf(value));
             }
         }
@@ -1082,84 +1083,125 @@ public:
     }
 
 
-    ValueType operator()(const expr::Unpackment *unpack) {
-        std::vector<ValueType   > valuetype;
-        std::vector<value::Value> values   ;
-        valuetype.reserve(unpack->lhs.size());
-        values   .reserve(unpack->lhs.size());
+    template <bool INFERRED>
+    void bindExpr(const expr::Unpackment *unpack, const expr::ExprPtr expr, ValueType valuetype) {
+        auto& [value, type] = valuetype;
 
-        unpackInto(unpack, valuetype, std::visit(*this, unpack->rhs->variant()).value);
+        if constexpr (INFERRED) {
+            addVar(
+                expr->stringify(),
+                expr->ID,
+                std::make_shared<value::Value>(std::move(value)),
+                std::move(type)
+            );
+        }
+        else if (auto access = dynamic_cast<expr::Access*>(expr.get())) {
+            accessUnpackment(unpack, access, value);
+        }
+        else if (auto access = dynamic_cast<expr::SpaceAccess*>(expr.get())) {
+            spaceAccessUnpackment(unpack, access, value);
+        }
+        else if (auto name = dynamic_cast<expr::Name*>(expr.get())) {
+            nameUnpackment(unpack, name, value);
+        }
+        else addVar(
+            expr->stringify(),
+            expr->ID,
+            std::make_shared<value::Value>(value)
+        );
+    }
 
-        if (unpack->inferred) for (const auto& [expr, valuetype] : std::views::zip(unpack->lhs, valuetype)) {
-            auto& [value, type] = valuetype;
-            values.push_back(value);
 
-            if (auto name = dynamic_cast<expr::Name*>(expr.get())) {
-                // names are allowed to be typed
-                addVar(
-                    name->name,
-                    name->ID,
-                    std::make_shared<value::Value>(std::move(value)),
-                    std::move(type)
-                );
+    template <bool INFERRED>
+    void bindPattern(
+        const expr::Unpackment *unpack,
+        const expr::Unpackment::Pattern *pattern,
+        ValueType valuetype
+    ) {
+        using Expr = expr::Unpackment::Expr;
+        using List = expr::Unpackment::List;
+        using Pack = expr::Unpackment::Pack;
+        using Map  = expr::Unpackment::Map;
+
+        // supposedly I don't need to check if the expression is a name
+        // since LexicalAnalysis should've done it..i think :)
+        if (auto expr = dynamic_cast<const Expr*>(pattern)) {
+            bindExpr<INFERRED>(unpack, expr->expr, valuetype);
+        }
+        else if (auto list = dynamic_cast<const List*>(pattern)) {
+            std::vector<ValueType> valuetypes;
+            unpackInto(unpack, valuetypes, valuetype.value, list->patterns.size());
+            const size_t size = valuetypes.size(); // true size
+
+            const auto pack_index = [list] -> std::optional<size_t> {
+                for (size_t i{}; const auto& pattern : list->patterns)
+                    if (++i; dynamic_cast<expr::Unpackment::Pack*>(pattern.get())) return i - 1;
+
+                return {};
+            }();
+
+            if (not pack_index) {
+                for (const auto& [pattern, valuetype] : std::views::zip(list->patterns, valuetypes)) {
+                    bindPattern<INFERRED>(unpack,pattern.get(), std::move(valuetype));
+                }
             }
             else {
-                if (
-                    dynamic_cast<expr::Access     *>(expr.get()) or
-                    dynamic_cast<expr::SpaceAccess*>(expr.get())
-                ) util::error("Cannot use an access inside unpackment: " + unpack->stringify());
+                const size_t leading_count = *pack_index;
+                const size_t trailing_count = list->patterns.size() - leading_count - 1; // minus 1 for the pack
 
+                for (
+                    const auto& [pattern, valuetype] :
+                    std::views::zip(list->patterns, valuetypes) | std::views::take(leading_count)
+                ) {
+                    bindPattern<INFERRED>(unpack,pattern.get(), valuetype);
+                }
+
+                const auto pack_pattern = dynamic_cast<Pack*>(list->patterns[*pack_index].get());
+
+                auto pack = value::makePack(
+                    valuetypes
+                    | std::views::drop(leading_count)
+                    | std::views::take(size - leading_count - trailing_count)
+                    | std::views::transform([] (const auto& valuetype) { return valuetype.value; })
+                    | std::ranges::to<std::vector<value::Value>>()
+                );
+                auto type = typeOf(pack);
 
                 addVar(
-                    expr->stringify(),
-                    expr->ID,
-                    std::make_shared<value::Value>((std::move(value)))
+                    pack_pattern->expr->stringify(),
+                    pack_pattern->expr->ID,
+                    std::make_shared<value::Value>(std::move(pack)),
+                    std::move(type)
                 );
+
+                for (
+                    const auto& [pattern, valuetype] :
+                    std::views::zip(list->patterns, valuetypes) | std::views::drop(size - trailing_count)
+                ) {
+                    bindPattern<INFERRED>(unpack,pattern.get(), valuetype);
+                }
             }
+        }
+        else if (auto map = dynamic_cast<const Map*>(pattern)) {
+
+        }
+    }
+
+
+    ValueType operator()(const expr::Unpackment *unpack) {
+        auto rhs = std::visit(*this, unpack->rhs->variant());
+
+        if (unpack->inferred) {
+            constexpr auto INFERRED = true;
+            bindPattern<INFERRED>(unpack, unpack->pattern.get(), rhs);
         }
         else {
-            for (const auto& [expr, valuetype] : std::views::zip(unpack->lhs, valuetype)) {
-                auto& [value, type] = valuetype;
-
-                if (auto access = dynamic_cast<expr::Access*>(expr.get())) {
-                    // I don't care about the return value 
-                    // all I care about is the side effects of this function
-                    // that it mutates the accessee
-                    accessUnpackment(unpack, access, value);
-                }
-                else if (auto access = dynamic_cast<expr::SpaceAccess*>(expr.get())) {
-                    spaceAccessUnpackment(unpack, access, value);
-                }
-                else {
-                    // if (auto var = getVar(expr->ID); var) { // variable already exists, reassign.
-                    //     value = typeCheck(var->value, var->type,
-                    //         "In unpackment: " + unpack->stringify() +
-                    //         "\nType mis-match! Variable `" + expr->stringify() + "` expected: " + var->type->text() + ", got: " + typeOf(var->value)->text()
-                    //     );
-
-                    //     changeVar(expr->ID, value);
-                    // }
-                    // else
-                    if (auto name = dynamic_cast<expr::Name*>(expr.get())) {
-                        nameUnpackment(unpack, name, value);
-                    }
-                    else addVar(
-                        expr->stringify(),
-                        expr->ID,
-                        std::make_shared<value::Value>(value)
-                    );
-                }
-
-
-                // has to be at the end in case a type truncates the value (sub type)
-                values.push_back(value);
-            }
+            constexpr auto INFERRED = false;
+            bindPattern<INFERRED>(unpack, unpack->pattern.get(), rhs);
         }
 
 
-        auto pack = value::makePack(std::move(values));
-        auto type = typeOf(pack);
-        return {std::move(pack), std::move(type)};
+        return rhs;
     }
 
 

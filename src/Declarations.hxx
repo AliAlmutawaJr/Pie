@@ -117,8 +117,7 @@ using Node = std::variant<
 >;
 
 
-struct Expr;
-using ExprPtr = std::shared_ptr<Expr>;
+using ExprPtr = std::shared_ptr<struct Expr>;
 
 struct Expr {
     ssize_t ID{-1};

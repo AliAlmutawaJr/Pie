@@ -71,6 +71,10 @@ public:
 
     void operator()(expr::Assignment*);
     void operator()(expr::InferredAssignment*);
+
+
+    void checkPattern(expr::Unpackment::Pattern*);
+    void checkPattern(expr::Unpackment::Pattern*, bool inferred); // tag to dispatch at compile time
     void operator()(expr::Unpackment *);
 
 
@@ -102,7 +106,6 @@ public:
 
 
     void checkPattern(expr::Match::Case::Pattern&);
-
 
     void operator()(expr::Match*);
 

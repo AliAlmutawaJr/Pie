@@ -3,6 +3,7 @@
 #include <print>
 #include <filesystem>
 #include <memory>
+#include <source_location>
 #include <string>
 #include <utility>
 #include <vector>
@@ -158,6 +159,7 @@ public:
         return left;
     }
 
+
     template <bool PARSE_TYPE = true, Context CTX = Context::NONE>
     expr::ExprPtr prefix(Token token) {
         switch (token.kind) {
@@ -248,30 +250,27 @@ public:
 
             case NAME: return infixName(std::move(left), std::move(token));
 
-            // either a pack literal (not implemented) or Packment
-            case COMMA:
-                if constexpr (CTX == Context::CALL) return left;
-            {
-                std::vector exprs = {std::move(left)};
+            // // either a pack literal (not implemented) or Packment
+            // case COMMA:
+            //     if constexpr (CTX == Context::CALL) return left;
+            // {
+            //     std::vector exprs = {std::move(left)};
 
-                do {
-                    if (check(ASSIGN) or check(WALRUS)) break;
-                    // maybe it should be prec::COMMA_VALUE but that has other issues
-                    exprs.push_back(parseExpr<false, Context::PACK>(prec::ASSIGNMENT_VALUE));
-                }
-                while (match(COMMA));
-
-
+            //     do {
+            //         if (check(ASSIGN) or check(WALRUS)) break;
+            //         // maybe it should be prec::COMMA_VALUE but that has other issues
+            //         exprs.push_back(parseExpr<false, Context::PACK>(prec::ASSIGNMENT_VALUE));
+            //     }
+            //     while (match(COMMA));
 
 
-                const bool inferred = consume().kind == WALRUS;
-                return std::make_shared<expr::Unpackment>(
-                    std::move(exprs),
-                    parseExpr(),
-                    inferred
-                );
-
-            }
+            //     const bool inferred = consume().kind == WALRUS;
+            //     return std::make_shared<expr::Unpackment>(
+            //         std::move(exprs),
+            //         parseExpr(),
+            //         inferred
+            //     );
+            // }
 
 
             case DOT: {
@@ -496,7 +495,7 @@ public:
     }
 
 
-    std::unique_ptr<expr::Match::Case::Pattern> parsePattern() {
+    expr::Match::Case::PatternPtr parseMatchPattern() {
         using enum TokenKind;
         using Pattern   = expr::Match::Case::Pattern;
         using Single    = expr::Match::Case::Pattern::Single;
@@ -550,10 +549,10 @@ public:
                 util::error("Match expression case doesn't contain a pattern");
 
             return std::make_unique<Pattern>(
-                Single {
+                Single{
                     {std::move(name)},
                     std::move(type),
-                    std::move(value)
+                    std::move(value),
                 }
             );
         }
@@ -561,7 +560,7 @@ public:
         Patterns patterns{};
         if (match(R_PAREN)) return std::make_unique<Pattern>(std::move(name), std::move(patterns));
 
-        do patterns.push_back(parsePattern()); while (match(COMMA));
+        do patterns.push_back(parseMatchPattern()); while (match(COMMA));
 
 
         consume(R_PAREN);
@@ -590,7 +589,7 @@ public:
 
             do {
                 cases.push_back({
-                    parsePattern(),
+                    parseMatchPattern(),
                     match(IF) ? parseExpr() : EMPTY_COND,
                     EMPTY_BODY
                 });
@@ -1177,6 +1176,138 @@ public:
     }
 
 
+    expr::ExprPtr handleScope() {
+        using enum token::TokenKind;
+
+        scope();
+
+        std::vector<expr::ExprPtr> exprs;
+        while(not match(R_BRACE)) {
+            exprs.push_back(parseExpr());
+            consume(SEMI);
+        }
+
+        unscope();
+
+        return std::make_shared<expr::Block>(std::move(exprs));
+    }
+
+
+    expr::ExprPtr listLiteral() {
+        using enum TokenKind;
+
+        std::vector<expr::ExprPtr> exprs = { parseExpr(prec::COMMA_VALUE), };
+
+        // the `and` check allows for trailing commas..I hope
+        while (match(COMMA) /* and not check(R_BRACE) */ ) exprs.push_back(parseExpr(prec::COMMA_VALUE)); 
+
+        consume(R_BRACE);
+
+        return std::make_shared<expr::List>(std::move(exprs));
+    }
+
+
+    expr::ExprPtr map() {
+        using enum token::TokenKind;
+
+        auto key = parseExpr<false, Context::MAP>(prec::COMMA_VALUE);
+        consume(COLON);
+        std::vector<std::pair<expr::ExprPtr, expr::ExprPtr>> exprs = { {std::move(key), parseExpr(prec::COMMA_VALUE), }, };
+        // std::unordered_map<expr::ExprPtr, expr::ExprPtr> exprs = { {parseExpr<false>(), parseExpr(), }, };
+
+        while (match(COMMA)) {
+            key = parseExpr<false, Context::MAP>(prec::COMMA_VALUE);
+            consume(COLON);
+            exprs.push_back({ std::move(key), parseExpr(prec::COMMA_VALUE), });
+
+            // auto key = parseExpr<false>();
+            // exprs[std::move(key)] = parseExpr();
+            // exprs.insert_or_assign(std::move(key), parseExpr());?
+        }
+
+        consume(R_BRACE);
+
+        return std::make_shared<expr::Map>(std::move(exprs));
+    }
+
+
+    template <Context CTX = Context::NONE>
+    expr::Unpackment::PatternPtr parseUnpackmentPattern() {
+        using enum token::TokenKind;
+        using Expr = expr::Unpackment::Expr;
+        using List = expr::Unpackment::List;
+        using Pack = expr::Unpackment::Pack;
+        using Map  = expr::Unpackment::Map ;
+
+        // using PatternPtr = expr::Unpackment::PatternPtr;
+        using Patterns = expr::Unpackment::Patterns;
+
+        if (match(L_BRACE)) { // either list pattern or map pattern
+            auto pattern = parseUnpackmentPattern();
+
+            if (match(R_BRACE))
+                return List::with(std::move(pattern));
+
+            if (match(COMMA)) { // list
+                Patterns patterns;
+                patterns.push_back(std::move(pattern));
+
+                do patterns.push_back(parseUnpackmentPattern()); while(match(COMMA));
+
+                consume(R_BRACE);
+
+                return std::make_unique<List>(std::move(patterns));
+            }
+
+
+            if (match(COLON)) { // map
+                auto map = Map::with(std::pair{std::move(pattern), parseUnpackmentPattern()});
+
+                while (match(COMMA)) {
+                    pattern = parseUnpackmentPattern();
+                    consume(COLON);
+                    map->patterns.emplace_back(std::move(pattern), parseUnpackmentPattern());
+                }
+
+                consume(R_BRACE);
+
+                return map;
+            }
+
+            util::error("Unrecognized Pattern!");
+        }
+        else if (match(ELLIPSIS)) { // pack
+            return std::make_unique<Pack>(
+                parseExpr()
+            );
+        }
+        else { // name pattern
+            return std::make_unique<Expr>(
+                parseExpr<false, CTX>()
+            );
+        }
+    }
+
+
+    expr::ExprPtr unpackment() {
+        using enum token::TokenKind;
+
+        unconsume(); // unconsume the L_RBACE token so paseUnpackmentPattern works correctly
+        auto pattern = parseUnpackmentPattern();
+
+
+        if (not check(ASSIGN) and not check(WALRUS))
+            util::error("Unpackment can only be used on the LHS of an assignment!");
+
+        const bool inferred = consume().kind == WALRUS;
+        return std::make_shared<expr::Unpackment>(
+            std::move(pattern),
+            parseExpr(),
+            inferred
+        );
+    }
+
+
     bool findTopLevel(const TokenKind token) {
         return [this, token] {
             using enum TokenKind;
@@ -1197,11 +1328,8 @@ public:
                     balance -= check(R_PAREN, i);
                 }
             }
-
-            return false;
         }();
     }
-
 
     expr::ExprPtr LBrace() {
         using enum TokenKind;
@@ -1213,8 +1341,32 @@ public:
             return std::make_shared<expr::Map>();
         }
 
-        const bool map_expr = [this] {
 
+        const bool unpack = [this] {
+            for (size_t i{}; /* not atEnd() */ ; ++i) {
+                if (check(R_BRACE, i)) {
+                    if (check(ASSIGN, i+1) or check(WALRUS, i+1)) return true;
+                    else return false;
+                }
+
+
+                for (ssize_t balance = check(L_BRACE, i); balance;) {
+                    balance += check(L_BRACE, ++i);
+                    balance -= check(R_BRACE, i);
+                }
+
+                for (ssize_t balance = check(L_PAREN, i); balance;) {
+                    balance += check(L_PAREN, ++i);
+                    balance -= check(R_PAREN, i);
+                }
+            }
+        }();
+
+
+        if (unpack) return unpackment();
+
+
+        const bool map_expr = [this] {
             for (size_t i{}; /* not atEnd(i) */ ; ++i) {
                 // if you find a colon first, then
                 // it could be a map {x: y};
@@ -1230,8 +1382,15 @@ public:
                         if (check(COLON  , a)) return true ; // this time the colon indicates a declaration {n1: n2: n3 = 4};
                         if (check(SEMI   , a)) return false; // proly a declaration, it's a scope..i think :c
 
-                        if (check(L_BRACE, a)) while (not check(R_BRACE, a)) ++a;
-                        if (check(L_PAREN, a)) while (not check(R_PAREN, a)) ++a;
+                        for (ssize_t balance = check(L_BRACE, a); balance;) {
+                            balance += check(L_BRACE, ++a);
+                            balance -= check(R_BRACE, a);
+                        }
+
+                        for (ssize_t balance = check(L_PAREN, a); balance;) {
+                            balance += check(L_PAREN, ++a);
+                            balance -= check(R_PAREN, a);
+                        }
                     }
                 }
 
@@ -1239,61 +1398,29 @@ public:
                 if (check(R_BRACE, i)) return false; // finding a `}` before finding `:` means it's a list with potentially one element
                 if (check(SEMI   , i)) return false; // finding a `;` means it's a scope, and that was the end of an expression...
 
-                if (check(L_BRACE, i)) while (not check(R_BRACE, i)) ++i;
-                if (check(L_PAREN, i)) while (not check(R_PAREN, i)) ++i;
+                for (ssize_t balance = check(L_BRACE, i); balance;) {
+                    balance += check(L_BRACE, ++i);
+                    balance -= check(R_BRACE, i);
+                }
+
+                for (ssize_t balance = check(L_PAREN, i); balance;) {
+                    balance += check(L_PAREN, ++i);
+                    balance -= check(R_PAREN, i);
+                }
             }
 
             return false; // argubaly, should be `error()`
         }();
 
-        if (map_expr) {
-            auto key = parseExpr<false, Context::MAP>(prec::COMMA_VALUE);
-            consume(COLON);
-            std::vector<std::pair<expr::ExprPtr, expr::ExprPtr>> exprs = { {std::move(key), parseExpr(prec::COMMA_VALUE), }, };
-            // std::unordered_map<expr::ExprPtr, expr::ExprPtr> exprs = { {parseExpr<false>(), parseExpr(), }, };
 
-            while (match(COMMA)) {
-                key = parseExpr<false, Context::MAP>(prec::COMMA_VALUE);
-                consume(COLON);
-                exprs.push_back({ std::move(key), parseExpr(prec::COMMA_VALUE), });
 
-                // auto key = parseExpr<false>();
-                // exprs[std::move(key)] = parseExpr();
-                // exprs.insert_or_assign(std::move(key), parseExpr());?
-            }
-
-            consume(R_BRACE);
-
-            return std::make_shared<expr::Map>(std::move(exprs));
-        }
+        if (map_expr) return map();
 
         // if there is at least one top-level semicolon, it's a scope!
         const bool is_scope = findTopLevel(SEMI);
 
-        if (is_scope) {// scope
-            scope();
 
-            std::vector<expr::ExprPtr> exprs;
-            while(not match(R_BRACE)) {
-                exprs.push_back(parseExpr());
-                consume(SEMI);
-            }
-
-            unscope();
-            return std::make_shared<expr::Block>(std::move(exprs));
-        }
-        else { // list literals
-            std::vector<expr::ExprPtr> exprs = { parseExpr(prec::COMMA_VALUE), };
-
-            // the `and` check allows for trailing commas..I hope
-            while (match(COMMA) /* and not check(R_BRACE) */ ) exprs.push_back(parseExpr(prec::COMMA_VALUE)); 
-
-            consume(R_BRACE);
-
-            return std::make_shared<expr::List>(std::move(exprs));
-        }
-
-        util::error();
+        return is_scope? handleScope() : listLiteral();
     }
 
 
@@ -1848,6 +1975,18 @@ public:
     }
 
 
+    void unconsume(const ptrdiff_t n = 1) {
+        const auto logical_pos = std::distance(tokens.begin(), token_iterator) - static_cast<ptrdiff_t>(red.size());
+
+        if (n > logical_pos)
+            util::error("unconsume(n): tried to undo more tokens than have actually been consumed");
+
+        red.insert(
+            red.begin(),
+            std::next(tokens.begin(), logical_pos - static_cast<ptrdiff_t>(n)),
+            std::next(tokens.begin(), logical_pos)
+        );
+    }
 
     Token consume() {
         lookAhead();
@@ -1897,9 +2036,9 @@ public:
 		return true;
     }
 
-    Token lookAhead(const size_t distance = 0) {
+    Token lookAhead(const size_t distance = 0, const std::source_location& loc = std::source_location::current()) {
         while (distance >= red.size()) {
-            if (atEnd()) util::error("out of token!");
+            if (atEnd()) util::error("out of token!", loc);
             red.push_back(*token_iterator++);
         }
 
@@ -1907,8 +2046,13 @@ public:
         return red[distance];
     }
 
-    [[nodiscard]] bool check(const TokenKind exp, const size_t i = {})        { return lookAhead(i).kind == exp; }
-    [[nodiscard]] bool check(const std::string_view exp, const size_t i = {}) { return lookAhead(i).text == exp; }
+    [[nodiscard]] bool check(const TokenKind exp, const size_t i = {}, const std::source_location& loc = std::source_location::current()) {
+        return lookAhead(i, loc).kind == exp;
+    }
+
+    [[nodiscard]] bool check(const std::string_view exp, const size_t i = {}, const std::source_location& loc = std::source_location::current()) {
+        return lookAhead(i, loc).text == exp;
+    }
 
     [[nodiscard]] int getPrecedence() {
 
@@ -1917,7 +2061,7 @@ public:
             using enum TokenKind;
 
             // right associative
-            case COMMA: return prec::COMMA_VALUE; 
+            // case COMMA: return prec::COMMA_VALUE;
 
             case WALRUS:
             case ASSIGN: return prec::ASSIGNMENT_VALUE;
@@ -2118,3 +2262,4 @@ public:
 
 } // parse
 } // pie
+

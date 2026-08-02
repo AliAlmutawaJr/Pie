@@ -89,13 +89,14 @@ namespace cli {
             for(const auto& expr : exprs)
                 std::println(std::clog, "{};", expr->stringify());
 
-        if(not norun and (print_parsed or print_tokens)) puts("Output:\n");
-
-        pie::analysis::LexicalScoping anal;
-        for (auto& expr : exprs)
-            std::visit(anal, expr->variant());
 
         if (not norun) {
+            if (print_parsed or print_tokens) puts("Output:\n");
+
+            pie::analysis::LexicalScoping anal;
+            for (auto& expr : exprs)
+                std::visit(anal, expr->variant());
+
             interp::Visitor visitor{std::move(anal).indeces};
             for (const auto& expr : exprs)
                 std::visit(visitor, expr->variant());
@@ -123,13 +124,14 @@ namespace cli {
             for(const auto& expr : exprs)
                 std::println(std::clog, "{};", expr->stringify(0));
 
-        if(not norun and (print_parsed or print_tokens)) puts("Output:\n");
-
-        pie::analysis::LexicalScoping anal;
-        for (auto& expr : exprs)
-            std::visit(anal, expr->variant());
 
         if (not norun) {
+            if (print_parsed or print_tokens) puts("Output:\n");
+
+            pie::analysis::LexicalScoping anal;
+            for (auto& expr : exprs)
+                std::visit(anal, expr->variant());
+
             interp::Visitor visitor{std::move(anal).indeces};
             for (const auto& expr : exprs)
                 std::visit(visitor, expr->variant());

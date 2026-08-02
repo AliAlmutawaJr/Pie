@@ -151,10 +151,11 @@ void LexicalScoping::operator()(expr::Fix *f) {
 
 
 void LexicalScoping::accessAssign(expr::Access *acc, expr::Assignment *ass) {
+    std::visit(*this, ass->rhs->variant());
+
     if (auto name = dynamic_cast<expr::Name*>(acc->var.get())) {
         if (const auto id = findVar(name->name); id) {
             name->ID = *id;
-            std::visit(*this, ass->rhs->variant());
         }
         else util::error<except::NameLookup>("Name `" + acc->var->stringify() + "` not found in assignment: " + ass->stringify());
     }
@@ -251,33 +252,90 @@ void LexicalScoping::operator()(expr::InferredAssignment *inf) {
 }
 
 
-void LexicalScoping::operator()(expr::Unpackment *unpack) {
-    if (unpack->inferred) {
-        // Inferred Assignment always declares a new variable
+void LexicalScoping::checkPattern(expr::Unpackment::Pattern *pattern) {
+    // regular assignment could re-assign an exisiting variable,
+    // or create a new one if it doesn't already exisit
 
-        std::visit(*this, unpack->rhs->variant());
+    if (auto expr = dynamic_cast<expr::Unpackment::Expr*>(pattern)) {
+        if (
+            dynamic_cast<expr::Access     *>(expr->expr.get()) or
+            dynamic_cast<expr::SpaceAccess*>(expr->expr.get())
+        )
+            return std::visit(*this, expr->expr->variant());
 
-        for (const auto& expr : unpack->lhs) {
-            expr->ID = variable_index++;
 
-            // maybe this line should go into its own for-loop
-            // actuallt maybe no since I'm not evaluating any expression
-            // just names..
-            addVar(expr->stringify(), expr->ID);
+        if (const auto id = findVar(expr->expr->stringify()); id) {
+            expr->expr->ID = *id;
+            return;
+        }
+
+        expr->expr->ID = variable_index++;
+        addVar(expr->expr->stringify(), expr->expr->ID);
+    }
+    else if (auto list = dynamic_cast<expr::Unpackment::List*>(pattern)) {
+        // std::ranges::for_each(list->patterns, [this](const auto& pat) { return checkPattern(pat.get()); });
+        for (const auto& pat : list->patterns) checkPattern(pat.get());
+    }
+    else if (auto map = dynamic_cast<expr::Unpackment::Map*>(pattern)) {
+        for (const auto& [key, val] : map->patterns) {
+            checkPattern(key.get());
+            checkPattern(val.get());
         }
     }
-    else {
-        std::visit(*this, unpack->rhs->variant());
-
-        for (const auto& expr : unpack->lhs) {
-            if (auto id = findVar(expr->stringify())) {
-                expr->ID = *id;
-            }
-            else {
-                expr->ID = variable_index++;
-                addVar(expr->stringify(), expr->ID);
-            }
+    else if (auto pack = dynamic_cast<expr::Unpackment::Pack*>(pattern)) {
+        if (const auto id = findVar(pack->expr->stringify()); id) {
+            pack->expr->ID = *id;
+            return;
         }
+
+        pack->expr->ID = variable_index++;
+        addVar(pack->expr->stringify(), pack->expr->ID);
+    }
+    else util::error();
+}
+
+
+void LexicalScoping::checkPattern(expr::Unpackment::Pattern *pattern, [[maybe_unused]] bool inferred) {
+    // Inferred Assignment always declares a new variable
+
+    if (auto expr = dynamic_cast<expr::Unpackment::Expr*>(pattern)) {
+        if (not dynamic_cast<expr::Name*>(expr->expr.get()))
+            util::error("Only proper names may appear on the LHS of the walrus operator `:=`");
+
+        expr->expr->ID = variable_index++;
+        addVar(expr->expr->stringify(), expr->expr->ID);
+    }
+    else if (auto list = dynamic_cast<expr::Unpackment::List*>(pattern)) {
+        // std::ranges::for_each(list->patterns, [this, inferred](const auto& pat) { return checkPattern(pat.get(), inferred); });
+        for (const auto& pat : list->patterns) checkPattern(pat.get(), inferred);
+    }
+    else if (auto map = dynamic_cast<expr::Unpackment::Map*>(pattern)) {
+        for (const auto& [key, val] : map->patterns) {
+            checkPattern(key.get(), inferred);
+            checkPattern(val.get(), inferred);
+        }
+    }
+    else if (auto pack = dynamic_cast<expr::Unpackment::Pack*>(pattern)) {
+        if (const auto id = findVar(pack->expr->stringify()); id) {
+            pack->expr->ID = *id;
+            return;
+        }
+
+        pack->expr->ID = variable_index++;
+        addVar(pack->expr->stringify(), pack->expr->ID);
+    }
+    else util::error();
+}
+
+
+void LexicalScoping::operator()(expr::Unpackment *unpack) {
+    std::visit(*this, unpack->rhs->variant());
+
+    if (unpack->inferred) {
+        checkPattern(unpack->pattern.get(), unpack->inferred);
+    }
+    else {
+        checkPattern(unpack->pattern.get());
     }
 }
 

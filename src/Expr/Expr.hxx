@@ -1,9 +1,11 @@
 #pragma once
 
 #include <cctype>
+#include <concepts>
 #include <string>
 #include <string_view>
 #include <filesystem>
+#include <type_traits>
 #include <vector>
 #include <utility>
 #include <tuple>
@@ -315,23 +317,69 @@ struct InferredAssignment : Expr{
 
 // Unpack Assignment
 struct Unpackment : Expr {
+
+    struct Pattern { virtual ~Pattern() = default; };
+    using PatternPtr = std::unique_ptr<Pattern>;
+    using Patterns = std::vector<PatternPtr>;
+
+    struct Expr : Pattern {
+        ExprPtr expr;
+        Expr(ExprPtr e) noexcept : expr{std::move(e)} { }
+    };
+
+    struct List : Pattern {
+        Patterns patterns;
+        List(Patterns p) noexcept : patterns{std::move(p)} { }
+
+        template <typename... Ts>
+        requires (std::same_as<std::remove_cvref_t<Ts>, PatternPtr> and ...)
+        static std::unique_ptr<List> with(Ts&&... members) {
+            Patterns patterns;
+            (..., patterns.push_back(std::forward<Ts>(members)));
+            return std::make_unique<List>(std::move(patterns));
+        }
+    };
+
+    struct Map : Pattern {
+        std::vector<std::pair<PatternPtr, PatternPtr>> patterns;
+        Map(std::vector<std::pair<PatternPtr, PatternPtr>> p) noexcept : patterns{std::move(p)} { }
+
+
+        template <typename... Ts>
+        requires (std::same_as<std::remove_cvref_t<Ts>, std::pair<PatternPtr, PatternPtr>> and ...)
+        static std::unique_ptr<Map> with(Ts&&... members) {
+            std::vector<std::pair<PatternPtr, PatternPtr>> patterns;
+            (..., patterns.push_back(std::forward<Ts>(members)));
+            return std::make_unique<Map>(std::move(patterns));
+        }
+    };
+
+    struct Pack : Pattern {
+        ExprPtr expr;
+        Pack(ExprPtr e) noexcept : expr{std::move(e)} { }
+    };
+
+
     // guranteed to have at leats one element
-    std::vector<ExprPtr> lhs;
+    PatternPtr pattern;
     ExprPtr rhs;
     bool inferred;
 
 
-    Unpackment(std::vector<ExprPtr> l, ExprPtr r, bool infer) noexcept
-    : lhs{std::move(l)}, rhs{std::move(r)}, inferred{infer} { }
+    Unpackment(PatternPtr p, ExprPtr r, bool infer) noexcept
+    : pattern{std::move(p)}, rhs{std::move(r)}, inferred{infer} { }
 
 
     std::string stringify(const size_t indent = 0) const override {
-        std::string s;
+        std::string s = "{";
 
-        s += lhs[0]->stringify();
-        for (const auto& expr : lhs | std::views::drop(1)) {
-            s += ", " + expr->stringify();
-        }
+        s += stringifyPattern(pattern.get(), indent + 4) + ", ";
+
+        // removing the trailing comma
+        s.pop_back();
+        s.pop_back();
+
+        s += '}';
 
         s += inferred ? " := " : " = ";
 
@@ -341,12 +389,55 @@ struct Unpackment : Expr {
     bool involvesName(const std::string_view sv) const override {
         if (sv == stringify()) return true;
 
-        for (const auto& expr : lhs) if (expr->involvesName(sv)) return true;
+        // for (const auto& expr : lhs) if (expr->involvesName(sv)) return true;
 
         return rhs->involvesName(sv);
     }
 
     Node variant() override { return this; }
+
+private:
+    std::string stringifyPattern(const Pattern *pattern, const size_t indent = 0) const {
+        std::string s;
+        if (auto expr = dynamic_cast<const Expr*>(pattern)) {
+            s = expr->expr->stringify();
+        }
+        else if (auto list = dynamic_cast<const List*>(pattern)) {
+            s += '{';
+
+            for (const auto& pat : list->patterns)
+                s += stringifyPattern(pat.get(), indent + 4) + ", ";
+
+
+            // removing the trailing comma
+            s.pop_back();
+            s.pop_back();
+
+            s += '}';
+        }
+        else if (auto map = dynamic_cast<const Map*>(pattern)) {
+            s += '{';
+            for (const auto& [key, value] : map->patterns) {
+                s +=
+                    stringifyPattern(key  .get(), indent + 4)
+                    + ": " +
+                    stringifyPattern(value.get(), indent + 4)
+                    + ", ";
+            }
+
+            // removing the trailing comma
+            s.pop_back();
+            s.pop_back();
+
+            s += '}';
+        }
+        else if (auto pack = dynamic_cast<const Pack*>(pattern)) {
+            s += "..." + pack->expr->stringify();
+        }
+        else util::error();
+
+        return s;
+    }
 };
 
 
@@ -426,7 +517,8 @@ struct Match : Expr {
                 ExprPtr value;
             };
 
-            using Patterns = std::vector<std::unique_ptr<Pattern>>;
+            using PatternPtr = std::unique_ptr<Pattern>;
+            using Patterns = std::vector<PatternPtr>;
             struct Structure { StringID type_name; Patterns patterns; };
 
 
@@ -442,8 +534,10 @@ struct Match : Expr {
             {}
         };
 
+        using PatternPtr = Pattern::PatternPtr;
+
         // Pattern pattern;
-        std::unique_ptr<Pattern> pattern;
+        PatternPtr pattern;
         ExprPtr guard;
         ExprPtr body;
     };
@@ -459,7 +553,7 @@ struct Match : Expr {
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "match " + expr->stringify(indent) + " {\n";
 
-        for (const std::string space(indent + 4, ' '); auto&& kase : cases) {
+        for (const std::string space(indent + 4, ' '); const auto& kase : cases) {
             s += space;
 
             s += stringifyPattern(*kase.pattern, indent + 4);
@@ -472,6 +566,7 @@ struct Match : Expr {
         return s + std::string(indent, ' ') + "}";
     }
 
+    // todo: fix this by checking every expression. Even inside Single
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or expr->involvesName(sv);
     }
