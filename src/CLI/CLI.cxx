@@ -30,7 +30,7 @@ namespace cli {
             if (line.back() != ';') line += ';';
 
 
-            Tokens v = lex::lex(std::move(line));
+            token::Tokens v = lex::lex(std::move(line));
             if (print_tokens) std::println(std::clog, "{}", v);
 
             if (v.empty()) continue;
@@ -76,7 +76,7 @@ namespace cli {
 
         auto processed_src = std::move(src);
 
-        Tokens v = lex::lex(std::move(processed_src));
+        token::Tokens v = lex::lex(std::move(processed_src));
         if (print_tokens) std::println(std::clog, "{}", v);
 
         if (v.empty()) return;
@@ -111,7 +111,7 @@ namespace cli {
         const bool print_parsed,
         const bool norun
     ) {
-        Tokens v = lex::lex(std::move(src));
+        token::Tokens v = lex::lex(std::move(src));
         if (print_tokens) std::println(std::clog, "{}", v);
 
         if (v.empty()) return;

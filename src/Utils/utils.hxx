@@ -57,11 +57,11 @@ template <typename Except = std::runtime_error, bool print_loc = true>
 }
 
 
-[[noreturn]] void expected(const TokenKind exp, const Token& got, const std::source_location& location = std::source_location::current());
+[[noreturn]] void expected(const token::TokenKind exp, const token::Token& got, const std::source_location& location = std::source_location::current());
 
-[[noreturn]] void expected(const TokenKind exp, const TokenKind got, const std::source_location& location = std::source_location::current());
+[[noreturn]] void expected(const token::TokenKind exp, const token::TokenKind got, const std::source_location& location = std::source_location::current());
 
-[[noreturn]] void expected(const std::string& exp, const Token& got, const std::source_location& location = std::source_location::current());
+[[noreturn]] void expected(const std::string& exp, const token::Token& got, const std::source_location& location = std::source_location::current());
 
 
 std::filesystem::path getPiePath();

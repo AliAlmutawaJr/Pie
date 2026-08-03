@@ -80,10 +80,10 @@ class Parser {
     std::filesystem::path root;
 
 
-    Tokens tokens;
-    typename Tokens::iterator token_iterator;
+    token::Tokens tokens;
+    typename token::Tokens::iterator token_iterator;
     // deque instead of vector for pop_front
-    std::deque<Token> red; // past tense of read lol
+    std::deque<token::Token> red; // past tense of read lol
 
 
 
@@ -95,7 +95,7 @@ class Parser {
 
 public:
 
-    Parser(Tokens t, std::filesystem::path r = ".") noexcept
+    Parser(token::Tokens t, std::filesystem::path r = ".") noexcept
     : root{r.remove_filename()}, tokens{std::move(t)}, token_iterator{tokens.begin()}, env(1)
     {}
 
@@ -108,11 +108,11 @@ public:
     [[nodiscard]] bool atEnd(const size_t offset = 0) const noexcept {
         // offsat?
         const auto offsetted = std::next(token_iterator, offset);
-        return offsetted == tokens.end() or offsetted->kind == TokenKind::END;
+        return offsetted == tokens.end() or offsetted->kind == token::TokenKind::END;
     }
 
 
-    void resetTokens(Tokens t) {
+    void resetTokens(token::Tokens t) {
         tokens = std::move(t);
         token_iterator = tokens.begin();
         red.clear();
@@ -124,16 +124,16 @@ public:
         while (not atEnd()) {
             expressions.push_back(parseExpr());
 
-            if (not match(TokenKind::SEMI)) {
+            if (not match(token::TokenKind::SEMI)) {
                 const auto t = lookAhead();
-                if (t.kind == TokenKind::NAME) {
+                if (t.kind == token::TokenKind::NAME) {
                     std::string msg = "Operator '" + t.text + "' not found!";
 
                     // most operators are 1 or 2 chars long
                     if (t.text.length() > 2) msg += " Did you, perhaps, forget a ';' on the previous line?";
                     util::error(msg); //  + '\n' + expressions.back()->stringify()
                 }
-                util::expected(TokenKind::SEMI, t);
+                util::expected(token::TokenKind::SEMI, t);
             }
         }
 
@@ -148,10 +148,10 @@ public:
         expr::ExprPtr left = prefix<PARSE_TYPE, CTX>(consume());
 
         while (precedence < getPrecedence()) {
-            if constexpr (not PARSE_TYPE or CTX == Context::MAP) if (check(TokenKind::COLON)) break;
+            if constexpr (not PARSE_TYPE or CTX == Context::MAP) if (check(token::TokenKind::COLON)) break;
             // // both context's need to parse comma separated lists
             // if constexpr (CTX == Context::CALL)
-            //     if (check(TokenKind::COMMA)) break;
+            //     if (check(token::TokenKind::COMMA)) break;
 
             left = infix<CTX>(std::move(left), consume());
         }
@@ -161,9 +161,9 @@ public:
 
 
     template <bool PARSE_TYPE = true, Context CTX = Context::NONE>
-    expr::ExprPtr prefix(Token token) {
+    expr::ExprPtr prefix(token::Token token) {
         switch (token.kind) {
-            using enum TokenKind;
+            using enum token::TokenKind;
 
             case FLOAT :
             case INT   : return std::make_shared<expr::Num   >(std::move(token).text);
@@ -244,9 +244,9 @@ public:
 
 
     template <Context CTX = Context::NONE>
-    expr::ExprPtr infix(expr::ExprPtr left, Token token) {
+    expr::ExprPtr infix(expr::ExprPtr left, token::Token token) {
         switch (token.kind) {
-            using enum TokenKind;
+            using enum token::TokenKind;
 
             case NAME: return infixName(std::move(left), std::move(token));
 
@@ -367,17 +367,19 @@ public:
 
     void unAddOp(const expr::Fix* fix) {
         switch (fix->type()) {
-            case TokenKind::PREFIX:
+            using enum token::TokenKind;
+
+            case PREFIX:
                 env.back().first.prefix_op_env.erase(fix->name);
                 return;
 
-            case TokenKind::INFIX:
-            case TokenKind::SUFFIX:
+            case INFIX :
+            case SUFFIX:
                 env.back().first.op_env.erase(fix->name);
                 return;
 
 
-            case TokenKind::EXFIX: { // name1 x name2
+            case EXFIX: { // name1 x name2
                 auto exfix = dynamic_cast<const expr::Exfix*>(fix);
                 if (not exfix) util::error();
 
@@ -386,7 +388,7 @@ public:
                 return;
             }
 
-            case TokenKind::MIXFIX: {
+            case MIXFIX: {
                 auto op = dynamic_cast<const expr::Operator*>(fix);
                 if (not op) util::error();
 
@@ -403,7 +405,7 @@ public:
 
     template <bool ALLOW_VARIADIC = true>
     type::TypePtr parseType() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         if (match(ELLIPSIS)) {
             if constexpr (not ALLOW_VARIADIC) util::error("Can't have a variadic of a variadic type!");
@@ -496,7 +498,7 @@ public:
 
 
     expr::Match::Case::PatternPtr parseMatchPattern() {
-        using enum TokenKind;
+        using enum token::TokenKind;
         using Pattern   = expr::Match::Case::Pattern;
         using Single    = expr::Match::Case::Pattern::Single;
         using Patterns  = expr::Match::Case::Pattern::Patterns;
@@ -569,7 +571,7 @@ public:
 
 
     expr::ExprPtr match() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         auto expr = parseExpr();
 
@@ -614,7 +616,7 @@ public:
 
 
     expr::ExprPtr klass() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         consume(L_BRACE);
 
@@ -647,7 +649,7 @@ public:
 
 
     expr::ExprPtr onion() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         consume(L_BRACE);
 
@@ -711,7 +713,7 @@ public:
 
 
     expr::ExprPtr import_directive() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         std::filesystem::path path = util::getPiePath(); // root;
         auto fname = consume(NAME).text + ".pie";
@@ -724,7 +726,7 @@ public:
         }
 
         const auto src = util::readFile(path);
-        const Tokens tokens = lex::lex(src);
+        const token::Tokens tokens = lex::lex(src);
         if (tokens.empty()) util::error("Can't import an empty file!");
 
         Parser p{std::move(tokens), path};
@@ -746,7 +748,7 @@ public:
 
 
     expr::ExprPtr nameSpace() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         std::string name = consume(NAME).text;
 
@@ -775,7 +777,7 @@ public:
 
 
     expr::ExprPtr use() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         const bool global_access = match(SCOPE_RESOLVE);
 
@@ -816,7 +818,7 @@ public:
 
 
     expr::ExprPtr useSpace() {
-        using enum TokenKind;
+        using enum token::TokenKind;
         const bool global_access = match(SCOPE_RESOLVE);
         bool pull_ops;
 
@@ -832,8 +834,8 @@ public:
 
 
     // use infix a; .: error
-    expr::ExprPtr useFix(const TokenKind kind) {
-        using enum TokenKind;
+    expr::ExprPtr useFix(const token::TokenKind kind) {
+        using enum token::TokenKind;
         const bool global_access = match(SCOPE_RESOLVE);
 
         std::vector<std::string> spaces = {consume(NAME).text, };
@@ -952,11 +954,11 @@ public:
     std::vector<expr::ExprPtr> parseCommaList() {
         std::vector<expr::ExprPtr> exprs;
 
-        if (match(TokenKind::R_PAREN)) return exprs;
+        if (match(token::TokenKind::R_PAREN)) return exprs;
 
-        do exprs.push_back(parseExpr()); while(match(TokenKind::COMMA));
+        do exprs.push_back(parseExpr()); while(match(token::TokenKind::COMMA));
 
-        consume(TokenKind::R_PAREN);
+        consume(token::TokenKind::R_PAREN);
 
         return exprs;
     }
@@ -974,7 +976,7 @@ public:
 
     // left paren already consumed
     expr::ExprPtr parseFoldExpr() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         // right folds (unseparated)
         if (match(ELLIPSIS)) return foldCase1And2();
@@ -987,7 +989,7 @@ public:
 
         std::string op = consume().text;
         if (not opsContain(op))                     util::error("Folding over unknown ""operator: " + op);
-        if (findOp(op)->type() != TokenKind::INFIX) util::error("Folding over non-infix operator: " + op);
+        if (findOp(op)->type() != INFIX) util::error("Folding over non-infix operator: " + op);
 
 
         if (match(ELLIPSIS)) {
@@ -1035,13 +1037,13 @@ public:
 
 
     expr::ExprPtr foldCase1And2() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         constexpr auto is_left_to_right = false;
 
         std::string op = consume().text;
         if (not opsContain(op))                     util::error("Folding over unknown operator: " + op);
-        if (findOp(op)->type() != TokenKind::INFIX) util::error("Folding over non-infix operator: " + op);
+        if (findOp(op)->type() != INFIX) util::error("Folding over non-infix operator: " + op);
 
         auto pack = parseExpr(prec::HIGH_VALUE);
 
@@ -1058,7 +1060,7 @@ public:
 
 
     expr::ExprPtr loop() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         auto kind = match(FAT_ARROW) ? nullptr : parseExpr();
 
@@ -1090,7 +1092,7 @@ public:
         // return exprs;
 
     expr::ExprPtr closure() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         std::vector<std::string> params;
         std::vector<type::TypePtr> params_types;
@@ -1133,7 +1135,7 @@ public:
 
 
     expr::ExprPtr call(expr::ExprPtr left) {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         std::unordered_map<std::string, expr::ExprPtr> named_args;
         std::vector<expr::ExprPtr> args;
@@ -1194,7 +1196,7 @@ public:
 
 
     expr::ExprPtr listLiteral() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         std::vector<expr::ExprPtr> exprs = { parseExpr(prec::COMMA_VALUE), };
 
@@ -1314,9 +1316,9 @@ public:
     }
 
 
-    bool findTopLevel(const TokenKind token) {
+    bool findTopLevel(const token::TokenKind token) {
         return [this, token] {
-            using enum TokenKind;
+            using enum token::TokenKind;
 
             for (size_t i{}; /* not atEnd(i) */; ++i) {
                 if (check(token  , i)) return true;
@@ -1421,7 +1423,7 @@ public:
 
 
     expr::ExprPtr LBrace() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         if (match(R_BRACE)) return std::make_shared<expr::List>();
 
@@ -1445,7 +1447,7 @@ public:
 
     template <bool PARSE_TYPE = true, Context CTX>
     expr::ExprPtr LParen() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         if (match(R_PAREN)) { // nullary closure
             type::TypePtr return_type = match(COLON) ? parseType() : type::builtins::_();
@@ -1499,7 +1501,7 @@ public:
 
 
     expr::ExprPtr backticks() {
-        util::Deferred d{[this] { consume(TokenKind::BACKTICK); }};
+        util::Deferred d{[this] { consume(token::TokenKind::BACKTICK); }};
 
 
         auto syn = std::make_shared<expr::Syntax>(parseExpr());
@@ -1512,13 +1514,13 @@ public:
     }
 
 
-    expr::ExprPtr name(Token token) {
-        if (match(TokenKind::COLON)){ // exprs preceeded by `:` are parsed as type
+    expr::ExprPtr name(token::Token token) {
+        if (match(token::TokenKind::COLON)){ // exprs preceeded by `:` are parsed as type
             // consume(/* COLON */);
             auto type = parseType();
 
 
-            consume(TokenKind::ASSIGN);
+            consume(token::TokenKind::ASSIGN);
 
             return std::make_shared<expr::Assignment>(
                 std::make_shared<expr::Name>(std::move(token).text),
@@ -1531,22 +1533,24 @@ public:
     }
 
 
-    expr::ExprPtr infixName(expr::ExprPtr left, Token token) {
+    expr::ExprPtr infixName(expr::ExprPtr left, token::Token token) {
         if (opsContain(token.text)) {
+            using enum token::TokenKind;
+
             switch (const auto& op = findOp(token.text); op->type()) {
                 // case TokenKind::PREFIX:
                 //     return std::make_shared<UnaryOp>(token, parseExpr(precFromToken(op->prec)));
 
-                case TokenKind::INFIX: {
+                case INFIX: {
                     const auto prec = prec::calculate(op->high, op->low, consolidateOps());
                     return std::make_shared<expr::BinOp>(std::move(left), std::move(token).text, parseExpr(prec));
                 }
-                case TokenKind::SUFFIX:
+                case SUFFIX:
                     return std::make_shared<expr::PostOp>(std::move(token).text, std::move(left));
 
 
                 //* I can fix this. Check if the name is the first or not and error accordingly!
-                case TokenKind::EXFIX: {
+                case EXFIX: {
                     const auto& op = dynamic_cast<const expr::Exfix*>(findOp(token.text).get());
                     if (token.text != op->name2) util::error("Open exfix operator found where closing one was expected!");
 
@@ -1555,7 +1559,7 @@ public:
 
 
                 // some other part of Operator. 
-                case TokenKind::MIXFIX: {
+                case MIXFIX: {
                     const auto& op = dynamic_cast<const expr::Operator*>(findOp(token.text).get());
 
                     // error("Beginning operator '" + token.text  + "' found where it shouldn't be!");
@@ -1592,14 +1596,16 @@ public:
         return std::make_shared<expr::Name>(std::move(token).text);
     }
 
-    expr::ExprPtr parsePrefixOperator(Token token) {
+    expr::ExprPtr parsePrefixOperator(token::Token token) {
         switch (const auto& op = findPrefixOp(token.text); op->type()) {
-            case TokenKind::PREFIX:{
+            using enum token::TokenKind;
+
+            case PREFIX: {
                 const int prec = prec::calculate(op->high, op->low, consolidateOps());
                 return std::make_shared<expr::UnaryOp>(std::move(token).text, parseExpr(prec));
             }
 
-            case TokenKind::EXFIX:{
+            case EXFIX: {
                 auto op = dynamic_cast<const expr::Exfix*>(findPrefixOp(token.text).get());
 
                 auto ret = std::make_shared<expr::CircumOp>(op->name, op->name2, parseExpr());
@@ -1609,7 +1615,7 @@ public:
                 return ret;
             }
 
-            case TokenKind::MIXFIX: {
+            case MIXFIX: {
                 auto op = dynamic_cast<const expr::Operator*>(findPrefixOp(token.text).get());
                 if (not op->op_pos[0]) util::error("Operator '" + token.text + "' has to come after an expression!");
 
@@ -1651,8 +1657,8 @@ public:
     }
 
 
-    void checkOperatpr(const TokenKind kind, const std::string& name, const std::string& high, const std::string& low) {
-        using enum TokenKind;
+    void checkOperatpr(const token::TokenKind kind, const std::string& name, const std::string& high, const std::string& low) {
+        using enum token::TokenKind;
 
         // gotta dry out this part
         // plus, I don't like that I made "Fix" take a "ExprPtr" rather than closure but I'll leave it for now
@@ -1693,8 +1699,8 @@ public:
 
     // operator defintion
     // fix(PREC) op = (...) => ...
-    expr::ExprPtr fixOperator(Token token) {
-        using enum TokenKind;
+    expr::ExprPtr fixOperator(token::Token token) {
+        using enum token::TokenKind;
 
         if (token.kind == EXFIX ) return exfixOperator();
         if (token.kind == MIXFIX) return arbitraryOperator();
@@ -1775,7 +1781,7 @@ public:
     }
 
     expr::ExprPtr exfixOperator() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         std::string name1 = consume(NAME).text;
         consume(COLON);
@@ -1798,9 +1804,9 @@ public:
             const auto& op = findPrefixOp(name1);
             // op->funcs.push_back(std::move(func));
 
-            if (op->type() != TokenKind::EXFIX) {
+            if (op->type() != token::TokenKind::EXFIX) {
                 std::println(std::cerr, "Overload set for operator '{}:{}' must have the same operator type:", name1, name2);
-                util::expected(op->type(), TokenKind::EXFIX);
+                util::expected(op->type(), token::TokenKind::EXFIX);
             }
 
             auto ex = dynamic_cast<const expr::Exfix*>(op.get());
@@ -1817,7 +1823,7 @@ public:
 
         if (opsContain(name2)) {
             std::println(std::cerr, "Overload set for operator '{}:{}' must have the same operator type:", name1, name2);
-            util::expected(findOp(name2)->type(), TokenKind::EXFIX);
+            util::expected(findOp(name2)->type(), token::TokenKind::EXFIX);
         }
 
 
@@ -1840,7 +1846,7 @@ public:
 
 
     expr::ExprPtr arbitraryOperator() {
-        using enum TokenKind;
+        using enum token::TokenKind;
 
         consume(L_PAREN);
         std::string low = consume().text;
@@ -1928,7 +1934,7 @@ public:
             const auto& op = findOp(first);
             // op->funcs.push_back(std::move(func));
 
-            if (op->type() != TokenKind::MIXFIX) util::error(); // ! ADD ERR MSG
+            if (op->type() != MIXFIX) util::error(); // ! ADD ERR MSG
 
             auto arb = dynamic_cast<const expr::Operator*>(op.get());
 
@@ -1971,8 +1977,8 @@ public:
 
 
     int parseOperatorShift() {
-        if (check(TokenKind::NAME)) {
-            const auto shift_token = consume(TokenKind::NAME).text;
+        if (check(token::TokenKind::NAME)) {
+            const auto shift_token = consume(token::TokenKind::NAME).text;
             // assert(shift_token.text.length() <= 1);
 
             if (shift_token.length() == 1){
@@ -2007,7 +2013,7 @@ public:
         );
     }
 
-    Token consume() {
+    token::Token consume() {
         lookAhead();
 
         const auto token = red.front();
@@ -2015,10 +2021,10 @@ public:
         return token;
     }
 
-    Token consume(const TokenKind exp, const std::source_location& loc = std::source_location::current()) {
+    token::Token consume(const token::TokenKind exp, const std::source_location& loc = std::source_location::current()) {
         using std::operator""s;
 
-		if (const Token token = lookAhead(); token.kind != exp) [[unlikely]] {
+		if (const token::Token token = lookAhead(); token.kind != exp) [[unlikely]] {
             // log();
             util::expected(exp, token, loc);
         }
@@ -2026,10 +2032,10 @@ public:
 		return consume();
 	}
 
-    Token consume(const std::string& exp, const std::source_location& loc = std::source_location::current()) {
+    token::Token consume(const std::string& exp, const std::source_location& loc = std::source_location::current()) {
         using std::operator""s;
 
-		if (const Token token = lookAhead(); token.text != exp) [[unlikely]] {
+		if (const token::Token token = lookAhead(); token.text != exp) [[unlikely]] {
             // log();
             util::expected(exp, token, loc);
         }
@@ -2037,8 +2043,8 @@ public:
 		return consume();
 	}
 
-    [[nodiscard]] bool match(const TokenKind exp) {
-		const Token token = lookAhead();
+    [[nodiscard]] bool match(const token::TokenKind exp) {
+		const token::Token token = lookAhead();
 
 		if (token.kind != exp) return false;
 
@@ -2047,7 +2053,7 @@ public:
 	}
 
     [[nodiscard]] bool match(const std::string_view text) {
-		const Token token = lookAhead();
+		const token::Token token = lookAhead();
 
 		if (token.text != text) return false;
 
@@ -2055,7 +2061,7 @@ public:
 		return true;
     }
 
-    Token lookAhead(const size_t distance = 0, const std::source_location& loc = std::source_location::current()) {
+    token::Token lookAhead(const size_t distance = 0, const std::source_location& loc = std::source_location::current()) {
         while (distance >= red.size()) {
             if (atEnd()) util::error("out of token!", loc);
             red.push_back(*token_iterator++);
@@ -2065,7 +2071,7 @@ public:
         return red[distance];
     }
 
-    [[nodiscard]] bool check(const TokenKind exp, const size_t i = {}, const std::source_location& loc = std::source_location::current()) {
+    [[nodiscard]] bool check(const token::TokenKind exp, const size_t i = {}, const std::source_location& loc = std::source_location::current()) {
         return lookAhead(i, loc).kind == exp;
     }
 
@@ -2075,9 +2081,9 @@ public:
 
     [[nodiscard]] int getPrecedence() {
 
-        const Token& token = lookAhead();
+        const token::Token& token = lookAhead();
         switch (token.kind) {
-            using enum TokenKind;
+            using enum token::TokenKind;
 
             // right associative
             // case COMMA: return prec::COMMA_VALUE;
@@ -2104,7 +2110,7 @@ public:
 
                 //todo: prefix sould also be right to left
                 // mix fix operators should be parsed right to left.......I think ;-;
-                if (token.text == op->name and op->type() == TokenKind::MIXFIX)
+                if (token.text == op->name and op->type() == MIXFIX)
                     return prec + 1;
 
                 return prec;
@@ -2125,7 +2131,7 @@ public:
         const ptrdiff_t dist = std::distance(tokens.begin(), token_iterator);
         const ptrdiff_t diff = begin ? 0 : dist < 5 ? dist : 5;
 
-        std::copy(token_iterator - (shift ? diff : 0), tokens.end(), std::ostream_iterator<Token>{std::clog, " "});
+        std::copy(token_iterator - (shift ? diff : 0), tokens.end(), std::ostream_iterator<token::Token>{std::clog, " "});
         puts("");
     }
 

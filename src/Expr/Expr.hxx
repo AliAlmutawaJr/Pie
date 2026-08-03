@@ -830,18 +830,18 @@ struct UseSpace : Expr {
 struct UseFix : Expr {
     bool global;
     std::vector<std::string> spaces;
-    TokenKind filter;
+    token::TokenKind filter;
     std::string op_name;
 
 
-    UseFix(bool g, std::vector<std::string> ns, const TokenKind f = TokenKind::NONE, std::string op = "") noexcept
+    UseFix(bool g, std::vector<std::string> ns, const token::TokenKind f = token::TokenKind::NONE, std::string op = "") noexcept
     : global{g}, spaces{std::move(ns)}, filter{f}, op_name{std::move(op)}
     {}
 
 
     std::string stringify(const size_t = 0) const override {
         std::string s = "use ";
-        if (filter != TokenKind::NONE) {
+        if (filter != token::TokenKind::NONE) {
             for (const char c : std::string_view{token::stringify(filter)})
                 s += tolower(c);
 
@@ -1282,7 +1282,7 @@ struct Fix : Expr {
 
     virtual std::unique_ptr<Fix> clone() const = 0;
     virtual std::string OpName() const = 0;
-    virtual TokenKind type() const = 0;
+    virtual token::TokenKind type() const = 0;
     virtual bool isPrefix() const = 0;
 };
 
@@ -1309,7 +1309,7 @@ struct Prefix : Fix {
 
     std::unique_ptr<Fix> clone() const override { return std::make_unique<Prefix>(*this); }
     std::string OpName() const override { return name; }
-    TokenKind type() const override { return TokenKind::PREFIX; }
+    token::TokenKind type() const override { return token::TokenKind::PREFIX; }
     bool isPrefix() const override { return true; }
 
     Node variant() override { return this; }
@@ -1335,7 +1335,7 @@ struct Infix : Fix {
 
     std::unique_ptr<Fix> clone() const override { return std::make_unique<Infix>(*this); }
     std::string OpName() const override { return name; }
-    TokenKind type() const override { return TokenKind::INFIX; }
+    token::TokenKind type() const override { return token::TokenKind::INFIX; }
     bool isPrefix() const override { return false; }
 
     Node variant() override { return this; }
@@ -1361,7 +1361,7 @@ struct Suffix : Fix {
 
     std::unique_ptr<Fix> clone() const override { return std::make_unique<Suffix>(*this); }
     std::string OpName() const override { return name; }
-    TokenKind type() const override { return TokenKind::SUFFIX; }
+    token::TokenKind type() const override { return token::TokenKind::SUFFIX; }
     bool isPrefix() const override { return false; }
 
     Node variant() override { return this; }
@@ -1389,7 +1389,7 @@ struct Exfix : Fix {
 
     std::unique_ptr<Fix> clone() const override { return std::make_unique<Exfix>(*this); }
     std::string OpName() const override { return name + ':' + name2; }
-    TokenKind type() const override { return TokenKind::EXFIX; }
+    token::TokenKind type() const override { return token::TokenKind::EXFIX; }
     bool isPrefix() const override { return true; }
 
     Node variant() override { return this; }
@@ -1448,7 +1448,7 @@ struct Operator : Fix {
         return op_name;
     }
     std::unique_ptr<Fix> clone() const override { return std::make_unique<Operator>(*this); }
-    TokenKind type() const override { return TokenKind::MIXFIX; }
+    token::TokenKind type() const override { return token::TokenKind::MIXFIX; }
     bool isPrefix() const override { return op_pos[0]; }
 
     Node variant() override { return this; }

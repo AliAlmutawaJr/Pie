@@ -621,7 +621,7 @@ void LexicalScoping::operator()(expr::Import *import) {
 
 
     const auto src = util::readFile(auto{import->path}.replace_extension(".pie").string());
-    const Tokens tokens = lex::lex(src);
+    const token::Tokens tokens = lex::lex(src);
     if (tokens.empty()) util::error("Can't import an empty file!");
 
     parse::Parser p{std::move(tokens), import->path};

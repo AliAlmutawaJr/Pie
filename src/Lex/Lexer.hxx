@@ -11,12 +11,12 @@ inline namespace pie {
 namespace lex {
 
 
-TokenKind keyword(const std::string_view word) noexcept;
+token::TokenKind keyword(const std::string_view word) noexcept;
 
 
 bool validNameChar(const char c) noexcept;
 
-[[nodiscard]] Tokens lex(const std::string& src);
+[[nodiscard]] token::Tokens lex(const std::string& src);
 
 
 

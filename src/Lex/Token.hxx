@@ -6,7 +6,7 @@
 #include <string>
 
 inline namespace pie {
-inline namespace token {
+namespace token {
 
 enum class TokenKind {
     NONE = 0,
@@ -140,16 +140,16 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
 
 
 template <>
-struct std::formatter<Token> : std::formatter<std::string> {
-    auto format(const Token& token, auto& ctx) const {
+struct std::formatter<token::Token> : std::formatter<std::string> {
+    auto format(const token::Token& token, auto& ctx) const {
         return std::format_to(ctx.out(), "Token{{{}, '{}'}}", stringify(token.kind), token.text);
     }
 };
 
 
 template <>
-struct std::formatter<std::vector<Token>> : std::formatter<std::string_view> {
-    auto format(const std::vector<Token>& vec, auto& ctx) const {
+struct std::formatter<std::vector<token::Token>> : std::formatter<std::string_view> {
+    auto format(const std::vector<token::Token>& vec, auto& ctx) const {
         std::string result = "[";
         bool first = true;
         for (const auto& token : vec) {

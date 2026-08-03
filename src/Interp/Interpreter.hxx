@@ -1646,10 +1646,12 @@ public:
         type::TypePtr type;
 
         switch (use->filter) {
-            case TokenKind::PREFIX:
+            using enum token::TokenKind;
+
+            case PREFIX:
                 for (const auto& [name, prefix_op] : ns->prefix_op_env)
                     if (
-                        prefix_op->type() == TokenKind::PREFIX and
+                        prefix_op->type() == PREFIX and
                         (use->op_name.empty() or name == use->op_name)
                     ) {
                         env.back().prefix_op_env[name] = prefix_op;
@@ -1660,10 +1662,10 @@ public:
                     }
                 break;
 
-            case TokenKind::INFIX:
+            case INFIX:
                 for (const auto& [name, op] : ns->op_env)
                     if (
-                        op->type() == TokenKind::INFIX and
+                        op->type() == INFIX and
                         (use->op_name.empty() or name == use->op_name)
                     ) {
                         env.back().op_env[name] = op;
@@ -1674,10 +1676,10 @@ public:
                     }
                 break;
 
-            case TokenKind::SUFFIX:
+            case SUFFIX:
                 for (const auto& [name, op] : ns->op_env)
                     if (
-                        op->type() == TokenKind::SUFFIX and
+                        op->type() == SUFFIX and
                         (use->op_name.empty() or name == use->op_name)
                     ) {
                         env.back().op_env[name] = op;
@@ -1688,10 +1690,10 @@ public:
                     }
                 break;
 
-            case TokenKind::EXFIX:
+            case EXFIX:
                 for (const auto& [name, prefix_op] : ns->prefix_op_env)
                     if (
-                        prefix_op->type() == TokenKind::EXFIX and
+                        prefix_op->type() == EXFIX and
                         (use->op_name.empty() or name == use->op_name)
                     ) {
                         const auto exfix = dynamic_cast<const expr::Exfix*>(prefix_op.get());
@@ -1706,10 +1708,10 @@ public:
                     }
                 break;
 
-            case TokenKind::MIXFIX:
+            case MIXFIX:
                 for (const auto& [name, prefix_op] : ns->prefix_op_env) {
                     if (
-                        prefix_op->type() == TokenKind::MIXFIX and
+                        prefix_op->type() == MIXFIX and
                         (use->op_name.empty() or name == use->op_name)
                     ) {
                         const auto mixfix = dynamic_cast<const expr::Operator*>(prefix_op.get());
@@ -1728,7 +1730,7 @@ public:
 
                 for (const auto& [name, op] : ns->op_env) {
                     if (
-                        op->type() == TokenKind::MIXFIX and
+                        op->type() == MIXFIX and
                         (use->op_name.empty() or name == use->op_name)
                     ) {
                         const auto mixfix = dynamic_cast<const expr::Operator*>(op.get());
@@ -1746,7 +1748,7 @@ public:
                 }
                 break;
 
-            case TokenKind::NONE:
+            case NONE:
                 for (const auto& [name, prefix_op] : ns->prefix_op_env) {
                     if (use->op_name.empty() or name == use->op_name) {
                         env.back().prefix_op_env[name] = prefix_op;
@@ -1805,7 +1807,7 @@ public:
     ValueType operator()(const expr::Import *import) {
 
         const auto src = util::readFile(auto{import->path}.replace_extension(".pie").string());
-        const Tokens tokens = lex::lex(src);
+        const token::Tokens tokens = lex::lex(src);
         if (tokens.empty()) util::error("Can't import an empty file!");
 
         Parser p{std::move(tokens), import->path};
@@ -3750,7 +3752,7 @@ public:
 
 
         switch (fix->type()) {
-            using enum TokenKind;
+            using enum token::TokenKind;
 
             case PREFIX:
                 if (prefixOpsContain(fix->name))

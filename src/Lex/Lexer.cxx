@@ -9,8 +9,8 @@ inline namespace pie {
 namespace lex {
 
 
-TokenKind keyword(const std::string_view word) noexcept {
-    using enum TokenKind;
+token::TokenKind keyword(const std::string_view word) noexcept {
+    using enum token::TokenKind;
     if (word == "mixfix") return MIXFIX;
     else if (word == "prefix") return PREFIX;
     else if (word == "infix" ) return INFIX ;
@@ -67,9 +67,9 @@ bool validNameChar(const char c) noexcept {
     return isalnum(c);
 }
 
-[[nodiscard]] Tokens lex(const std::string& src) {
-    TokenLines lines = {{}};
-    Tokens line;
+[[nodiscard]] token::Tokens lex(const std::string& src) {
+    token::TokenLines lines = {{}};
+    token::Tokens line;
 
     size_t line_count = 1;
     size_t line_starting_index{};
@@ -79,7 +79,7 @@ bool validNameChar(const char c) noexcept {
 
         try {
         switch (src[index]) {
-            using enum TokenKind;
+            using enum token::TokenKind;
 
             #pragma GCC diagnostic push
             #pragma GCC diagnostic ignored "-Wpedantic"
@@ -159,7 +159,7 @@ bool validNameChar(const char c) noexcept {
                 }
 
 
-                const TokenKind token = keyword(word);
+                const token::TokenKind token = keyword(word);
 
                 lines.back().emplace_back(token, word);
                 --index;
@@ -271,17 +271,17 @@ bool validNameChar(const char c) noexcept {
 
     }
 
-    if (not lines.empty() and not lines.back().empty() and lines.back().back().kind != TokenKind::SEMI)
+    if (not lines.empty() and not lines.back().empty() and lines.back().back().kind != token::TokenKind::SEMI)
         util::error("Last line doesn't end with a ';'!");
 
 
     if (lines.size() > 1) {
         lines.pop_back();
-        lines.back().emplace_back(TokenKind::END, "EOF");
+        lines.back().emplace_back(token::TokenKind::END, "EOF");
     }
 
 
-    Tokens tokens;
+    token::Tokens tokens;
     for (auto&& line : lines)
         for (auto&& t : line)
             tokens.push_back(std::move(t));
