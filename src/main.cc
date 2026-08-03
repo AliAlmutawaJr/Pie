@@ -1,3 +1,5 @@
+#include <print>
+#include <iostream>
 #include <exception>
 #include <string_view>
 #include <filesystem>
@@ -25,7 +27,7 @@ int main(int argc, char *argv[]) {
 
     // this would leave file name at argv[1]
     for(; argc > 1; --argc, ++argv) {
-        if      (argv[1] == "-t"sv or argv[1] == "--token"sv  ) print_tokens       = true ;
+        if      (argv[1] == "-t"sv or argv[1] == "--tokens"sv ) print_tokens       = true ;
         else if (argv[1] == "-a"sv or argv[1] == "--ast"sv    ) print_parsed       = true ;
         else if (argv[1] == "-h"sv or argv[1] == "--help"sv   ) print_help         = true ;
         else if (argv[1] == "-r"sv or argv[1] == "--norun"sv  ) norun              = true;

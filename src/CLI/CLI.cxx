@@ -1,13 +1,22 @@
 #include "CLI.hxx"
 
+#include <print>
+#include <iostream>
+
+#include "../Lex/Lexer.hxx"
+// #include "../Preprocessor/Preprocessor.hxx"
+#include "../Parser/Parser.hxx"
+#include "../Analysis/LexicalScoping.hxx"
+#include "../Interp/Interpreter.hxx"
+
 
 inline namespace pie {
 namespace cli {
 
     void help() {
-        std::println("-t [--token]  :   print tokens");
+        std::println("-t [--tokens] :   print tokens");
         std::println("-a [--ast]    :   print parsed");
-        std::println("-r [--run]    :   don't run program");
+        std::println("-r [--norun]  :   don't run program");
         std::println("-h [--help]   :   print this message");
         std::println("-c [--command]:   run script from command line");
     }
