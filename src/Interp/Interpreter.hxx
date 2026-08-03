@@ -4733,7 +4733,7 @@ public:
             if (same) return type::ListOf(std::move(values)[0]);
 
 
-            return type::UnionOf(std::move(values));
+            return type::ListOf(type::UnionOf(std::move(values)));
         }
 
         if (std::holds_alternative<value::Map>(value)) {

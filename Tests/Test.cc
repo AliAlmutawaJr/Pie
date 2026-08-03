@@ -1161,8 +1161,8 @@ while(() => x < 10, () => {
 
 TEST_CASE("Shadowing Loop Variables", "[Loop][Var]") {
     const auto src1 = R"(
-loop 5 => i {
-    loop 3 => i {
+loop i : 5 {
+    loop i : 3 {
         __builtin_print(i);
     };
     __builtin_print(i);
@@ -1194,8 +1194,8 @@ loop 5 => i {
 
 TEST_CASE("Nested Loops", "[Loop]") {
     const auto src1 = R"(
-loop 5 => i {
-    x = loop 3 => e {
+loop i : 5 {
+    x = loop e : 3 {
         __builtin_conditional(
             __builtin_eq(e, 2), break "broken", __builtin_print(i)
         );
@@ -1228,7 +1228,7 @@ broken)");
 
 TEST_CASE("Break 1", "[Loop]") {
     const auto src1 = R"(
-r = loop 5 => i
+r = loop i : 5
     __builtin_conditional(__builtin_eq(i, 2), break "meow", __builtin_print(i));
 
 __builtin_print(r);
@@ -1243,7 +1243,7 @@ meow)");
 
 TEST_CASE("Continue 1", "[Loop]") {
     const auto src1 = R"(
-loop 5 => i __builtin_conditional(__builtin_eq(i, 2), __builtin_print(continue), __builtin_print(i));
+loop i : 5 __builtin_conditional(__builtin_eq(i, 2), __builtin_print(continue), __builtin_print(i));
 )";
 
     REQUIRE(pie::test::run(src1) == R"(0
@@ -1254,7 +1254,7 @@ loop 5 => i __builtin_conditional(__builtin_eq(i, 2), __builtin_print(continue),
 
 
     const auto src2 = R"(
-loop 5 => i __builtin_conditional(__builtin_eq(i, 2), continue, __builtin_print(i));
+loop i : 5 __builtin_conditional(__builtin_eq(i, 2), continue, __builtin_print(i));
 )";
 
     REQUIRE(pie::test::run(src2) == R"(0
@@ -1269,7 +1269,7 @@ TEST_CASE("Break/Continue Outside Loop", "[Loop]") {
 func1 = (x) => continue;
 func2 = (x, y) => __builtin_print(y);
 
-loop {1, 2, 3} => e {
+loop e : {1, 2, 3} {
   func2(func1(e), "hey");
   __builtin_print("hi");
 };
@@ -1288,7 +1288,7 @@ fib = (n) => __builtin_conditional(
     __builtin_add(fib(__builtin_sub(n, 1)), fib(__builtin_sub(n, 2)))
 );
 
-loop 10 => i __builtin_print(fib(i));
+loop i : 10 __builtin_print(fib(i));
 )";
 
     REQUIRE(pie::test::run(src1) == R"(1
@@ -2876,7 +2876,7 @@ print = __builtin_print;
 list = {1, "Hi", 3.14, true, class {}};
 
 
-loop list => e print(e);
+loop e : list print(e);
 )";
 
     REQUIRE(pie::test::run(src) == R"(1
@@ -2952,7 +2952,7 @@ TEST_CASE("List Types", "[Type]") {
 
 TEST_CASE("Looping Over Pack Without Loop Var", "[Loop]") {
     const auto src = R"(
-func = (pack: ...Any) => loop pack => __builtin_print(0);
+func = (pack: ...Any) => loop pack __builtin_print(0);
 
 func(1, "Hi", 3.14);
 )";
@@ -2965,7 +2965,7 @@ func(1, "Hi", 3.14);
 
 TEST_CASE("Looping Over Pack", "[Loop]") {
     const auto src = R"(
-func = (pack: ...Any) => loop pack => e __builtin_print(e);
+func = (pack: ...Any) => loop e : pack __builtin_print(e);
 
 func(1, "Hi", 3.14);
 )";
@@ -2978,7 +2978,7 @@ Hi
 
 TEST_CASE("Looping Over Range Without Loop Var", "[Loop]") {
     const auto src = R"(
-loop 5 => __builtin_print("fuck");
+loop 5 __builtin_print("fuck");
 )";
 
     REQUIRE(pie::test::run(src) == R"(fuck
@@ -2991,7 +2991,7 @@ fuck)");
 
 TEST_CASE("Looping Over Range", "[Loop]") {
     const auto src = R"(
-loop 5 => i __builtin_print(i);
+loop i : 5 __builtin_print(i);
 )";
 
     REQUIRE(pie::test::run(src) == R"(0
@@ -3017,7 +3017,7 @@ Iota: Type = class {
     };
 };
 
-loop Iota(10) => num __builtin_print(num);
+loop num: Iota(10) __builtin_print(num);
 )";
 
     REQUIRE(pie::test::run(src) == R"(0
