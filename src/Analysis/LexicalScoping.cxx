@@ -563,17 +563,18 @@ void LexicalScoping::operator()(expr::Loop *loop) {
     ScopeGuard sg{this};
 
     if (loop->kind) std::visit(*this, loop->kind->variant());
-    if (not loop->var.name.empty()) {
-        loop->var.ID = variable_index++;
-        addVar(loop->var.name, loop->var.ID);
-    }
+
+    // the extra argument `{}` acts as a tag for static dispatch
+    // is means "introduce new names instead of acting as assignment"
+    if (loop->var) checkPattern(loop->var.get(), {});
+
 
     const auto was_in_loop = in_loop;
     in_loop = true;
     std::visit(*this, loop->body->variant());
     in_loop = was_in_loop;
 
-    if (loop->els) std::visit(*this, loop->els ->variant());
+    if (loop->els) std::visit(*this, loop->els->variant());
 }
 
 

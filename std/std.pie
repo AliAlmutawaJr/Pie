@@ -30,5 +30,19 @@ space std {
 
 
     mixfix([]) : [ : ] = (cont, at) => __builtin_get(cont, at);
+
+
+
+    Enumerate = class {
+        collection = {};
+        index = 0;
+
+        hasNext = () => __builtin_lt(index, __builtin_len(collection));
+        next = () => {
+            ind = index;
+            index = __builtin_add(index, 1);
+            {ind, __builtin_get(collection, ind)};
+        };
+    };
 };
 

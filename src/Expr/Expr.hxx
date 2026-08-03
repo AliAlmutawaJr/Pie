@@ -387,17 +387,16 @@ struct Unpackment : Expr {
     }
 
     bool involvesName(const std::string_view sv) const override {
-        if (sv == stringify()) return true;
-
-        // for (const auto& expr : lhs) if (expr->involvesName(sv)) return true;
-
-        return rhs->involvesName(sv);
+        return sv == stringify()
+            or patternInvolves(pattern.get(), sv)
+            or rhs->involvesName(sv);
     }
 
     Node variant() override { return this; }
 
-private:
-    std::string stringifyPattern(const Pattern *pattern, const size_t indent = 0) const {
+
+
+    static std::string stringifyPattern(const Pattern *pattern, const size_t indent = 0) {
         std::string s;
         if (auto expr = dynamic_cast<const Expr*>(pattern)) {
             s = expr->expr->stringify();
@@ -437,6 +436,31 @@ private:
         else util::error();
 
         return s;
+    }
+
+
+
+    static bool patternInvolves(const Pattern *pattern, const std::string_view sv) {
+
+        if (auto expr = dynamic_cast<const Expr*>(pattern)) {
+            return expr->expr->involvesName(sv);
+        }
+        else if (auto list = dynamic_cast<const List*>(pattern)) {
+            for (const auto& pat : list->patterns)
+                if (patternInvolves(pat.get(), sv)) return true;
+        }
+        else if (auto map = dynamic_cast<const Map*>(pattern)) {
+            for (const auto& [key, value] : map->patterns) {
+                if (patternInvolves(key  .get(), sv)) return true;
+                if (patternInvolves(value.get(), sv)) return true;
+            }
+        }
+        else if (auto pack = dynamic_cast<const Pack*>(pattern)) {
+            return pack->expr->involvesName(sv);
+        }
+        else util::error();
+
+        return false;
     }
 };
 
@@ -547,7 +571,7 @@ struct Match : Expr {
 
     Match(ExprPtr e, std::vector<Case> cs) noexcept
     : expr{std::move(e)}, cases{std::move(cs)}
-    {}
+    { }
 
 
     std::string stringify(const size_t indent = 0) const override {
@@ -620,33 +644,55 @@ struct Type : Expr {
 
 struct Loop : Expr {
     ExprPtr kind;
+
+    // changes of `var` over the years...lol
     // ExprPtr var;
-    StringID var;
+    // StringID var;
+    Unpackment::PatternPtr var;
+
     ExprPtr body;
     ExprPtr els;
 
-    Loop(ExprPtr b, std::string v = "", ExprPtr k = nullptr, ExprPtr e = nullptr) noexcept
+    Loop(ExprPtr b, Unpackment::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr e = nullptr) noexcept
     : kind{std::move(k)}, var{std::move(v)}, body{std::move(b)}, els{std::move(e)}
-    {}
+    { }
+
+    // Loop(ExprPtr b, ExprPtr v = nullptr, ExprPtr k = nullptr, ExprPtr e = nullptr) noexcept
+    // : kind{std::move(k)}, var{std::move(v)}, body{std::move(b)}, els{std::move(e)}
+    // { }
+
+    // Loop(ExprPtr b, Unpackment::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr e = nullptr) noexcept
+    // : kind{std::move(k)}, var{std::move(v)}, body{std::move(b)}, els{std::move(e)}
+    // { }
+
+
+
 
 
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "loop ";
 
-        if (kind) s += kind->stringify(indent + 4) + " => ";
-        if (not var.name.empty()) s += var.name + " ";
+        if (var) s += Unpackment::stringifyPattern(var.get()) + (kind ? " : " : ": ");
+
+        if (kind) s += kind->stringify(indent + 4) + ' ';
+
+        // s += " {\n";
 
         s += body->stringify(indent + 4);
 
-        if (els) s += " else " + els->stringify();
+        // s += "\n" + std::string(indent, ' ') + "}";
+
+        if (els) s += " => " + els->stringify();
 
         return s;
     }
 
     bool involvesName(const std::string_view sv) const override {
+            if (var and Unpackment::patternInvolves(var.get(), sv)) return true;
+
+
         return sv == stringify()
             or kind->involvesName(sv)
-            or sv == var.name
             or body->involvesName(sv)
             or els ->involvesName(sv);
     }

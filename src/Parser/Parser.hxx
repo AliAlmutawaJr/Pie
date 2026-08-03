@@ -81,7 +81,9 @@ class Parser {
 
 
     token::Tokens tokens;
+    const typename token::Tokens::iterator iterator_beginning;
     typename token::Tokens::iterator token_iterator;
+    const size_t tokens_size{};
     // deque instead of vector for pop_front
     std::deque<token::Token> red; // past tense of read lol
 
@@ -96,8 +98,13 @@ class Parser {
 public:
 
     Parser(token::Tokens t, std::filesystem::path r = ".") noexcept
-    : root{r.remove_filename()}, tokens{std::move(t)}, token_iterator{tokens.begin()}, env(1)
-    {}
+    : root{r.remove_filename()}         ,
+      tokens{std::move(t)}              ,
+      iterator_beginning{tokens.begin()},
+      token_iterator{iterator_beginning},
+      tokens_size{tokens.size()}        ,
+      env(1)
+    { }
 
 
     explicit Parser(std::filesystem::path r) noexcept
@@ -106,9 +113,12 @@ public:
 
 
     [[nodiscard]] bool atEnd(const size_t offset = 0) const noexcept {
-        // offsat?
-        const auto offsetted = std::next(token_iterator, offset);
-        return offsetted == tokens.end() or offsetted->kind == token::TokenKind::END;
+        const auto distance = std::distance(iterator_beginning, token_iterator);
+        return distance + offset >= tokens_size or std::next(token_iterator, offset)->kind == token::TokenKind::END;
+
+        // // offsat?
+        // const auto offsetted = std::next(token_iterator, offset);
+        // return offsetted == tokens.end() or offsetted->kind == token::TokenKind::END;
     }
 
 
@@ -237,7 +247,7 @@ public:
 
 
             default:
-                // log();
+                log();
                 util::error("Couldn't parse \"" + token.text + "\"!");
         }
     }
@@ -1062,34 +1072,108 @@ public:
     expr::ExprPtr loop() {
         using enum token::TokenKind;
 
-        auto kind = match(FAT_ARROW) ? nullptr : parseExpr();
 
-        if (kind) consume(FAT_ARROW);
+        expr::Unpackment::PatternPtr loop_var;
 
-        auto var_or_body = parseExpr();
+        const bool has_var = [this] {
+            using enum token::TokenKind;
 
-        if (match(FAT_ARROW))
-            return std::make_shared<expr::Loop>(std::move(var_or_body), "", std::move(kind), parseExpr());
+            for (size_t i{}; /* not atEnd(i) */; ++i) {
+                if (check(COLON  , i)) return true;
+                if (check(SEMI   , i)) return false;
+                if (check(R_BRACE, i)) return false;
+                if (check(R_PAREN, i)) return false;
 
-        if (check(SEMI))
-            return std::make_shared<expr::Loop>(std::move(var_or_body), "", std::move(kind));
+
+                for (ssize_t balance = check(L_BRACE, i); balance; ) {
+                    balance += check(L_BRACE, ++i);
+                    balance -= check(R_BRACE, i);
+                }
+
+                for (ssize_t balance = check(L_PAREN, i); balance; ) {
+                    balance += check(L_PAREN, ++i);
+                    balance -= check(R_PAREN, i);
+                }
+            }
+        }();
+
+        // indicates a loop variable
+        if (has_var) {
+            loop_var = parseUnpackmentPattern();
+            consume(COLON);
+        }
 
 
-        auto& var = var_or_body;
+        // non-expr patterns MUST have loop kind to destructure!
+        if (loop_var and not dynamic_cast<expr::Unpackment::Expr*>(loop_var.get())) {
+            auto kind = parseExpr();
+            auto body = parseExpr();
+
+            return std::make_shared<expr::Loop>(
+                std::move(body    ),
+                std::move(loop_var),
+                std::move(kind    ),
+                match(FAT_ARROW) ? parseExpr() : nullptr
+            );
+        }
+
+
+        // still could have a kind:
+        auto kind = parseExpr();
+
+        if (check(SEMI)) {
+            // `kind` was actually the body
+            return std::make_shared<expr::Loop>(
+                std::move(kind),
+                std::move(loop_var)
+            );
+        }
+
+
+        if (match(FAT_ARROW)) {
+            // `kind` was actually the body, but this time with an else
+            return std::make_shared<expr::Loop>(
+                std::move(kind),
+                std::move(loop_var),
+                nullptr,
+                parseExpr()
+            );
+        }
+
+
         auto body = parseExpr();
 
-        if (match(FAT_ARROW))
-            return std::make_shared<expr::Loop>(std::move(body), std::move(var)->stringify(), std::move(kind), parseExpr());
+        return std::make_shared<expr::Loop>(
+            std::move(body),
+            std::move(loop_var),
+            std::move(kind),
+            match(FAT_ARROW) ? parseExpr() : nullptr
+        );
 
-        return std::make_shared<expr::Loop>(std::move(body), std::move(var)->stringify(), std::move(kind));
+
+        // auto kind = match(FAT_ARROW) ? nullptr : parseExpr();
+
+        // if (kind) consume(FAT_ARROW);
+
+        // auto var_or_body = parseExpr();
+
+        // if (match(FAT_ARROW))
+        //     return std::make_shared<expr::Loop>(std::move(var_or_body), "", std::move(kind), parseExpr());
+
+        // if (check(SEMI))
+        //     return std::make_shared<expr::Loop>(std::move(var_or_body), "", std::move(kind));
+
+
+        // auto& var = var_or_body;
+        // auto body = parseExpr();
+
+        // if (match(FAT_ARROW))
+        //     return std::make_shared<expr::Loop>(std::move(body), std::move(var)->stringify(), std::move(kind), parseExpr());
+
+        // return std::make_shared<expr::Loop>(std::move(body), std::move(var)->stringify(), std::move(kind));
     }
 
 
-        // std::vector<expr::ExprPtr> exprs;
-        // if (match(TokenKind::R_PAREN)) return exprs;
-        // do exprs.push_back(parseExpr()); while(match(TokenKind::COMMA));
-        // consume(TokenKind::R_PAREN);
-        // return exprs;
 
     expr::ExprPtr closure() {
         using enum token::TokenKind;
@@ -1316,29 +1400,6 @@ public:
     }
 
 
-    bool findTopLevel(const token::TokenKind token) {
-        return [this, token] {
-            using enum token::TokenKind;
-
-            for (size_t i{}; /* not atEnd(i) */; ++i) {
-                if (check(token  , i)) return true;
-                if (check(R_BRACE, i)) return false;
-                if (check(R_PAREN, i)) return false;
-
-
-                for (ssize_t balance = check(L_BRACE, i); balance;) {
-                    balance += check(L_BRACE, ++i);
-                    balance -= check(R_BRACE, i);
-                }
-
-                for (ssize_t balance = check(L_PAREN, i); balance;) {
-                    balance += check(L_PAREN, ++i);
-                    balance -= check(R_PAREN, i);
-                }
-            }
-        }();
-    }
-
 
     bool isUnpackment() {
         using enum token::TokenKind;
@@ -1438,8 +1499,27 @@ public:
 
 
         // if there is at least one top-level semicolon, it's a scope!
-        const bool is_scope = findTopLevel(SEMI);
+        const bool is_scope = [this] {
+            using enum token::TokenKind;
 
+            for (size_t i{}; /* not atEnd(i) */; ++i) {
+                if (check(SEMI   , i)) return true;
+
+                if (check(R_BRACE, i)) return false;
+                if (check(R_PAREN, i)) return false;
+
+
+                for (ssize_t balance = check(L_BRACE, i); balance; ) {
+                    balance += check(L_BRACE, ++i);
+                    balance -= check(R_BRACE, i);
+                }
+
+                for (ssize_t balance = check(L_PAREN, i); balance; ) {
+                    balance += check(L_PAREN, ++i);
+                    balance -= check(R_PAREN, i);
+                }
+            }
+        }();
 
         return is_scope? handleScope() : listLiteral();
     }
@@ -2125,13 +2205,13 @@ public:
 
 
 
-    //  only call right before calling error/expected since tt exhausts the stream
     void log(bool shift = false, bool begin = false) {
         puts("");
-        const ptrdiff_t dist = std::distance(tokens.begin(), token_iterator);
+        const auto iter = token_iterator;
+        const ptrdiff_t dist = std::distance(tokens.begin(), iter);
         const ptrdiff_t diff = begin ? 0 : dist < 5 ? dist : 5;
 
-        std::copy(token_iterator - (shift ? diff : 0), tokens.end(), std::ostream_iterator<token::Token>{std::clog, " "});
+        std::copy(iter - (shift ? diff : 0), tokens.end(), std::ostream_iterator<token::Token>{std::clog, " "});
         puts("");
     }
 
