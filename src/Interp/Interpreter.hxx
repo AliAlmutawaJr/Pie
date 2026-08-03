@@ -937,7 +937,7 @@ public:
         const auto& obj = get<value::Object>(left);
 
         const auto& found = std::ranges::find_if(obj.second->members,
-            [name = acc->name] (const auto& member) { return get<expr::Name>(member).stringify() == name; }
+            [name = acc->name] (const auto& member) { return get<expr::Name>(member).name == name; }
         );
         if (found == obj.second->members.end()) util::error("In unpackment '" + unpack->stringify() + "', Name '" + acc->name + "' doesn't exist in object: " + stringify(obj));
 
@@ -1049,7 +1049,7 @@ public:
 
 
     // @pre-condition: values.reserve(n)
-    void unpackInto(
+    void unpackIntoList(
         const expr::Unpackment *unpack, // passed for better error messages!
         std::vector<ValueType>& valuetypes,
         const value::Value& value,
@@ -1077,8 +1077,63 @@ public:
             }
         }
         else if (std::holds_alternative<value::Map>(value)) {
-            // const auto& map = get<value::Map>(value);
-            // not done yet
+            const auto& map = get<value::Map>(value);
+
+            if (map.items->map.size() < at_least)
+                util::error("Unpacking more elements than available: " + unpack->stringify());
+
+            for (const auto& [key, value] : map.items->map) {
+                auto list = value::makeList({key, value});
+                valuetypes.emplace_back(list, typeOf(list));
+            }
+        }
+    }
+
+
+    void unpackIntoMap(
+        const expr::Unpackment *unpack, // passed for better error messages!
+        std::vector<std::pair<ValueType, ValueType>>& valuetypes,
+        const value::Value& value,
+        const size_t at_least
+    ) {
+
+        if (std::holds_alternative<value::Object>(value)) {
+            util::error("Map unpacking is not allowed on objects: " + unpack->stringify());
+            // const auto& object = get<value::Object>(value);
+
+            // if (object.second->members.size() < at_least)
+            //     util::error("Unpacking more members than available: " + unpack->stringify());
+
+            // for (const auto& [name, type, value_ptr] : object.second->members) {
+            //     valuetypes.emplace_back(ValueType{name.name, type::builtins::String()}, ValueType{*value_ptr, type});
+            // }
+
+            // // valuetypes.emplace_back(
+            // //     ValueType{*get<2>(object.second->members[0]), get<1>(object.second->members[0])},
+            // //     ValueType{*get<2>(object.second->members[1]), get<1>(object.second->members[1])}
+            // // );
+        }
+        else if (std::holds_alternative<value::List>(value)) {
+            const auto& list = get<value::List>(value);
+
+            if (list.elts->values.size() < at_least)
+                util::error("Unpacking more elements than available: " + unpack->stringify());
+
+            for (ssize_t i = -1; const auto& value : list.elts->values) {
+                valuetypes.emplace_back(ValueType{++i, type::builtins::Int()}, ValueType{value, typeOf(value)});
+            }
+        }
+        else if (std::holds_alternative<value::Map>(value)) {
+            const auto& map = get<value::Map>(value);
+            auto type = typeOf(map);
+            auto map_type = dynamic_cast<type::MapType*>(type.get());
+
+            if (map.items->map.size() < at_least)
+                util::error("Unpacking more elements than available: " + unpack->stringify());
+
+            for (const auto& [key, val] : map.items->map) {
+                valuetypes.emplace_back(ValueType{key, map_type->key_type}, ValueType{val, map_type->val_type});
+            }
         }
     }
 
@@ -1129,10 +1184,6 @@ public:
             bindExpr<INFERRED>(unpack, expr->expr, valuetype);
         }
         else if (auto list = dynamic_cast<const List*>(pattern)) {
-            std::vector<ValueType> valuetypes;
-            unpackInto(unpack, valuetypes, valuetype.value, list->patterns.size());
-            const size_t size = valuetypes.size(); // true size
-
             const auto pack_index = [list] -> std::optional<size_t> {
                 for (size_t i{}; const auto& pattern : list->patterns)
                     if (++i; dynamic_cast<expr::Unpackment::Pack*>(pattern.get())) return i - 1;
@@ -1140,9 +1191,14 @@ public:
                 return {};
             }();
 
+
+            std::vector<ValueType> valuetypes;
+            unpackIntoList(unpack, valuetypes, valuetype.value, list->patterns.size() - pack_index.has_value());
+            const size_t size = valuetypes.size(); // true size
+
             if (not pack_index) {
                 for (const auto& [pattern, valuetype] : std::views::zip(list->patterns, valuetypes)) {
-                    bindPattern<INFERRED>(unpack,pattern.get(), std::move(valuetype));
+                    bindPattern<INFERRED>(unpack,pattern.get(), valuetype);
                 }
             }
             else {
@@ -1175,15 +1231,26 @@ public:
                 );
 
                 for (
+                    size_t pat_size = list->patterns.size();
+
                     const auto& [pattern, valuetype] :
-                    std::views::zip(list->patterns, valuetypes) | std::views::drop(size - trailing_count)
+                    std::views::zip(
+                        list->patterns | std::views::drop(pat_size - trailing_count),
+                        valuetypes     | std::views::drop(size     - trailing_count)
+                    )
                 ) {
                     bindPattern<INFERRED>(unpack,pattern.get(), valuetype);
                 }
             }
         }
         else if (auto map = dynamic_cast<const Map*>(pattern)) {
+            std::vector<std::pair<ValueType, ValueType>> valuetype_pairs;
+            unpackIntoMap(unpack, valuetype_pairs, valuetype.value, map->patterns.size());
 
+            for (const auto& [pattern, pair] : std::views::zip(map->patterns, valuetype_pairs)) {
+                bindPattern<INFERRED>(unpack, pattern.first .get(), pair.first );
+                bindPattern<INFERRED>(unpack, pattern.second.get(), pair.second);
+            }
         }
     }
 

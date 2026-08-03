@@ -19,6 +19,71 @@
 
 
 
+TEST_CASE("Chained Unpackment!", "[Unpack]") {
+    const auto src1 = R"(
+print = __builtin_print;
+
+
+{...w: Int = 5, end}    = 
+{x: a, y: {...b}, z: c} =
+{1, 2.5, 3}             =
+{"one", {"two", "two and a half"}, "three", "four", "five", "six"};
+
+
+print((w: Int = 5));
+print(end);
+
+print(1);
+print(2.5);
+print(3);
+
+print(x, a);
+print(y, b);
+print(z, c);
+
+)";
+
+    REQUIRE(pie::test::run(src1) == R"(one, {two, two and a half}, three, four, five
+six
+one
+{two, two and a half}
+three
+0 one
+1 two, two and a half
+2 three)");
+}
+
+
+
+TEST_CASE("Unpackment Reassignments!", "[Unpack]") {
+    const auto src1 = R"(
+infix + = (_, _) => _; .: I just need it to parse
+
+Human = class {
+    name = "";
+    age = 0;
+    human = 0;
+};
+
+me = Human("Ali", 24, Human("Meow", 23, Human("Pie", 3)));
+
+space x {
+    name = "haha";
+};
+
+another_human = Human();
+
+
+{x::name, 1 + 5, {name2, another_human.age, {...2 + 2, _}}} = me;
+
+
+__builtin_print(x::name, another_human.age, 1 + 5, 2 + 2);
+)";
+
+    REQUIRE(pie::test::run(src1) == "Ali 23 24 Pie, 3");
+}
+
+
 TEST_CASE("Sub Typing a Member Variable", "[Class][Type]") {
     const auto src1 = R"(
 Named = class { name = ""; };
@@ -54,7 +119,9 @@ Object {
 }
 
 
-TEST_CASE("Unpackment", "[Structured Bindings]") {
+
+
+TEST_CASE("Unpackment", "[Unpack]") {
     const auto src1 = R"(
 a = 10;
 c: Int = 20;
@@ -70,13 +137,13 @@ Human = class {
 
 
 h = Human("Moew", 33, 57, 32);
-z, = h;
+{z} = h;
 __builtin_print(z);
 
 {
     1;
 
-    n, a, h, w, := h;
+    {n, a, h, w} := h;
 
     __builtin_print(n, a, h, w);
 };
@@ -84,7 +151,7 @@ __builtin_print(z);
 __builtin_print(a, h.age);
 
 {
-    x, y, a = Human("", 0, 50);
+    {x, y, a} = Human("", 0, 50);
 };
 
 __builtin_print(a);

@@ -1,17 +1,17 @@
 
 space std {
-    print = __builtin_print;
-    type = __builtin_type;
+    print    = __builtin_print;
+    type     = __builtin_type;
     decltype = __builtin_decltype;
-    reset = __builtin_reset;
+    reset    = __builtin_reset;
 
+    infix + = (a: String, b: String) => __builtin_concat(a, b);
     infix + = (a, b) => __builtin_add(a, b);
     infix * = (a, b) => __builtin_mul(a, b);
     infix - = (a, b) => __builtin_sub(a, b);
     infix / = (a, b) => __builtin_div(a, b);
     infix % = (a, b) => __builtin_mod(a, b);
 
-    infix + = (a: String, b: String) => __builtin_concat(a, b);
 
 
     prefix(!) -   = (x) => __builtin_neg(x);

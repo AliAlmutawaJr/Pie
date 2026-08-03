@@ -1261,12 +1261,16 @@ public:
 
 
             if (match(COLON)) { // map
-                auto map = Map::with(std::pair{std::move(pattern), parseUnpackmentPattern()});
+                // need to test the first pattern since the we didn't know the context back there
+                if (dynamic_cast<expr::Unpackment::Pack*>(pattern.get()))
+                    util::error("Cannot have pack patterns inside map unpackments!");
+
+                auto map = Map::with(std::pair{std::move(pattern), parseUnpackmentPattern<Context::MAP>()});
 
                 while (match(COMMA)) {
-                    pattern = parseUnpackmentPattern();
+                    pattern = parseUnpackmentPattern<Context::MAP>();
                     consume(COLON);
-                    map->patterns.emplace_back(std::move(pattern), parseUnpackmentPattern());
+                    map->patterns.emplace_back(std::move(pattern), parseUnpackmentPattern<Context::MAP>());
                 }
 
                 consume(R_BRACE);
@@ -1277,6 +1281,8 @@ public:
             util::error("Unrecognized Pattern!");
         }
         else if (match(ELLIPSIS)) { // pack
+            if constexpr (CTX == Context::MAP) util::error("Cannot have pack patterns inside map unpackments!");
+
             return std::make_unique<Pack>(
                 parseExpr()
             );
@@ -1331,6 +1337,89 @@ public:
         }();
     }
 
+
+    bool isUnpackment() {
+        using enum token::TokenKind;
+
+        for (size_t i{}; /* not atEnd() */ ; ++i) {
+            if (check(R_BRACE, i)) {
+                if (check(ASSIGN, i+1) or check(WALRUS, i+1)) return true;
+                else return false;
+            }
+
+
+            for (ssize_t balance = check(L_BRACE, i); balance;) {
+                balance += check(L_BRACE, ++i);
+                balance -= check(R_BRACE, i);
+            }
+
+            for (ssize_t balance = check(L_PAREN, i); balance;) {
+                balance += check(L_PAREN, ++i);
+                balance -= check(R_PAREN, i);
+            }
+        }
+    }
+
+
+    bool isMap() {
+        using enum token::TokenKind;
+
+        for (size_t i{}; /* not atEnd(i) */ ; ++i) {
+            // if you find a colon first, then
+            // it could be a map {x: y};
+            // OR it could be a declaration {x: y = 1;};
+            // must find an assignment to make sure...
+
+            // { (name1: Int = name3): name4 }
+            // { name1: Int = name3 }
+            if (check(COLON, i)) {
+                for (size_t a = i + 1; /* not atEnd(a) */; ++a) {
+                    // onto next element, it's a map
+                    if (check(COMMA  , a)) return true ;
+
+                    // closed the map, it's a map
+                    if (check(R_BRACE, a)) return true ;
+
+                    // this time the colon indicates a declaration {n1: n2: n3 = 4};
+                    // this does NOT indicate a qualified name (namespace accesss)
+                    // since 2 colons back to back are tokenized as TokenKind::SPACE_RESOLVE
+                    if (check(COLON  , a)) return true ;
+
+                    // proly a declaration, it's a scope..i think :c
+                    if (check(SEMI   , a)) return false;
+
+
+                    for (ssize_t balance = check(L_BRACE, a); balance;) {
+                        balance += check(L_BRACE, ++a);
+                        balance -= check(R_BRACE, a);
+                    }
+
+                    for (ssize_t balance = check(L_PAREN, a); balance;) {
+                        balance += check(L_PAREN, ++a);
+                        balance -= check(R_PAREN, a);
+                    }
+                }
+            }
+
+            if (check(COMMA  , i)) return false; // if you find a comma first, it's a list {1, 2};
+            if (check(R_BRACE, i)) return false; // finding a `}` before finding `:` means it's a list with potentially one element
+            if (check(SEMI   , i)) return false; // finding a `;` means it's a scope, and that was the end of an expression...
+
+            for (ssize_t balance = check(L_BRACE, i); balance;) {
+                balance += check(L_BRACE, ++i);
+                balance -= check(R_BRACE, i);
+            }
+
+            for (ssize_t balance = check(L_PAREN, i); balance;) {
+                balance += check(L_PAREN, ++i);
+                balance -= check(R_PAREN, i);
+            }
+        }
+
+        return false; // argubaly, should be `error()`
+    }
+
+
     expr::ExprPtr LBrace() {
         using enum TokenKind;
 
@@ -1342,79 +1431,9 @@ public:
         }
 
 
-        const bool unpack = [this] {
-            for (size_t i{}; /* not atEnd() */ ; ++i) {
-                if (check(R_BRACE, i)) {
-                    if (check(ASSIGN, i+1) or check(WALRUS, i+1)) return true;
-                    else return false;
-                }
+        if (isUnpackment()) return unpackment();
+        if (       isMap()) return        map();
 
-
-                for (ssize_t balance = check(L_BRACE, i); balance;) {
-                    balance += check(L_BRACE, ++i);
-                    balance -= check(R_BRACE, i);
-                }
-
-                for (ssize_t balance = check(L_PAREN, i); balance;) {
-                    balance += check(L_PAREN, ++i);
-                    balance -= check(R_PAREN, i);
-                }
-            }
-        }();
-
-
-        if (unpack) return unpackment();
-
-
-        const bool map_expr = [this] {
-            for (size_t i{}; /* not atEnd(i) */ ; ++i) {
-                // if you find a colon first, then
-                // it could be a map {x: y};
-                // OR it could be a declaration {x: y = 1;};
-                // must find an assignment to make sure...
-
-                // { (name1: Int = name3): name4 }
-                // { name1: Int = name3 }
-                if (check(COLON, i)) {
-                    for (size_t a = i + 1; /* not atEnd(a) */; ++a) {
-                        if (check(COMMA  , a)) return true ; // onto next element, it's a map
-                        if (check(R_BRACE, a)) return true ; // closed the map, it's a map
-                        if (check(COLON  , a)) return true ; // this time the colon indicates a declaration {n1: n2: n3 = 4};
-                        if (check(SEMI   , a)) return false; // proly a declaration, it's a scope..i think :c
-
-                        for (ssize_t balance = check(L_BRACE, a); balance;) {
-                            balance += check(L_BRACE, ++a);
-                            balance -= check(R_BRACE, a);
-                        }
-
-                        for (ssize_t balance = check(L_PAREN, a); balance;) {
-                            balance += check(L_PAREN, ++a);
-                            balance -= check(R_PAREN, a);
-                        }
-                    }
-                }
-
-                if (check(COMMA  , i)) return false; // if you find a comma first, it's a list {1, 2};
-                if (check(R_BRACE, i)) return false; // finding a `}` before finding `:` means it's a list with potentially one element
-                if (check(SEMI   , i)) return false; // finding a `;` means it's a scope, and that was the end of an expression...
-
-                for (ssize_t balance = check(L_BRACE, i); balance;) {
-                    balance += check(L_BRACE, ++i);
-                    balance -= check(R_BRACE, i);
-                }
-
-                for (ssize_t balance = check(L_PAREN, i); balance;) {
-                    balance += check(L_PAREN, ++i);
-                    balance -= check(R_PAREN, i);
-                }
-            }
-
-            return false; // argubaly, should be `error()`
-        }();
-
-
-
-        if (map_expr) return map();
 
         // if there is at least one top-level semicolon, it's a scope!
         const bool is_scope = findTopLevel(SEMI);

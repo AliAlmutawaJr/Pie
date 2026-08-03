@@ -85,14 +85,15 @@ template <typename ...Ts>
     return std::make_shared<Elements>(std::forward<Ts>(args)...);
 }
 
-
 [[nodiscard]] inline Pack makePack(std::vector<Value> values) {
     return std::make_shared<Elements>(std::move(values));
 }
 
+
 [[nodiscard]] inline List makeList(std::vector<Value> values = {}) {
     return {std::make_shared<Elements>(std::move(values))};
 }
+
 
 [[nodiscard]] inline Map makeMap(std::unordered_map<Value, Value> items = {}) {
     return {std::make_shared<Items>(std::move(items))};
