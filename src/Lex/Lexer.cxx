@@ -185,14 +185,20 @@ bool validNameChar(const char c) noexcept {
             case '.':
                 if (src.at(index + 1) == ':') {
                     if (src.at(index + 2) == ':') {
-                        for(index += 2;
+                        for(
+                            index += 2;
                             src.substr(index, 3) != "::.";
                             ++index
-                        );
+                        ) {
+                            if (src[index] == '\n') ++line_count;
+                        }
 
                         index += 2;
                     }
-                    else while(++index < src.length() and src[index] != '\n');
+                    else {
+                        while(++index < src.length() and src[index] != '\n');
+                        ++line_count;
+                    }
                 }
                 else if (src[index + 1] == '.' and src.at(index + 2) == '.')
                     lines.back().push_back({ELLIPSIS, {src[index], src[++index], src[++index]}});
@@ -239,7 +245,10 @@ bool validNameChar(const char c) noexcept {
                         switch (src[++index]) {
                             case '\\': str.push_back('\\'); break;
                             case '"' : str.push_back('"' ); break;
-                            case 'n' : str.push_back('\n'); break;
+                            case 'n' : 
+                                str.push_back('\n');
+                                ++line_count;
+                                break;
                             case 't' : str.push_back('\t'); break;
                             case 'v' : str.push_back('\v'); break;
                             case 'b' : str.push_back('\b'); break;
@@ -252,7 +261,10 @@ bool validNameChar(const char c) noexcept {
                             // case '\0': str.push_back('\0');
                         }
                     }
-                    else str.push_back(c);
+                    else {
+                        line_count += (c == '\n');
+                        str.push_back(c);
+                    }
                 }
 
                 lines.back().push_back({STRING, str});
