@@ -193,7 +193,7 @@ public:
 
             case BREAK: 
                 // if (check(SEMI)) return std::make_shared<expr::Break>();
-                return std::make_shared<expr::Break>(parseExpr(prec::COMMA_VALUE));
+                return std::make_shared<expr::Break>(parseExpr());
 
             case CONTINUE:
                 // if (check(SEMI))
@@ -259,29 +259,6 @@ public:
             using enum token::TokenKind;
 
             case NAME: return infixName(std::move(left), std::move(token));
-
-            // // either a pack literal (not implemented) or Packment
-            // case COMMA:
-            //     if constexpr (CTX == Context::CALL) return left;
-            // {
-            //     std::vector exprs = {std::move(left)};
-
-            //     do {
-            //         if (check(ASSIGN) or check(WALRUS)) break;
-            //         // maybe it should be prec::COMMA_VALUE but that has other issues
-            //         exprs.push_back(parseExpr<false, Context::PACK>(prec::ASSIGNMENT_VALUE));
-            //     }
-            //     while (match(COMMA));
-
-
-            //     const bool inferred = consume().kind == WALRUS;
-            //     return std::make_shared<expr::Unpackment>(
-            //         std::move(exprs),
-            //         parseExpr(),
-            //         inferred
-            //     );
-            // }
-
 
             case DOT: {
                 auto accessee = parseExpr(prec::HIGH_VALUE);
@@ -1183,7 +1160,7 @@ public:
 
         if (not match(R_PAREN)) {
             do {
-                params.push_back(parseExpr<false>(prec::COMMA_VALUE)->stringify());
+                params.push_back(parseExpr<false>()->stringify());
 
                 if (match(COLON))
                     params_types.push_back(parseType());
@@ -1209,7 +1186,7 @@ public:
         consume(FAT_ARROW);
 
         scope();
-        auto body = parseExpr(prec::COMMA_VALUE); // allows to pass closures as parameters nicely
+        auto body = parseExpr(); // allows to pass closures as parameters nicely
         unscope();
 
         return std::make_shared<expr::Closure>(
@@ -1228,7 +1205,7 @@ public:
 
             do {
                 constexpr auto PARSE_TYPE = true;
-                auto arg = parseExpr<PARSE_TYPE, Context::CALL>(prec::COMMA_VALUE);
+                auto arg = parseExpr<PARSE_TYPE, Context::CALL>();
 
                 if (auto ass = dynamic_cast<expr::Assignment*>(arg.get())) {
                     if (match(ELLIPSIS)) util::error("Cannot expand pack in named argument: " + ass->stringify());
@@ -1282,10 +1259,10 @@ public:
     expr::ExprPtr listLiteral() {
         using enum token::TokenKind;
 
-        std::vector<expr::ExprPtr> exprs = { parseExpr(prec::COMMA_VALUE), };
+        std::vector<expr::ExprPtr> exprs = { parseExpr(), };
 
         // the `and` check allows for trailing commas..I hope
-        while (match(COMMA) /* and not check(R_BRACE) */ ) exprs.push_back(parseExpr(prec::COMMA_VALUE)); 
+        while (match(COMMA) /* and not check(R_BRACE) */ ) exprs.push_back(parseExpr()); 
 
         consume(R_BRACE);
 
@@ -1296,15 +1273,15 @@ public:
     expr::ExprPtr map() {
         using enum token::TokenKind;
 
-        auto key = parseExpr<false, Context::MAP>(prec::COMMA_VALUE);
+        auto key = parseExpr<false, Context::MAP>();
         consume(COLON);
-        std::vector<std::pair<expr::ExprPtr, expr::ExprPtr>> exprs = { {std::move(key), parseExpr(prec::COMMA_VALUE), }, };
+        std::vector<std::pair<expr::ExprPtr, expr::ExprPtr>> exprs = { {std::move(key), parseExpr(), }, };
         // std::unordered_map<expr::ExprPtr, expr::ExprPtr> exprs = { {parseExpr<false>(), parseExpr(), }, };
 
         while (match(COMMA)) {
-            key = parseExpr<false, Context::MAP>(prec::COMMA_VALUE);
+            key = parseExpr<false, Context::MAP>();
             consume(COLON);
-            exprs.push_back({ std::move(key), parseExpr(prec::COMMA_VALUE), });
+            exprs.push_back({ std::move(key), parseExpr(), });
 
             // auto key = parseExpr<false>();
             // exprs[std::move(key)] = parseExpr();
@@ -1534,7 +1511,7 @@ public:
 
             consume(FAT_ARROW);
             // It's a closure
-            auto body = parseExpr(prec::COMMA_VALUE);
+            auto body = parseExpr();
             return std::make_shared<expr::Closure>(std::vector<std::string>{}, std::move(body), type::FuncType{{}, std::move(return_type)});
         }
 
