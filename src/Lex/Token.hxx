@@ -118,11 +118,14 @@ constexpr const char* stringify(const TokenKind token) noexcept {
 
 
 
+struct SourceSpan { size_t line, column; };
 struct Token {
     TokenKind kind;
     std::string text;
 
-    bool operator==(const Token&) const = default;
+    // SourceSpan span;
+
+    bool operator==(const Token& that) const { return kind == that.kind and text == that.text; }
 };
 
 

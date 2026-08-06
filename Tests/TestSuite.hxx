@@ -8,7 +8,7 @@
 
 #include "../src/Lex/Lexer.hxx"
 #include "../src/Parser/Parser.hxx"
-#include "../src/Analysis/LexicalScoping.hxx"
+#include "../src/Analysis/LexicalAnalysis.hxx"
 #include "../src/Interp/Interpreter.hxx"
 
 
@@ -85,7 +85,7 @@ struct Capture {
     auto exprs = p.parse();
 
 
-    pie::analysis::LexicalScoping anal;
+    pie::analysis::LexicalAnalysis anal;
     for (const auto& expr : exprs)
         std::visit(anal, expr->variant());
 

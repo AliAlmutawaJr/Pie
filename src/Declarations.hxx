@@ -40,7 +40,7 @@ namespace value {
     };
 
     using Environment = std::unordered_map<
-        size_t,
+        ssize_t,
         std::tuple<
             SpaceRef,
             value::ValuePtr,
@@ -120,7 +120,8 @@ using Node = std::variant<
 using ExprPtr = std::shared_ptr<struct Expr>;
 
 struct Expr {
-    ssize_t ID{-1};
+    ssize_t var_ID{-1};
+    ssize_t constant_ID{-1};
 
     virtual ~Expr() = default;
     virtual std::string stringify(const size_t = 0) const = 0;

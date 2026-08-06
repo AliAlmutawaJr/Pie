@@ -10,6 +10,7 @@
 
 #include "../Expr/Expr.hxx"
 #include "../Type/Type.hxx"
+#include "../Value/Value.hxx"
 
 
 inline namespace pie {
@@ -32,18 +33,20 @@ struct Env {
 };
 
 
-class LexicalScoping {
+class LexicalAnalysis {
     enum class EnvTag {
         SCOPE,
         SPACE,
     };
 
     size_t variable_index;
+    size_t constant_index;
 
 
     // scopes
     std::vector<std::pair<Env, EnvTag>> env;
     std::vector<NameSpace*> current_space;
+    std::unordered_map<std::string, std::pair<size_t, const value::Value>> constants;
 
 
 
@@ -53,7 +56,7 @@ public:
 
     std::vector<size_t> indeces;
 
-    LexicalScoping(const size_t index = 0);
+    LexicalAnalysis(const size_t = 0, const size_t = 0);
 
 
     // void operator()(auto *node) { }
@@ -176,7 +179,10 @@ public:
     );
 
 
-    [[nodiscard]] std::optional<size_t> findVar(const std::string&) const;
+    [[nodiscard]] std::optional<size_t> findVariable(const std::string&) const;
+    [[nodiscard]] std::optional<size_t> findConstant(const std::string&) const;
+
+    [[nodiscard]] std::unordered_map<ssize_t, const value::Value> extractConstantMap() const;
 
 
     void scope();
@@ -188,8 +194,8 @@ public:
     void unscope();
 
     struct ScopeGuard {
-        LexicalScoping* that;
-         ScopeGuard(LexicalScoping* t) : that{t} { that->scope(); }
+        LexicalAnalysis* that;
+         ScopeGuard(LexicalAnalysis* t) : that{t} { that->scope(); }
         ~ScopeGuard() { that->unscope(); }
     };
 };

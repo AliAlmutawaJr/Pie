@@ -21,7 +21,8 @@ namespace cli {
         const std::filesystem::path fname,
         const bool print_tokens,
         const bool print_parsed,
-        const bool norun
+        const bool norun,
+        const bool vm = false
     );
 
     void run(

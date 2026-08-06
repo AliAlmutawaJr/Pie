@@ -6,8 +6,9 @@
 #include "../Lex/Lexer.hxx"
 // #include "../Preprocessor/Preprocessor.hxx"
 #include "../Parser/Parser.hxx"
-#include "../Analysis/LexicalScoping.hxx"
+#include "../Analysis/LexicalAnalysis.hxx"
 #include "../Interp/Interpreter.hxx"
+#include "../Compiler/Compiler.hxx"
 
 
 inline namespace pie {
@@ -29,7 +30,7 @@ namespace cli {
         const bool run
     ) {
         Parser parser{canonical_root};
-        pie::analysis::LexicalScoping anal;
+        pie::analysis::LexicalAnalysis anal;
         interp::Visitor visitor{{}};
 
         for (;;) try {
@@ -79,7 +80,8 @@ namespace cli {
         const std::filesystem::path fname,
         const bool print_tokens,
         const bool print_parsed,
-        const bool norun
+        const bool norun,
+        const bool vm
     ) {
         auto src = util::readFile(fname.string());
 
@@ -102,13 +104,30 @@ namespace cli {
         if (not norun) {
             if (print_parsed or print_tokens) puts("Output:\n");
 
-            pie::analysis::LexicalScoping anal;
+            pie::analysis::LexicalAnalysis anal;
             for (auto& expr : exprs)
                 std::visit(anal, expr->variant());
 
-            interp::Visitor visitor{std::move(anal).indeces};
-            for (const auto& expr : exprs)
-                std::visit(visitor, expr->variant());
+
+            if (vm) {
+                for (const auto& [id, constant] : anal.extractConstantMap()) {
+                    std::println("constant: {} with ID {}", id, value::stringify(constant));
+                }
+
+                vm::Compiler compiler{anal.extractConstantMap()};
+
+                for (const auto& expr : exprs) {
+                    std::visit(compiler, expr->variant());
+                    compiler.emitPop(); // disregard the last expression (semi colon)
+                }
+
+                compiler.output(std::cout);
+            }
+            else {
+                interp::Visitor visitor{std::move(anal).indeces};
+                for (const auto& expr : exprs)
+                    std::visit(visitor, expr->variant());
+            }
         }
     }
 
@@ -137,7 +156,7 @@ namespace cli {
         if (not norun) {
             if (print_parsed or print_tokens) puts("Output:\n");
 
-            pie::analysis::LexicalScoping anal;
+            pie::analysis::LexicalAnalysis anal;
             for (auto& expr : exprs)
                 std::visit(anal, expr->variant());
 

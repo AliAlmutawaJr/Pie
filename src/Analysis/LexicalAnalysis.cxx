@@ -1,8 +1,9 @@
-#include "LexicalScoping.hxx"
+#include "LexicalAnalysis.hxx"
 
 #include "../Lex/Lexer.hxx"
 #include "../Parser/Parser.hxx"
 #include "../Utils/Exceptions.hxx"
+#include <optional>
 #include <variant>
 
 
@@ -20,7 +21,9 @@ std::string stringify(const std::vector<std::string>& spaces) {
 }
 
 
-LexicalScoping::LexicalScoping(const size_t index) : variable_index(index) {
+LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
+    variable_index{v_index}, constant_index{c_index}
+{
     env.push_back({{}, EnvTag::SCOPE});
 
     const auto builtins = {
@@ -112,34 +115,96 @@ LexicalScoping::LexicalScoping(const size_t index) : variable_index(index) {
 }
 
 
-void LexicalScoping::operator()(expr::Num *n) {
-    if (auto id = findVar(n->stringify())) {
-        n->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Num *n) {
+    auto str = n->stringify();
+
+    // has it been re-assigned?
+    if (auto id = findVariable(str)) {
+        n->var_ID = *id;
         return;
     }
-}
-void LexicalScoping::operator()(expr::Bool *b) {
-    if (auto id = findVar(b->stringify())) {
-        b->ID = *id;
+
+
+    // has it been used before? (avoid loading it twice)
+    if (auto id = findConstant(str)) {
+        n->constant_ID = *id;
         return;
     }
+
+
+    // load it into memory
+    n->constant_ID = constant_index++;
+    if (n->num.find('.') != std::string::npos) {
+        // double
+        constants.insert({str, {n->constant_ID, std::stod(n->num)}});
+    }
+    else {
+        // integer
+        constants.insert({str, {n->constant_ID, std::stoll(n->num)}});
+    }
 }
-void LexicalScoping::operator()(expr::String *s) {
-    if (auto id = findVar(s->stringify())) {
-        s->ID = *id;
+
+
+
+void LexicalAnalysis::operator()(expr::Bool *b) {
+    auto str = b->stringify();
+
+    if (auto id = findVariable(str)) {
+        b->var_ID = *id;
+        return;
+    }
+
+
+    // has it been used before? (avoid loading it twice)
+    if (auto id = findConstant(str)) {
+        b->constant_ID = *id;
+        return;
+    }
+
+
+    // load it into memory
+    b->constant_ID = constant_index++;
+    constants.insert({str, {b->constant_ID, b->boolean}});
+}
+
+
+
+void LexicalAnalysis::operator()(expr::String *s) {
+    auto str = s->stringify();
+
+    if (auto id = findVariable(str)) {
+        s->var_ID = *id;
+        return;
+    }
+
+
+    // has it been used before? (avoid loading it twice)
+    if (auto id = findConstant(str)) {
+        s->constant_ID = *id;
+        return;
+    }
+
+
+    // load it into memory
+    s->constant_ID = constant_index++;
+    constants.insert({str, {s->constant_ID, s->str}});
+}
+
+
+
+void LexicalAnalysis::operator()(expr::Cascade *c) {
+    if (auto id = findVariable(c->stringify())) {
+        c->var_ID = *id;
         return;
     }
 }
 
-void LexicalScoping::operator()(expr::Cascade *c) {
-    if (auto id = findVar(c->stringify())) {
-        c->ID = *id;
-        return;
-    }
-}
-void LexicalScoping::operator()(expr::Fix *f) {
-    if (auto id = findVar(f->stringify())) {
-        f->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::Fix *f) {
+    if (auto id = findVariable(f->stringify())) {
+        f->var_ID = *id;
         return;
     }
 
@@ -150,12 +215,13 @@ void LexicalScoping::operator()(expr::Fix *f) {
 }
 
 
-void LexicalScoping::accessAssign(expr::Access *acc, expr::Assignment *ass) {
+
+void LexicalAnalysis::accessAssign(expr::Access *acc, expr::Assignment *ass) {
     std::visit(*this, ass->rhs->variant());
 
     if (auto name = dynamic_cast<expr::Name*>(acc->var.get())) {
-        if (const auto id = findVar(name->name); id) {
-            name->ID = *id;
+        if (const auto id = findVariable(name->name); id) {
+            name->var_ID = *id;
         }
         else util::error<except::NameLookup>("Name `" + acc->var->stringify() + "` not found in assignment: " + ass->stringify());
     }
@@ -165,7 +231,7 @@ void LexicalScoping::accessAssign(expr::Access *acc, expr::Assignment *ass) {
 
 
 
-void LexicalScoping::spaceAccessAssign(expr::SpaceAccess *acc, expr::Assignment *ass) {
+void LexicalAnalysis::spaceAccessAssign(expr::SpaceAccess *acc, expr::Assignment *ass) {
     const auto space = findSpace(acc->spaces, acc->global);
     if (not space) util::error("Namespace `" + stringify(acc->spaces) + "` is expression `" + ass->stringify() + "` was not found!");
 
@@ -181,7 +247,8 @@ void LexicalScoping::spaceAccessAssign(expr::SpaceAccess *acc, expr::Assignment 
 }
 
 
-void LexicalScoping::operator()(expr::Assignment *ass) {
+
+void LexicalAnalysis::operator()(expr::Assignment *ass) {
     if (auto *acc = dynamic_cast<expr::Access*>(ass->lhs.get()))
         return accessAssign(acc, ass);
 
@@ -197,20 +264,20 @@ void LexicalScoping::operator()(expr::Assignment *ass) {
     if (is_closure or is_class) {
         // if there is a type explicitly stated, then a new variable should be create no matter what
         if (not type::shouldReassign(ass->type)) {
-            ass->lhs->ID = variable_index++;
-            addVar(ass->lhs->stringify(), ass->lhs->ID);
+            ass->lhs->var_ID = variable_index++;
+            addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
-        else if (const auto id = findVar(ass->lhs->stringify()); id) {
-            ass->lhs->ID = *id;
+        else if (const auto id = findVariable(ass->lhs->stringify()); id) {
+            ass->lhs->var_ID = *id;
         }
         else {
-            ass->lhs->ID = variable_index++;
-            addVar(ass->lhs->stringify(), ass->lhs->ID);
+            ass->lhs->var_ID = variable_index++;
+            addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
     }
 
     std::visit(*this, ass->rhs->variant());
-    if (const auto id = findVar(ass->type->text()); id) {
+    if (const auto id = findVariable(ass->type->text()); id) {
         ass->type->ID = *id;
     }
     else std::visit(*this, expr::Type{ass->type}.variant());
@@ -219,20 +286,22 @@ void LexicalScoping::operator()(expr::Assignment *ass) {
     if (not is_closure and not is_class) {
         // if there is a type explicitly stated, then a new variable should be create no matter what
         if (not type::shouldReassign(ass->type)) {
-            ass->lhs->ID = variable_index++;
-            addVar(ass->lhs->stringify(), ass->lhs->ID);
+            ass->lhs->var_ID = variable_index++;
+            addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
-        else if (const auto id = findVar(ass->lhs->stringify()); id) {
-            ass->lhs->ID = *id;
+        else if (const auto id = findVariable(ass->lhs->stringify()); id) {
+            ass->lhs->var_ID = *id;
         }
         else { // I could probably shorten this to only use an "if-else" and not "if-elif-else"
-            ass->lhs->ID = variable_index++;
-            addVar(ass->lhs->stringify(), ass->lhs->ID);
+            ass->lhs->var_ID = variable_index++;
+            addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
     }
 }
 
-void LexicalScoping::operator()(expr::InferredAssignment *inf) {
+
+
+void LexicalAnalysis::operator()(expr::InferredAssignment *inf) {
     // Inferred Assignment always declares a new variable
 
     // allows for recursion
@@ -252,7 +321,8 @@ void LexicalScoping::operator()(expr::InferredAssignment *inf) {
 }
 
 
-void LexicalScoping::checkPattern(expr::Unpackment::Pattern *pattern) {
+
+void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern) {
     // regular assignment could re-assign an exisiting variable,
     // or create a new one if it doesn't already exisit
 
@@ -264,13 +334,13 @@ void LexicalScoping::checkPattern(expr::Unpackment::Pattern *pattern) {
             return std::visit(*this, expr->expr->variant());
 
 
-        if (const auto id = findVar(expr->expr->stringify()); id) {
-            expr->expr->ID = *id;
+        if (const auto id = findVariable(expr->expr->stringify()); id) {
+            expr->expr->var_ID = *id;
             return;
         }
 
-        expr->expr->ID = variable_index++;
-        addVar(expr->expr->stringify(), expr->expr->ID);
+        expr->expr->var_ID = variable_index++;
+        addVar(expr->expr->stringify(), expr->expr->var_ID);
     }
     else if (auto list = dynamic_cast<expr::Unpackment::List*>(pattern)) {
         // std::ranges::for_each(list->patterns, [this](const auto& pat) { return checkPattern(pat.get()); });
@@ -283,27 +353,28 @@ void LexicalScoping::checkPattern(expr::Unpackment::Pattern *pattern) {
         }
     }
     else if (auto pack = dynamic_cast<expr::Unpackment::Pack*>(pattern)) {
-        if (const auto id = findVar(pack->expr->stringify()); id) {
-            pack->expr->ID = *id;
+        if (const auto id = findVariable(pack->expr->stringify()); id) {
+            pack->expr->var_ID = *id;
             return;
         }
 
-        pack->expr->ID = variable_index++;
-        addVar(pack->expr->stringify(), pack->expr->ID);
+        pack->expr->var_ID = variable_index++;
+        addVar(pack->expr->stringify(), pack->expr->var_ID);
     }
     else util::error();
 }
 
 
-void LexicalScoping::checkPattern(expr::Unpackment::Pattern *pattern, [[maybe_unused]] bool inferred) {
+
+void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern, [[maybe_unused]] bool inferred) {
     // Inferred Assignment always declares a new variable
 
     if (auto expr = dynamic_cast<expr::Unpackment::Expr*>(pattern)) {
         if (not dynamic_cast<expr::Name*>(expr->expr.get()))
             util::error("Only proper names may appear on the LHS of the walrus operator `:=`");
 
-        expr->expr->ID = variable_index++;
-        addVar(expr->expr->stringify(), expr->expr->ID);
+        expr->expr->var_ID = variable_index++;
+        addVar(expr->expr->stringify(), expr->expr->var_ID);
     }
     else if (auto list = dynamic_cast<expr::Unpackment::List*>(pattern)) {
         // std::ranges::for_each(list->patterns, [this, inferred](const auto& pat) { return checkPattern(pat.get(), inferred); });
@@ -316,19 +387,20 @@ void LexicalScoping::checkPattern(expr::Unpackment::Pattern *pattern, [[maybe_un
         }
     }
     else if (auto pack = dynamic_cast<expr::Unpackment::Pack*>(pattern)) {
-        if (const auto id = findVar(pack->expr->stringify()); id) {
-            pack->expr->ID = *id;
+        if (const auto id = findVariable(pack->expr->stringify()); id) {
+            pack->expr->var_ID = *id;
             return;
         }
 
-        pack->expr->ID = variable_index++;
-        addVar(pack->expr->stringify(), pack->expr->ID);
+        pack->expr->var_ID = variable_index++;
+        addVar(pack->expr->stringify(), pack->expr->var_ID);
     }
     else util::error();
 }
 
 
-void LexicalScoping::operator()(expr::Unpackment *unpack) {
+
+void LexicalAnalysis::operator()(expr::Unpackment *unpack) {
     std::visit(*this, unpack->rhs->variant());
 
     if (unpack->inferred) {
@@ -340,19 +412,21 @@ void LexicalScoping::operator()(expr::Unpackment *unpack) {
 }
 
 
-void LexicalScoping::operator()(expr::Name *name) {
-    if (const auto id = findVar(name->name)) {
-        name->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Name *name) {
+    if (const auto id = findVariable(name->name)) {
+        name->var_ID = *id;
         return;
     }
 
-    util::error<except::NameLookup>("Name `" + name->name + " with ID [" + std::to_string(name->ID) + "] not found!");
+    util::error<except::NameLookup>("Name `" + name->name + " with ID [" + std::to_string(name->var_ID) + "] not found!");
 }
 
 
-void LexicalScoping::operator()(expr::Block *b) {
-    if (auto id = findVar(b->stringify())) {
-        b->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Block *b) {
+    if (auto id = findVariable(b->stringify())) {
+        b->var_ID = *id;
         return;
     }
 
@@ -362,9 +436,11 @@ void LexicalScoping::operator()(expr::Block *b) {
         std::visit(*this, e->variant());
 }
 
-void LexicalScoping::operator()(expr::Closure *c) {
-    if (auto id = findVar(c->stringify())) {
-        c->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::Closure *c) {
+    if (auto id = findVariable(c->stringify())) {
+        c->var_ID = *id;
         return;
     }
 
@@ -374,8 +450,8 @@ void LexicalScoping::operator()(expr::Closure *c) {
         std::visit(*this, expr::Type{type}.variant());
 
         if (auto expr_type = type::isExpr(type)) {
-            if (const auto id = findVar(type->text()); id)
-                expr_type->t->ID = *id;
+            if (const auto id = findVariable(type->text()); id)
+                expr_type->t->var_ID = *id;
         }
 
         name.ID = variable_index++;
@@ -386,9 +462,11 @@ void LexicalScoping::operator()(expr::Closure *c) {
     std::visit(*this, c->body->variant());
 }
 
-void LexicalScoping::operator()(expr::Call *call) {
-    if (auto id = findVar(call->stringify())) {
-        call->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::Call *call) {
+    if (auto id = findVariable(call->stringify())) {
+        call->var_ID = *id;
         return;
     }
 
@@ -402,9 +480,11 @@ void LexicalScoping::operator()(expr::Call *call) {
         std::visit(*this, arg->variant());
 }
 
-void LexicalScoping::operator()(expr::List *list) {
-    if (auto id = findVar(list->stringify())) {
-        list->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::List *list) {
+    if (auto id = findVariable(list->stringify())) {
+        list->var_ID = *id;
         return;
     }
 
@@ -412,9 +492,11 @@ void LexicalScoping::operator()(expr::List *list) {
         std::visit(*this, e->variant());
 }
 
-void LexicalScoping::operator()(expr::Map *map) {
-    if (auto id = findVar(map->stringify())) {
-        map->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::Map *map) {
+    if (auto id = findVariable(map->stringify())) {
+        map->var_ID = *id;
         return;
     }
 
@@ -422,27 +504,33 @@ void LexicalScoping::operator()(expr::Map *map) {
         std::visit(*this, key->variant()), std::visit(*this, value->variant());
 }
 
-void LexicalScoping::operator()(expr::Expansion *e) {
-    if (auto id = findVar(e->stringify())) {
-        e->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::Expansion *e) {
+    if (auto id = findVariable(e->stringify())) {
+        e->var_ID = *id;
         return;
     }
 
     std::visit(*this, e->pack->variant());
 }
 
-void LexicalScoping::operator()(expr::UnaryFold *fold) {
-    if (auto id = findVar(fold->stringify())) {
-        fold->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::UnaryFold *fold) {
+    if (auto id = findVariable(fold->stringify())) {
+        fold->var_ID = *id;
         return;
     }
 
     std::visit(*this, fold->pack->variant());
 }
 
-void LexicalScoping::operator()(expr::SeparatedUnaryFold *fold) {
-    if (auto id = findVar(fold->stringify())) {
-        fold->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::SeparatedUnaryFold *fold) {
+    if (auto id = findVariable(fold->stringify())) {
+        fold->var_ID = *id;
         return;
     }
 
@@ -450,9 +538,11 @@ void LexicalScoping::operator()(expr::SeparatedUnaryFold *fold) {
     std::visit(*this, fold->rhs->variant());
 }
 
-void LexicalScoping::operator()(expr::BinaryFold *fold) {
-    if (auto id = findVar(fold->stringify())) {
-        fold->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::BinaryFold *fold) {
+    if (auto id = findVariable(fold->stringify())) {
+        fold->var_ID = *id;
         return;
     }
 
@@ -463,9 +553,10 @@ void LexicalScoping::operator()(expr::BinaryFold *fold) {
 }
 
 
-void LexicalScoping::operator()(expr::Class *cls) {
-    if (auto id = findVar(cls->stringify())) {
-        cls->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Class *cls) {
+    if (auto id = findVariable(cls->stringify())) {
+        cls->var_ID = *id;
         return;
     }
 
@@ -474,27 +565,28 @@ void LexicalScoping::operator()(expr::Class *cls) {
 
      // needed for methods to access member variables
     for (auto& [name, _, __] : cls->fields) {
-        name.ID = variable_index++;
-        addVar(name.name, name.ID);
+        name.var_ID = variable_index++;
+        addVar(name.name, name.var_ID);
     }
 
     for (const auto& [_, type, expr] : cls->fields) {
         std::visit(*this, expr::Type{type}.variant());
         std::visit(*this, expr->variant());
     }
-
 }
 
-void LexicalScoping::operator()(expr::Union *onion) {
-    if (auto id = findVar(onion->stringify())) {
-        onion->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::Union *onion) {
+    if (auto id = findVariable(onion->stringify())) {
+        onion->var_ID = *id;
         return;
     }
 
     ScopeGuard sg{this};
 
     for (auto& type : onion->types) {
-        if (const auto id = findVar(type->text()); id)
+        if (const auto id = findVariable(type->text()); id)
             type->ID = *id;
 
         else std::visit(*this, expr::Type{type}.variant());
@@ -502,7 +594,8 @@ void LexicalScoping::operator()(expr::Union *onion) {
 }
 
 
-void LexicalScoping::checkPattern(expr::Match::Case::Pattern& pat) {
+
+void LexicalAnalysis::checkPattern(expr::Match::Case::Pattern& pat) {
     if (std::holds_alternative<expr::Match::Case::Pattern::Single>(pat.pattern)) {
         auto& pattern = get<expr::Match::Case::Pattern::Single>(pat.pattern);
 
@@ -522,7 +615,7 @@ void LexicalScoping::checkPattern(expr::Match::Case::Pattern& pat) {
     else { // holds expr::Match::Case::Pattern::Structure
         auto& [name, patterns] = get<expr::Match::Case::Pattern::Structure>(pat.pattern);
 
-        if (const auto id = findVar(name.name); not id)
+        if (const auto id = findVariable(name.name); not id)
             util::error<except::NameLookup>("Name `" + name.name + "` not found!");
         else name.ID = *id;
 
@@ -531,9 +624,10 @@ void LexicalScoping::checkPattern(expr::Match::Case::Pattern& pat) {
 }
 
 
-void LexicalScoping::operator()(expr::Match *match) {
-    if (auto id = findVar(match->stringify())) {
-        match->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Match *match) {
+    if (auto id = findVariable(match->stringify())) {
+        match->var_ID = *id;
         return;
     }
 
@@ -554,9 +648,10 @@ void LexicalScoping::operator()(expr::Match *match) {
 }
 
 
-void LexicalScoping::operator()(expr::Loop *loop) {
-    if (auto id = findVar(loop->stringify())) {
-        loop->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Loop *loop) {
+    if (auto id = findVariable(loop->stringify())) {
+        loop->var_ID = *id;
         return;
     }
 
@@ -578,9 +673,10 @@ void LexicalScoping::operator()(expr::Loop *loop) {
 }
 
 
-void LexicalScoping::operator()(expr::Break *br) {
-    if (auto id = findVar(br->stringify())) {
-        br->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Break *br) {
+    if (auto id = findVariable(br->stringify())) {
+        br->var_ID = *id;
         return;
     }
 
@@ -589,9 +685,11 @@ void LexicalScoping::operator()(expr::Break *br) {
     std::visit(*this, br->expr->variant());
 }
 
-void LexicalScoping::operator()(expr::Continue *cont) {
-    if (auto id = findVar(cont->stringify())) {
-        cont->ID = *id;
+
+
+void LexicalAnalysis::operator()(expr::Continue *cont) {
+    if (auto id = findVariable(cont->stringify())) {
+        cont->var_ID = *id;
         return;
     }
 
@@ -601,10 +699,11 @@ void LexicalScoping::operator()(expr::Continue *cont) {
 }
 
 
-void LexicalScoping::operator()(const expr::Access *acc) {
+
+void LexicalAnalysis::operator()(const expr::Access *acc) {
     std::visit(*this, acc->var->variant());
 
-    // if (auto id = findVar(acc->var->stringify())) acc->var->ID = *id;
+    // if (auto id = findVariable(acc->var->stringify())) acc->var->ID = *id;
     // else util::error("Name `" + acc->var->stringify() + "` not found in access expression: " + acc->stringify());
 
     // can't check the accessee
@@ -614,9 +713,10 @@ void LexicalScoping::operator()(const expr::Access *acc) {
 }
 
 
-void LexicalScoping::operator()(expr::Import *import) {
-    if (auto id = findVar(import->stringify())) {
-        import->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Import *import) {
+    if (auto id = findVariable(import->stringify())) {
+        import->var_ID = *id;
         return;
     }
 
@@ -630,7 +730,7 @@ void LexicalScoping::operator()(expr::Import *import) {
     auto exprs = p.parse();
 
     indeces.push_back(variable_index);
-    LexicalScoping v{variable_index};
+    LexicalAnalysis v{variable_index};
 
     for (const auto& expr : exprs)
         std::visit(v, std::move(expr)->variant());
@@ -652,9 +752,10 @@ void LexicalScoping::operator()(expr::Import *import) {
 }
 
 
-void LexicalScoping::operator()(expr::Namespace *n) {
-    if (auto id = findVar(n->stringify())) {
-        n->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Namespace *n) {
+    if (auto id = findVariable(n->stringify())) {
+        n->var_ID = *id;
         return;
     }
 
@@ -676,9 +777,10 @@ void LexicalScoping::operator()(expr::Namespace *n) {
 }
 
 
-void LexicalScoping::operator()(expr::UseFix *use) {
-    if (auto id = findVar(use->stringify())) {
-        use->ID = *id;
+
+void LexicalAnalysis::operator()(expr::UseFix *use) {
+    if (auto id = findVariable(use->stringify())) {
+        use->var_ID = *id;
         return;
     }
 
@@ -686,9 +788,10 @@ void LexicalScoping::operator()(expr::UseFix *use) {
 }
 
 
-void LexicalScoping::operator()(expr::UseSpace *use) {
-    if (auto id = findVar(use->stringify())) {
-        use->ID = *id;
+
+void LexicalAnalysis::operator()(expr::UseSpace *use) {
+    if (auto id = findVariable(use->stringify())) {
+        use->var_ID = *id;
         return;
     }
 
@@ -728,9 +831,10 @@ void LexicalScoping::operator()(expr::UseSpace *use) {
 }
 
 
-void LexicalScoping::operator()(expr::Use *use) {
-    if (auto id = findVar(use->stringify())) {
-        use->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Use *use) {
+    if (auto id = findVariable(use->stringify())) {
+        use->var_ID = *id;
         return;
     }
 
@@ -751,7 +855,8 @@ void LexicalScoping::operator()(expr::Use *use) {
 }
 
 
-void LexicalScoping::operator()(expr::SpaceAccess *acc) {
+
+void LexicalAnalysis::operator()(expr::SpaceAccess *acc) {
     const auto space = findSpace(acc->spaces, acc->global);
 
     if (not space) util::error();
@@ -768,9 +873,10 @@ void LexicalScoping::operator()(expr::SpaceAccess *acc) {
 }
 
 
-void LexicalScoping::operator()(expr::Grouping *group) {
-    if (auto id = findVar(group->stringify())) {
-        group->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Grouping *group) {
+    if (auto id = findVariable(group->stringify())) {
+        group->var_ID = *id;
         return;
     }
 
@@ -778,9 +884,10 @@ void LexicalScoping::operator()(expr::Grouping *group) {
 }
 
 
-void LexicalScoping::operator()(expr::UnaryOp *up) {
-    if (auto id = findVar(up->stringify())) {
-        up->ID = *id;
+
+void LexicalAnalysis::operator()(expr::UnaryOp *up) {
+    if (auto id = findVariable(up->stringify())) {
+        up->var_ID = *id;
         return;
     }
 
@@ -788,9 +895,10 @@ void LexicalScoping::operator()(expr::UnaryOp *up) {
 }
 
 
-void LexicalScoping::operator()(expr::BinOp *bp) {
-    if (auto id = findVar(bp->stringify())) {
-        bp->ID = *id;
+
+void LexicalAnalysis::operator()(expr::BinOp *bp) {
+    if (auto id = findVariable(bp->stringify())) {
+        bp->var_ID = *id;
         return;
     }
 
@@ -799,9 +907,10 @@ void LexicalScoping::operator()(expr::BinOp *bp) {
 }
 
 
-void LexicalScoping::operator()(expr::PostOp   *pp) {
-    if (auto id = findVar(pp->stringify())) {
-        pp->ID = *id;
+
+void LexicalAnalysis::operator()(expr::PostOp   *pp) {
+    if (auto id = findVariable(pp->stringify())) {
+        pp->var_ID = *id;
         return;
     }
 
@@ -809,9 +918,10 @@ void LexicalScoping::operator()(expr::PostOp   *pp) {
 }
 
 
-void LexicalScoping::operator()(expr::CircumOp *cp) {
-    if (auto id = findVar(cp->stringify())) {
-        cp->ID = *id;
+
+void LexicalAnalysis::operator()(expr::CircumOp *cp) {
+    if (auto id = findVariable(cp->stringify())) {
+        cp->var_ID = *id;
         return;
     }
 
@@ -819,9 +929,10 @@ void LexicalScoping::operator()(expr::CircumOp *cp) {
 }
 
 
-void LexicalScoping::operator()(expr::OpCall *oc) {
-    if (auto id = findVar(oc->stringify())) {
-        oc->ID = *id;
+
+void LexicalAnalysis::operator()(expr::OpCall *oc) {
+    if (auto id = findVariable(oc->stringify())) {
+        oc->var_ID = *id;
         return;
     }
 
@@ -830,20 +941,21 @@ void LexicalScoping::operator()(expr::OpCall *oc) {
 }
 
 
-void LexicalScoping::visitType(const type::TypePtr& type) {
+
+void LexicalAnalysis::visitType(const type::TypePtr& type) {
     if (auto expr_type = type::isExpr(type)) {
         // leave em empty for now...
         if (const auto n = dynamic_cast<const expr::Num*>(expr_type->t.get()));
         else if (const auto b = dynamic_cast<const expr::Bool*>(expr_type->t.get()));
         else if (const auto s = dynamic_cast<const expr::String*>(expr_type->t.get()));
 
-        else if (const auto id = findVar(type->text()); id) {
+        else if (const auto id = findVariable(type->text()); id) {
             expr_type->ID = *id;
-            expr_type->t->ID = *id;
+            expr_type->t->var_ID = *id;
         }
         else if (auto unio = dynamic_cast<expr::Union*>(expr_type->t.get())) {
             for (auto& type : unio->types) {
-                if (const auto id = findVar(type->text()); id) type->ID = *id;
+                if (const auto id = findVariable(type->text()); id) type->ID = *id;
                 else visitType(type);
             }
         }
@@ -865,12 +977,13 @@ void LexicalScoping::visitType(const type::TypePtr& type) {
     else if(const auto var = type::isVariadic(type)) {
         visitType(var->type);
     }
-};
+}
 
 
-void LexicalScoping::operator()(expr::Syntax *syn) {
-    if (auto id = findVar(syn->stringify())) {
-        syn->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Syntax *syn) {
+    if (auto id = findVariable(syn->stringify())) {
+        syn->var_ID = *id;
         return;
     }
 
@@ -878,9 +991,10 @@ void LexicalScoping::operator()(expr::Syntax *syn) {
 }
 
 
-void LexicalScoping::operator()(expr::Type *type) {
-    if (auto id = findVar(type->stringify())) {
-        type->ID = *id;
+
+void LexicalAnalysis::operator()(expr::Type *type) {
+    if (auto id = findVariable(type->stringify())) {
+        type->var_ID = *id;
         type->type->ID = *id;
         return;
     }
@@ -889,7 +1003,8 @@ void LexicalScoping::operator()(expr::Type *type) {
 }
 
 
-void LexicalScoping::addSpace(const std::string& name) {
+
+void LexicalAnalysis::addSpace(const std::string& name) {
     std::shared_ptr<NameSpace> ns;
 
     if (env.back().second == EnvTag::SPACE) {
@@ -915,7 +1030,8 @@ void LexicalScoping::addSpace(const std::string& name) {
 }
 
 
-void LexicalScoping::popSpace() {
+
+void LexicalAnalysis::popSpace() {
     // if (env[env.size() - 2].second == EnvTag::SPACE) {
     //     for (auto& [name, space] : env.back().first.spaces) {
 
@@ -928,7 +1044,7 @@ void LexicalScoping::popSpace() {
 
 
 
-NameSpace* LexicalScoping::matchChain(const std::vector<std::string>& names, NameSpace *space) {
+NameSpace* LexicalAnalysis::matchChain(const std::vector<std::string>& names, NameSpace *space) {
     if (names.empty()) return nullptr;
     if (names[0] != space->name) return nullptr;
 
@@ -951,8 +1067,9 @@ NameSpace* LexicalScoping::matchChain(const std::vector<std::string>& names, Nam
 }
 
 
+
 // ideally, should be called findSpaces!
-NameSpace* LexicalScoping::findSpace(const std::vector<std::string>& names, const bool global_search_only) {
+NameSpace* LexicalAnalysis::findSpace(const std::vector<std::string>& names, const bool global_search_only) {
     if (not global_search_only) {
         for (const auto space : std::views::reverse(current_space)) {
             if (const auto s = matchChain(names, space)) return s;
@@ -973,7 +1090,9 @@ NameSpace* LexicalScoping::findSpace(const std::vector<std::string>& names, cons
     util::error<except::NameLookup>("Space `" + stringify(names) + "` not found!");
 }
 
-void LexicalScoping::addVar(std::string name, const size_t index) {
+
+
+void LexicalAnalysis::addVar(std::string name, const size_t index) {
     env.back().first.vars[std::move(name)] = index;
     // if (space_dir.empty()) 
     // else {
@@ -983,7 +1102,8 @@ void LexicalScoping::addVar(std::string name, const size_t index) {
 }
 
 
-std::optional<size_t> LexicalScoping::findVarInSpace(const std::string& name) const {
+
+std::optional<size_t> LexicalAnalysis::findVarInSpace(const std::string& name) const {
 
     for (const auto space : std::views::reverse(current_space)) {
 
@@ -1001,7 +1121,8 @@ std::optional<size_t> LexicalScoping::findVarInSpace(const std::string& name) co
 }
 
 
-void LexicalScoping::addNamespaces(
+
+void LexicalAnalysis::addNamespaces(
     std::unordered_map<std::string, std::shared_ptr<NameSpace>>& spaces,
     const std::unordered_map<std::string, std::shared_ptr<NameSpace>>& new_spaces
 ) {
@@ -1035,7 +1156,8 @@ void LexicalScoping::addNamespaces(
 }
 
 
-[[nodiscard]] std::optional<size_t> LexicalScoping::findVar(const std::string& name) const {
+
+[[nodiscard]] std::optional<size_t> LexicalAnalysis::findVariable(const std::string& name) const {
     if (name.empty()) return {}; // no reason to search
 
     if (not current_space.empty()) {
@@ -1054,21 +1176,40 @@ void LexicalScoping::addNamespaces(
 }
 
 
-void LexicalScoping::scope() {
+[[nodiscard]] std::optional<size_t> LexicalAnalysis::findConstant(const std::string& str) const {
+    if (constants.contains(str)) return constants.at(str).first;
+
+    return {};
+}
+
+
+[[nodiscard]] std::unordered_map<ssize_t, const value::Value> LexicalAnalysis::extractConstantMap() const {
+    std::unordered_map<ssize_t, const value::Value> consts;
+
+    for (const auto& [_, idXval] : constants) {
+        const auto& [id, val] = idXval;
+        consts.insert({id, val});
+    }
+
+    return consts;
+}
+
+
+void LexicalAnalysis::scope() {
     env.push_back({{}, EnvTag::SCOPE});
 }
 
 
-void LexicalScoping::scope(const std::shared_ptr<NameSpace>& space) {
+
+void LexicalAnalysis::scope(const std::shared_ptr<NameSpace>& space) {
     env.push_back({{}, EnvTag::SPACE});
 
     env.back().first.spaces[space->name] = space;
 }
 
 
-void LexicalScoping::unscope() {
-    env.pop_back();
-}
+
+void LexicalAnalysis::unscope() { env.pop_back(); }
 
 } // namespace analysis
 } // namespace pie

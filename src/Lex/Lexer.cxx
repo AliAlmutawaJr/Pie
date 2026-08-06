@@ -71,12 +71,13 @@ bool validNameChar(const char c) noexcept {
     token::TokenLines lines = {{}};
     token::Tokens line;
 
+
+    [[maybe_unused]] size_t column_count = 1;
     size_t line_count = 1;
     size_t line_starting_index{};
 
 
     for (size_t index{}; index < src.length(); ++index) {
-
         try {
         switch (src[index]) {
             using enum token::TokenKind;
@@ -190,7 +191,10 @@ bool validNameChar(const char c) noexcept {
                             src.substr(index, 3) != "::.";
                             ++index
                         ) {
-                            if (src[index] == '\n') ++line_count;
+                            if (src[index] == '\n') {
+                                ++line_count;
+                                column_count = 1;
+                            }
                         }
 
                         index += 2;
@@ -198,6 +202,7 @@ bool validNameChar(const char c) noexcept {
                     else {
                         while(++index < src.length() and src[index] != '\n');
                         ++line_count;
+                        column_count = 1;
                     }
                 }
                 else if (src[index + 1] == '.' and src.at(index + 2) == '.')
@@ -224,6 +229,7 @@ bool validNameChar(const char c) noexcept {
 
             case '\n':
                 ++line_count;
+                column_count = 1;
                 line_starting_index = index + 1;
                 break;
 
@@ -248,6 +254,7 @@ bool validNameChar(const char c) noexcept {
                             case 'n' : 
                                 str.push_back('\n');
                                 ++line_count;
+                                column_count = 1;
                                 break;
                             case 't' : str.push_back('\t'); break;
                             case 'v' : str.push_back('\v'); break;
@@ -263,6 +270,8 @@ bool validNameChar(const char c) noexcept {
                     }
                     else {
                         line_count += (c == '\n');
+                        column_count = 1;
+
                         str.push_back(c);
                     }
                 }
@@ -280,8 +289,8 @@ bool validNameChar(const char c) noexcept {
         catch(const std::exception& err) {
             util::error();
         }
-
     }
+
 
     if (not lines.empty() and not lines.back().empty() and lines.back().back().kind != token::TokenKind::SEMI)
         util::error("Last line doesn't end with a ';'!");

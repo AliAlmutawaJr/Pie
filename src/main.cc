@@ -20,6 +20,7 @@ int main(int argc, char *argv[]) {
     bool print_help         = false;
     bool norun              = false;
     bool repl               = false;
+    bool vm                 = false;
     bool command            = false;
 
 
@@ -31,6 +32,7 @@ int main(int argc, char *argv[]) {
         else if (argv[1] == "-a"sv or argv[1] == "--ast"sv    ) print_parsed       = true ;
         else if (argv[1] == "-h"sv or argv[1] == "--help"sv   ) print_help         = true ;
         else if (argv[1] == "-r"sv or argv[1] == "--norun"sv  ) norun              = true;
+        else if (argv[1] == "-c"sv or argv[1] == "--vm"sv     ) vm                 = true ;
         else if (argv[1] == "-c"sv or argv[1] == "--command"sv) command            = true ;
         else if (argv[1] == "-repl"sv                         ) repl               = true ;
         else content = argv[1];
@@ -38,6 +40,20 @@ int main(int argc, char *argv[]) {
 
 
     try {
+
+        if (vm) {
+
+            pie::cli::runFile(
+                std::filesystem::path(content),
+                print_tokens,
+                print_parsed,
+                norun,
+                true
+            );
+
+            return 0;
+        }
+
         if (command) {
             pie::cli::run(std::string{content}, print_tokens, print_parsed, norun);
             return 0;
