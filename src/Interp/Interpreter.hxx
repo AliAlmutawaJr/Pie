@@ -1790,8 +1790,58 @@ public:
         }
     }
 
+    static ValueType zenOfPie() {
+        const std::string_view zen =  
+R"(
+           .-.           
+   .-..   ( __)   .--.   
+  /    \  (''")  /    \  
+ ' .-,  ;  | |  |  .-. ; 
+ | |  . |  | |  |  | | | 
+ | |  | |  | |  |  |/  | 
+ | |  | |  | |  |  ' _.' 
+ | |  ' |  | |  |  .'.-. 
+ | `-'  '  | |  '  `-' / 
+ | \__.'  (___)  `.__.'  
+ | |                     
+(___)                    
+
+
+The Zen of Pie, by Ali Almutawa Jr.
+
+Be unique, not unfamiliar.
+Express yourself.
+You decide what operates.
+More control to you.
+null is void.
+Be whimzy, be quirky.
+Break the rules.
+Code is art.
+You're an artist..
+not a good one,
+but a great one.
+Steal. Every. Idea.
+Don't forget to have fun.
+There are no mistakes with art.)";
+
+        std::println("{}", zen);
+
+        static bool twice = false;
+        if (twice) {
+            return {314, type::builtins::Int()};
+        }
+        else {
+            twice = true;
+            return {"", type::builtins::String()};
+        }
+    }
+
 
     ValueType operator()(const expr::Import *import) {
+        if (const auto& var = getVar(import->var_ID); var) return *var;
+
+        if (import->path == "self") return zenOfPie();
+
 
         const auto src = util::readFile(auto{import->path}.replace_extension(".pie").string());
         const token::Tokens tokens = lex::lex(src);

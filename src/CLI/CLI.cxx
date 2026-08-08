@@ -27,7 +27,7 @@ namespace cli {
         const std::filesystem::path canonical_root,
         const bool print_tokens,
         const bool print_parsed,
-        const bool run
+        const bool norun
     ) {
         Parser parser{canonical_root};
         pie::analysis::LexicalAnalysis anal;
@@ -37,13 +37,16 @@ namespace cli {
             std::string line;
             std::print(">>> ");
             std::getline(std::cin, line);
+
+            if (line.empty()) continue;
+
             if (line.back() != ';') line += ';';
 
 
             token::Tokens v = lex::lex(std::move(line));
             if (print_tokens) std::println(std::clog, "{}", v);
 
-            if (v.empty()) continue;
+            // if (v.empty()) continue;
 
             parser.resetTokens(std::move(v));
 
@@ -53,14 +56,14 @@ namespace cli {
                 for(const auto& expr : exprs)
                     std::println(std::clog, "{};", expr->stringify());
 
-            if(run and (print_parsed or print_tokens)) puts("Output:\n");
+            if(not norun and (print_parsed or print_tokens)) puts("Output:\n");
 
 
             for (auto& expr : exprs)
                 std::visit(anal, expr->variant());
 
 
-            if (run) {
+            if (not norun) {
                 if (not exprs.empty()) {
                     value::Value value;
                     for (auto& expr : exprs) value = std::visit(visitor, std::move(expr)->variant()).value;

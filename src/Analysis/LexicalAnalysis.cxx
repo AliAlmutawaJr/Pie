@@ -773,6 +773,9 @@ void LexicalAnalysis::operator()(expr::Import *import) {
         return;
     }
 
+    // Zen of Pie
+    if (import->path == "self") return;
+
 
     const auto src = util::readFile(auto{import->path}.replace_extension(".pie").string());
     const token::Tokens tokens = lex::lex(src);

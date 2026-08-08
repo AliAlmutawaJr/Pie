@@ -813,21 +813,6 @@ make
 - [ ] File IO
 - [ ] Simplify Closure Captures without performance penalty (internal)
 - [ ] Simplify Pack Expansion (internal)
-- [ ] Zen of Pie (with the pie ascii art):
-<!-- 
-           .-.           
-   .-..   ( __)   .--.   
-  /    \  (''")  /    \  
- ' .-,  ;  | |  |  .-. ; 
- | |  . |  | |  |  | | | 
- | |  | |  | |  |  |/  | 
- | |  | |  | |  |  ' _.' 
- | |  ' |  | |  |  .'.-. 
- | `-'  '  | |  '  `-' / 
- | \__.'  (___)  `.__.'  
- | |                     
-(___)                    
- -->
 - [ ] Fix variadic expansion
 - [ ] Breaking Out of Nested Loops
 - [ ] Use Big Int instead of `int64_t`
@@ -845,6 +830,7 @@ make
 ---
 
 ### Done
+- [x] Zen of Pie (with the pie ascii art):
 - [x] Cascade operator `..`
 - [x] Importing Operators
 - [x] Compile to WASM & a web interface (YAAAY)

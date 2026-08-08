@@ -85,7 +85,7 @@ class Parser {
     token::Tokens tokens;
     typename token::Tokens::iterator iterator_beginning;
     typename token::Tokens::iterator token_iterator;
-    const size_t tokens_size{};
+    size_t tokens_size{};
     // deque instead of vector for pop_front
     std::deque<token::Token> red; // past tense of read lol
 
@@ -126,7 +126,9 @@ public:
 
     void resetTokens(token::Tokens t) {
         tokens = std::move(t);
-        token_iterator = tokens.begin();
+        iterator_beginning = tokens.begin();
+        token_iterator = iterator_beginning;
+        tokens_size = tokens.size();
         red.clear();
     }
 
@@ -742,9 +744,15 @@ public:
     expr::ExprPtr import_directive() {
         using enum token::TokenKind;
 
-        std::filesystem::path path = util::getPiePath(); // root;
-        auto fname = consume(NAME).text + ".pie";
+        auto fname = consume(NAME).text;
+
+        // Zen of Pie!
+        if (fname == "self") return std::make_shared<expr::Import>(std::move(fname));
+
+
+        fname += ".pie";
         // path.append(consume(NAME).text);
+        std::filesystem::path path = util::getPiePath(); // root;
         if (std::filesystem::exists(path / "std" / fname)) {
             path.append("std").append(std::move(fname));
         }
@@ -758,12 +766,6 @@ public:
 
         Parser p{std::move(tokens), path};
         p.parse();
-        // auto exprs = p.parse();
-
-
-        // for (auto& [name, space] : p.global_spaces) {
-
-        // }
 
         addNamespaces(global_spaces, p.global_spaces);
 
