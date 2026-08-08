@@ -169,7 +169,8 @@ checklibs:
 
 clean:
 	rm -f $(OUTPUT_NAME) $(DEBUG_OUTPUT_NAME) run_tests run_tests_gh $(WEB_OUTPUT_NAME) Pie.wasm
-	rm -rf build remote_includes/*
+	rm -rf build
+	rm -rf remote_includes/*
 
 .PHONY: checklibs clean main debug test web gh-actions test_dylib_lnx
 

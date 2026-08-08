@@ -19,6 +19,35 @@
 
 
 
+TEST_CASE("Map and List Comprehensions", "[Comp]") {
+    const auto src1 = R"(
+l = { loop i: 10 => i };
+m = { loop i: 10 => i: __builtin_mul(i, 2) };
+
+__builtin_print(l);
+
+loop key : 10 {
+    value = __builtin_get(m, key);
+    __builtin_print(key, ": ", value, sep = "");
+};
+
+)";
+
+    REQUIRE(pie::test::run(src1) == R"({0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+0: 0
+1: 2
+2: 4
+3: 6
+4: 8
+5: 10
+6: 12
+7: 14
+8: 16
+9: 18)");
+}
+
+
+
 TEST_CASE("Loop Expression Used As NOT A Statement", "[Loop]") {
     const auto src1 = R"(
 x = {loop i: {

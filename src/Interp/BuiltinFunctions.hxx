@@ -1,6 +1,6 @@
 #pragma once
 
-#include <fstream>
+// #include <fstream>
 #include <random>
 #include <cmath>
 
@@ -244,11 +244,10 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 }
 
                 else if constexpr (std::is_same_v<T, value::Map>) {
-                    auto key = stringify(ind);
-                    if (not a.items->map.contains(key))
-                        util::error("Accessing Map '" + stringify(a) + "' at key '" + key + "' which doesn't exist!");
+                    if (not a.items->map.contains(ind))
+                        util::error("Accessing Map '" + stringify(a) + "' at key `" + stringify(ind) + "` which doesn't exist!");
 
-                    return a.items->map.at(key);
+                    return a.items->map.at(ind);
                 }
 
                 else { // if constexpr (std::is_same_v<std::remove_cvref_t<decltype(a)>, std::string>) {
@@ -280,7 +279,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     const auto type = that->typeOf(cont);
                     const auto& map_type = dynamic_cast<const type::MapType&>(*type);
 
-                    auto key = stringify(that->typeCheck(at, map_type.key_type));
+                    auto key = that->typeCheck(at, map_type.key_type);
                     return cont.items->map[key] = that->typeCheck(elt, map_type.val_type);
                 }
             }),

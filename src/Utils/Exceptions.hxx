@@ -17,6 +17,9 @@ inline namespace pie {
 
 namespace except {
     DefineError(LexerError         );
+    DefineError(UnexpectedToken    );
+    DefineError(OperatorError      );
+    DefineError(SyntaxError        );
     DefineError(TypeMismatch       );
     DefineError(NameLookup         );
     DefineError(InvalidArgument    );

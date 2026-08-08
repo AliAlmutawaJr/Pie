@@ -1,8 +1,10 @@
+x = 1;
 space std {
-    print    = __builtin_print;
-    type     = __builtin_type;
+    print    = __builtin_print   ;
+    type     = __builtin_type    ;
     decltype = __builtin_decltype;
-    reset    = __builtin_reset;
+    reset    = __builtin_reset   ;
+    eval     = __builtin_eval    ;
 
     infix + = (a: String, b: String) => __builtin_concat(a, b);
     infix + = (a, b) => __builtin_add(a, b);

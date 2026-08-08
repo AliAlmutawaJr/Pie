@@ -1940,7 +1940,7 @@ public:
         expr::Unpackment::Pattern *var,
         expr::Expr *kind,
         expr::Expr *els,
-        std::invocable<ValueType> auto handle,
+        std::invocable<expr::Node> auto handle,
         const auto& expr_str
     ) {
 
@@ -1970,7 +1970,7 @@ public:
                     const auto limit = get<BigInt>(kind_value);
                     if (limit <= 0) {
                         if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
-                        handle(std::visit(*this, els->variant()));
+                        handle(els->variant());
                         return;
                     }
 
@@ -1982,8 +1982,7 @@ public:
 
                             bindPattern<CREATE_NEW_VAR>(expr_str, var, {loop_counter, type::builtins::Int()});
 
-
-                            handle(std::visit(*this, body->variant()));
+                            handle(body->variant());
 
                             if (broken) break;
                             // if (continued) continue;
@@ -1992,7 +1991,7 @@ public:
                     else for (loop_counter = 0; loop_counter < limit; ++loop_counter) {
                         continued = false;
 
-                        handle(std::visit(*this, body->variant()));
+                        handle(body->variant());
 
                         if (broken) break;
                     }
@@ -2003,7 +2002,7 @@ public:
                 case Type::BOOL: {
                     if (not get<bool>(kind_value)) {
                         if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
-                        handle(std::visit(*this, els->variant()));
+                        handle(els->variant());
                         return;
                     }
 
@@ -2014,7 +2013,7 @@ public:
 
                             bindPattern<CREATE_NEW_VAR>(expr_str, var, {loop_counter, type::builtins::Int()});
 
-                            handle(std::visit(*this, body->variant()));
+                            handle(body->variant());
 
 
                             if (broken) break;
@@ -2027,7 +2026,7 @@ public:
                     else for (loop_counter = 0; get<bool>(cond); ++loop_counter) {
                         continued = false;
 
-                        handle(std::visit(*this, body->variant()));
+                        handle(body->variant());
 
                         if (broken) break;
 
@@ -2039,7 +2038,7 @@ public:
                     const auto& list = get<value::List>(kind_value);
                     if (list.elts->values.empty()) {
                         if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
-                        handle(std::visit(*this, els->variant()));
+                        handle(els->variant());
                         return;
                     }
 
@@ -2058,7 +2057,7 @@ public:
 
                             bindPattern<CREATE_NEW_VAR>(expr_str, var, {elt, list_type->type});
 
-                            handle(std::visit(*this, body->variant()));
+                            handle(body->variant());
 
                             if (broken) break;
                         }
@@ -2067,7 +2066,7 @@ public:
                     else for ([[maybe_unused]] const auto& _ : list.elts->values) {
                         continued = false;
 
-                        handle(std::visit(*this, body->variant()));
+                        handle(body->variant());
 
                         if (broken) break;
                     }
@@ -2077,7 +2076,7 @@ public:
                     const auto& str = get<std::string>(kind_value);
                     if (str.empty()) {
                         if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
-                        handle(std::visit(*this, els->variant()));
+                        handle(els->variant());
                         return;
                     }
 
@@ -2088,7 +2087,7 @@ public:
 
                             bindPattern<CREATE_NEW_VAR>(expr_str, var, {std::string{elt}, type::builtins::String()});
 
-                            handle(std::visit(*this, body->variant()));
+                            handle(body->variant());
 
                             if (broken) break;
                         }
@@ -2097,7 +2096,7 @@ public:
                     else for ([[maybe_unused]] const auto& _ : str) {
                         continued = false;
 
-                        handle(std::visit(*this, body->variant()));
+                        handle(body->variant());
 
                         if (broken) break;
                     }
@@ -2107,7 +2106,7 @@ public:
                     const auto& pack = get<value::Pack>(kind_value);
                     if (pack->values.empty()) {
                         if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
-                        handle(std::visit(*this, els->variant()));
+                        handle(els->variant());
                         return;
                     }
 
@@ -2126,7 +2125,7 @@ public:
 
                             bindPattern<CREATE_NEW_VAR>(expr_str, var, {elt, pack_type->type});
 
-                            handle(std::visit(*this, body->variant()));
+                            handle(body->variant());
 
                             if (broken) break;
                         }
@@ -2135,7 +2134,7 @@ public:
                     else for ([[maybe_unused]] const auto& _ : pack->values) {
                         continued = false;
 
-                        handle(std::visit(*this, body->variant()));
+                        handle(body->variant());
 
                         if (broken) break;
                     }
@@ -2181,7 +2180,7 @@ public:
 
                             bindPattern<CREATE_NEW_VAR>(expr_str, var, std::visit(*this, next_call.variant()));
 
-                            handle(std::visit(*this, body->variant()));
+                            handle(body->variant());
 
                             if (broken) break;
 
@@ -2200,7 +2199,7 @@ public:
 
                             std::visit(*this, next_call.variant());
 
-                            handle(std::visit(*this, body->variant()));
+                            handle(body->variant());
 
                             if (broken) break;
 
@@ -2224,7 +2223,7 @@ public:
             for (loop_counter = 0; ; ++loop_counter) {
                 bindPattern<CREATE_NEW_VAR>(expr_str, var, {loop_counter, type::builtins::Int()});
 
-                handle(std::visit(*this, body->variant()));
+                handle(body->variant());
 
                 if (broken) break;
             }
@@ -2233,7 +2232,7 @@ public:
         else for (loop_counter = 0; ; ++loop_counter) {
             continued = false;
 
-            handle(std::visit(*this, body->variant()));
+            handle(body->variant());
 
             if (broken) break;
         }
@@ -2257,7 +2256,8 @@ public:
             loop->var.get(),
             loop->kind.get(),
             loop->els.get(),
-            [&value, &type] (ValueType valuetype) {
+            [this, &value, &type] (expr::Node node) {
+                auto valuetype = std::visit(*this, std::move(node));
                 value = std::move(valuetype).value;
                 type  = std::move(valuetype).type ;
             },
@@ -2274,16 +2274,34 @@ public:
 
         auto list = value::makeList();
 
-        handleLoop(
-            comp->body.get(),
-            comp->var.get(),
-            comp->kind.get(),
-            nullptr,
-            [&list] (ValueType valuetype) {
-                list.elts->values.push_back(std::move(valuetype).value);
-            },
-            wrapStringify(comp)
-        );
+
+        if (comp->guard)
+            handleLoop(
+                comp->body.get(),
+                comp->var.get(),
+                comp->kind.get(),
+                nullptr,
+                [this, comp, &list, &guard = comp->guard] (expr::Node node) {
+                    auto g = std::visit(*this, guard->variant());
+                    if (not std::holds_alternative<bool>(g.value))
+                        util::error("Comprehension guard didn't yield a boolean: " + comp->stringify());
+
+                    if (get<bool>(g.value))
+                        list.elts->values.push_back(std::visit(*this, std::move(node)).value);
+                },
+                wrapStringify(comp)
+            );
+        else
+            handleLoop(
+                comp->body.get(),
+                comp->var.get(),
+                comp->kind.get(),
+                nullptr,
+                [this, &list] (expr::Node node) {
+                    list.elts->values.push_back(std::visit(*this, std::move(node)).value);
+                },
+                wrapStringify(comp)
+            );
 
 
         auto type = typeOf(list);
@@ -2295,22 +2313,52 @@ public:
         if (const auto& var = getVar(comp->var_ID); var) return *var;
 
 
-        auto list = value::makeList();
+        auto map = value::makeMap();
 
-        // handleLoop(
-        //     comp->body.get(),
-        //     comp->var.get(),
-        //     comp->kind.get(),
-        //     nullptr,
-        //     [&list] (ValueType valuetype) {
-        //         list.elts->values.push_back(std::move(valuetype).value);
-        //     },
-        //     wrapStringify(comp)
-        // );
+        expr::ExprPtr pair = std::make_shared<expr::List>(
+            std::vector<expr::ExprPtr>{comp->body1, comp->body2}
+        );
 
 
-        auto type = typeOf(list);
-        return {std::move(list), std::move(type)};
+        if (comp->guard)
+            handleLoop(
+                pair.get(),
+                comp->var.get(),
+                comp->kind.get(),
+                nullptr,
+                [this, comp, &map, &guard = comp->guard] (expr::Node node) {
+                    auto g = std::visit(*this, guard->variant());
+                    if (not std::holds_alternative<bool>(g.value))
+                        util::error("Comprehension guard didn't yield a boolean: " + comp->stringify());
+
+
+                    if (get<bool>(g.value)) {
+                        auto valuetype = std::visit(*this, std::move(node));
+
+                        auto& list = get<value::List>(valuetype.value);
+                        map.items->map.insert_or_assign(std::move(list.elts->values[0]), std::move(list.elts->values[1]));
+                    }
+                },
+                wrapStringify(comp)
+            );
+        else
+            handleLoop(
+                pair.get(),
+                comp->var.get(),
+                comp->kind.get(),
+                nullptr,
+                [this, &map] (expr::Node node) {
+                    auto valuetype = std::visit(*this, std::move(node));
+
+                    auto& list = get<value::List>(valuetype.value);
+                    map.items->map.insert_or_assign(std::move(list.elts->values[0]), std::move(list.elts->values[1]));
+                },
+                wrapStringify(comp)
+            );
+
+
+        auto type = typeOf(map);
+        return {std::move(map), std::move(type)};
     }
 
 

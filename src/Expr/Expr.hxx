@@ -732,10 +732,11 @@ struct Continue : Expr {
 struct ListComp : Expr {
     Unpackment::PatternPtr var;
     ExprPtr kind;
+    ExprPtr guard;
     ExprPtr body;
 
-    ListComp(ExprPtr b, Unpackment::PatternPtr v = nullptr, ExprPtr k = nullptr) noexcept
-    : var{std::move(v)}, kind{std::move(k)}, body{std::move(b)}
+    ListComp(ExprPtr b, Unpackment::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr g = nullptr) noexcept
+    : var{std::move(v)}, kind{std::move(k)}, guard{std::move(g)}, body{std::move(b)}
     { }
 
 
@@ -744,6 +745,7 @@ struct ListComp : Expr {
 
         if (var ) s += Unpackment::stringifyPattern(var.get(), indent + 4);
         if (kind) s += ' ' + kind->stringify(indent + 4);
+        if (guard) s += ", " + guard->stringify(indent + 4);
 
         return s + " => " + body->stringify(indent + 4) + "}";
     }
@@ -753,6 +755,7 @@ struct ListComp : Expr {
         return sv == stringify()
             or (var and sv == Unpackment::stringifyPattern(var.get()))
             or (kind and kind->involvesName(sv))
+            or (guard and guard->involvesName(sv))
             or body->involvesName(sv);
     }
 
@@ -760,7 +763,38 @@ struct ListComp : Expr {
 };
 
 struct MapComp : Expr {
+    Unpackment::PatternPtr var;
+    ExprPtr kind;
+    ExprPtr guard;
+    ExprPtr body1;
+    ExprPtr body2;
 
+    MapComp(ExprPtr b1, ExprPtr b2, Unpackment::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr g = nullptr) noexcept
+    : var{std::move(v)}, kind{std::move(k)}, guard{std::move(g)}, body1{std::move(b1)}, body2{std::move(b2)}
+    { }
+
+
+    std::string stringify(const size_t indent = 0) const override {
+        std::string s = "{loop ";
+
+        if (var  ) s += Unpackment::stringifyPattern(var.get(), indent + 4);
+        if (kind ) s += ' ' + kind->stringify(indent + 4);
+        if (guard) s += ", " + guard->stringify(indent + 4);
+
+        return s + " => " + body1->stringify(indent + 4) + ": " + body2->stringify() + "}";
+    }
+
+
+    bool involvesName(const std::string_view sv) const override {
+        return sv == stringify()
+            or (var and sv == Unpackment::stringifyPattern(var.get()))
+            or (kind and kind->involvesName(sv))
+            or (guard and guard->involvesName(sv))
+            or body1->involvesName(sv)
+            or body2->involvesName(sv);
+    }
+
+    Node variant() override { return this; }
 };
 
 

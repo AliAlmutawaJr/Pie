@@ -52,9 +52,10 @@ template <typename Except = std::runtime_error, bool print_loc = true>
 }
 
 
+template <typename Except = std::runtime_error>
 [[noreturn]] inline void error(const std::source_location& location)
 {
-    error("[no diagnostic]. If you see this, please file a bug report!", location);
+    error<Except>("[no diagnostic]. If you see this, please file a bug report!", location);
 }
 
 

@@ -512,6 +512,8 @@ void LexicalAnalysis::operator()(expr::ListComp *comp) {
     // is means "introduce new names instead of acting as assignment"
     if (comp->var) checkPattern(comp->var.get(), {});
 
+    if (comp->guard) std::visit(*this, comp->guard->variant());
+
 
     const auto was_in_loop = in_loop;
     in_loop = true;
@@ -527,7 +529,32 @@ void LexicalAnalysis::operator()(expr::MapComp *comp) {
         return;
     }
 
-    util::error();
+
+    ScopeGuard sg{this};
+
+    if (comp->kind) std::visit(*this, comp->kind->variant());
+
+    // the extra argument `{}` acts as a tag for static dispatch
+    // is means "introduce new names instead of acting as assignment"
+    if (comp->var) checkPattern(comp->var.get(), {});
+
+    if (comp->guard) std::visit(*this, comp->guard->variant());
+
+
+    const auto was_in_loop = in_loop;
+    in_loop = true;
+
+    {
+        ScopeGuard first_body{this};
+        std::visit(*this, comp->body1->variant());
+    }
+
+    {
+        ScopeGuard first_body{this};
+        std::visit(*this, comp->body2->variant());
+    }
+
+    in_loop = was_in_loop;
 }
 
 
