@@ -19,6 +19,22 @@
 
 
 
+TEST_CASE("Loop Expression Used As NOT A Statement", "[Loop]") {
+    const auto src1 = R"(
+x = {loop i: {
+    __builtin_print("hello");
+    __builtin_conditional(__builtin_eq(i, 2), break "done", 0);
+}};
+
+__builtin_print(x);
+)";
+
+    REQUIRE(pie::test::run(src1) == "hello\nhello\nhello\n{done}");
+}
+
+
+
+
 TEST_CASE("Chained Unpackment!", "[Unpack]") {
     const auto src1 = R"(
 print = __builtin_print;

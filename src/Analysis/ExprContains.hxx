@@ -128,10 +128,6 @@ template <typename EXPR> const EXPR *exprContains(expr::ExprPtr expr) {
         return exprContains<EXPR>(acc->var);
     }
 
-    if (auto acc = dynamic_cast<const expr::Cascade *>(expr.get())) {
-        return nullptr;
-    }
-
     if (auto ns = dynamic_cast<const expr::Namespace *>(expr.get())) {
         for (const auto &expr : ns->space) {
         if (auto p = exprContains<EXPR>(expr))

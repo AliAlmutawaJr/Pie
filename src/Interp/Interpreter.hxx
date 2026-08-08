@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -914,15 +915,19 @@ public:
     }
 
 
+    // to delay stringifying until an error is throw.
+    // avoid slow recursive virtual calls and string allocations
+    static auto wrapStringify(const expr::Expr* expr) { return [expr] { return expr->stringify(); }; }
 
-    ValueType accessUnpackment(const expr::Expr *expr, expr::Access *acc, value::Value value) {
+
+    ValueType accessUnpackment(const auto& expr_str, expr::Access *acc, value::Value value) {
 
         if (auto name = dynamic_cast<const expr::Name*>(acc->var.get()); name and name->name == "self") {
             if (selves.empty())
-                util::error("Can't use 'self' outside of class scope: " + expr->stringify()); // shouldn't happen anyway
+                util::error("Can't use 'self' outside of class scope: " + expr_str()); // shouldn't happen anyway
 
             if (not checkMemberInThisObject(acc->name))
-                util::error("Name '" + acc->name + "' not found in object '" + acc->var->stringify() + "' in assignment: " + expr->stringify());
+                util::error("Name '" + acc->name + "' not found in object '" + acc->var->stringify() + "' in assignment: " + expr_str());
 
             return changeThis(acc->name, value);
         }
@@ -937,13 +942,13 @@ public:
         const auto& found = std::ranges::find_if(obj.second->members,
             [name = acc->name] (const auto& member) { return get<expr::Name>(member).name == name; }
         );
-        if (found == obj.second->members.end()) util::error("In unpackment '" + expr->stringify() + "', Name '" + acc->name + "' doesn't exist in object: " + stringify(obj));
+        if (found == obj.second->members.end()) util::error("In unpackment '" + expr_str() + "', Name '" + acc->name + "' doesn't exist in object: " + stringify(obj));
 
 
         const type::TypePtr& type = get<type::TypePtr>(*found);
 
         value = typeCheck(value, type,
-            "In unpackment: " + expr->stringify() +
+            "In unpackment: " + expr_str() +
             "\nType mis-match! Variable `" + acc->stringify() + "` expected: " + type->text() + ", got: " + typeOf(value)->text()
         );
 
@@ -956,13 +961,13 @@ public:
 
 
 
-    ValueType spaceAccessUnpackment(const expr::Expr *expr, expr::SpaceAccess *sa, const value::Value& value) {
+    ValueType spaceAccessUnpackment(const auto& expr_str, expr::SpaceAccess *sa, const value::Value& value) {
         const auto space = findNS(sa->spaces, sa->global);
 
         auto [_, __, type] = space->members[sa->name.ID];
 
         *get<value::ValuePtr>(space->members[sa->name.ID]) = typeCheck(value, type,
-            "In unpackment: " + expr->stringify() +
+            "In unpackment: " + expr_str() +
             "\nType mis-match! Variable `" + sa->stringify() + "` expected: " + type->text() + ", got: " + typeOf(value)->text()
         );
 
@@ -971,7 +976,7 @@ public:
 
 
 
-    ValueType refUnpackment(const expr::Expr *expr, const expr::Name* name, const value::Value& value) {
+    ValueType refUnpackment(auto expr_str, const expr::Name* name, const value::Value& value) {
         for (const auto& [e, _, __, ___] : std::views::reverse(env)) {
             if (e.contains(name->var_ID)) {
                 const auto& [named_ref, value_ptr, type_ptr] = e.at(name->var_ID);
@@ -989,7 +994,7 @@ public:
 
 
                 *get<value::ValuePtr>(space->members[name->var_ID]) = typeCheck(value, type,
-                    "In unpackment: " + expr->stringify() +
+                    "In unpackment: " + expr_str() +
                     "\nType mis-match! Variable `" + name->name + "` expected: " + type->text() + ", got: " + typeOf(value)->text()
                 );
 
@@ -1005,13 +1010,13 @@ public:
 
 
     // newly introduced vars here will always be `Any`
-    ValueType nameUnpackment(const expr::Expr *expr, const expr::Name* name, value::Value value) {
+    ValueType nameUnpackment(const auto& expr_str, const expr::Name* name, value::Value value) {
         type::TypePtr type = type::builtins::Any();
         bool change{};
 
         // variable already exists. Check that type matches the rhs type
         if (const auto& var = getVar(name->var_ID); var) {
-            if (isRef(name->var_ID)) return refUnpackment(expr, name, std::move(value));
+            if (isRef(name->var_ID)) return refUnpackment(expr_str, name, std::move(value));
 
             type = var->type;
             change = true;
@@ -1019,7 +1024,7 @@ public:
 
 
         value = typeCheck(value, type,
-            "In unpackment: " + expr->stringify() +
+            "In unpackment: " + expr_str() +
             "\nType mis-match! Variable `" +  name->name + "` expected: " + type->text() + ", got: " + typeOf(value)->text()
         );
 
@@ -1048,7 +1053,7 @@ public:
 
     // @pre-condition: values.reserve(n)
     void unpackIntoList(
-        const expr::Expr *expr, // passed for better error messages!
+        const auto& expr_str,
         std::vector<ValueType>& valuetypes,
         const value::Value& value,
         const size_t at_least
@@ -1058,7 +1063,7 @@ public:
             const auto& object = get<value::Object>(value);
 
             if (object.second->members.size() < at_least)
-                util::error("Unpacking more members than available: " + expr->stringify());
+                util::error("Unpacking more members than available: " + expr_str());
 
             for (const auto& [_, type, value_ptr] : object.second->members) {
                 valuetypes.emplace_back(*value_ptr, type);
@@ -1068,7 +1073,7 @@ public:
             const auto& list = get<value::List>(value);
 
             if (list.elts->values.size() < at_least)
-                util::error("Unpacking more elements than available: " + expr->stringify());
+                util::error("Unpacking more elements than available: " + expr_str());
 
             for (const auto& value : list.elts->values) {
                 valuetypes.emplace_back(value, typeOf(value));
@@ -1078,7 +1083,7 @@ public:
             const auto& map = get<value::Map>(value);
 
             if (map.items->map.size() < at_least)
-                util::error("Unpacking more elements than available: " + expr->stringify());
+                util::error("Unpacking more elements than available: " + expr_str());
 
             for (const auto& [key, value] : map.items->map) {
                 auto list = value::makeList({key, value});
@@ -1089,14 +1094,14 @@ public:
 
 
     void unpackIntoMap(
-        const expr::Expr *expr, // passed for better error messages!
+        const auto& expr_str,
         std::vector<std::pair<ValueType, ValueType>>& valuetypes,
         const value::Value& value,
         const size_t at_least
     ) {
 
         if (std::holds_alternative<value::Object>(value)) {
-            util::error("Map unpacking is not allowed on objects: " + expr->stringify());
+            util::error("Map unpacking is not allowed on objects: " + expr_str());
             // const auto& object = get<value::Object>(value);
 
             // if (object.second->members.size() < at_least)
@@ -1115,7 +1120,7 @@ public:
             const auto& list = get<value::List>(value);
 
             if (list.elts->values.size() < at_least)
-                util::error("Unpacking more elements than available: " + expr->stringify());
+                util::error("Unpacking more elements than available: " + expr_str());
 
             for (ssize_t i = -1; const auto& value : list.elts->values) {
                 valuetypes.emplace_back(ValueType{++i, type::builtins::Int()}, ValueType{value, typeOf(value)});
@@ -1127,7 +1132,7 @@ public:
             auto map_type = dynamic_cast<type::MapType*>(type.get());
 
             if (map.items->map.size() < at_least)
-                util::error("Unpacking more elements than available: " + expr->stringify());
+                util::error("Unpacking more elements than available: " + expr_str());
 
             for (const auto& [key, val] : map.items->map) {
                 valuetypes.emplace_back(ValueType{key, map_type->key_type}, ValueType{val, map_type->val_type});
@@ -1137,7 +1142,7 @@ public:
 
 
     template <bool INFERRED>
-    void bindExpr(const expr::Expr *expr, const expr::ExprPtr bound, ValueType valuetype) {
+    void bindExpr(const auto& expr_str, const expr::ExprPtr bound, ValueType valuetype) {
         auto& [value, type] = valuetype;
 
         if constexpr (INFERRED) {
@@ -1149,13 +1154,13 @@ public:
             );
         }
         else if (auto access = dynamic_cast<expr::Access*>(bound.get())) {
-            accessUnpackment(expr, access, value);
+            accessUnpackment(expr_str, access, value);
         }
         else if (auto access = dynamic_cast<expr::SpaceAccess*>(bound.get())) {
-            spaceAccessUnpackment(expr, access, value);
+            spaceAccessUnpackment(expr_str, access, value);
         }
         else if (auto name = dynamic_cast<expr::Name*>(bound.get())) {
-            nameUnpackment(expr, name, value);
+            nameUnpackment(expr_str, name, value);
         }
         else addVar(
             bound->stringify(),
@@ -1167,7 +1172,7 @@ public:
 
     template <bool INFERRED>
     void bindPattern(
-        const expr::Expr *expr,
+        const auto& expr_str,
         const expr::Unpackment::Pattern *pattern,
         ValueType valuetype
     ) {
@@ -1179,7 +1184,7 @@ public:
         // supposedly I don't need to check if the expression is a name
         // since LexicalAnalysis should've done it..i think :)
         if (auto expr_ptr = dynamic_cast<const Expr*>(pattern)) {
-            bindExpr<INFERRED>(expr, expr_ptr->expr, valuetype);
+            bindExpr<INFERRED>(expr_str, expr_ptr->expr, valuetype);
         }
         else if (auto list = dynamic_cast<const List*>(pattern)) {
             const auto pack_index = [list] -> std::optional<size_t> {
@@ -1191,12 +1196,12 @@ public:
 
 
             std::vector<ValueType> valuetypes;
-            unpackIntoList(expr, valuetypes, valuetype.value, list->patterns.size() - pack_index.has_value());
+            unpackIntoList(expr_str, valuetypes, valuetype.value, list->patterns.size() - pack_index.has_value());
             const size_t size = valuetypes.size(); // true size
 
             if (not pack_index) {
                 for (const auto& [pattern, valuetype] : std::views::zip(list->patterns, valuetypes)) {
-                    bindPattern<INFERRED>(expr,pattern.get(), valuetype);
+                    bindPattern<INFERRED>(expr_str,pattern.get(), valuetype);
                 }
             }
             else {
@@ -1207,7 +1212,7 @@ public:
                     const auto& [pattern, valuetype] :
                     std::views::zip(list->patterns, valuetypes) | std::views::take(leading_count)
                 ) {
-                    bindPattern<INFERRED>(expr,pattern.get(), valuetype);
+                    bindPattern<INFERRED>(expr_str,pattern.get(), valuetype);
                 }
 
                 const auto pack_pattern = dynamic_cast<Pack*>(list->patterns[*pack_index].get());
@@ -1237,17 +1242,17 @@ public:
                         valuetypes     | std::views::drop(size     - trailing_count)
                     )
                 ) {
-                    bindPattern<INFERRED>(expr,pattern.get(), valuetype);
+                    bindPattern<INFERRED>(expr_str,pattern.get(), valuetype);
                 }
             }
         }
         else if (auto map = dynamic_cast<const Map*>(pattern)) {
             std::vector<std::pair<ValueType, ValueType>> valuetype_pairs;
-            unpackIntoMap(expr, valuetype_pairs, valuetype.value, map->patterns.size());
+            unpackIntoMap(expr_str, valuetype_pairs, valuetype.value, map->patterns.size());
 
             for (const auto& [pattern, pair] : std::views::zip(map->patterns, valuetype_pairs)) {
-                bindPattern<INFERRED>(expr, pattern.first .get(), pair.first );
-                bindPattern<INFERRED>(expr, pattern.second.get(), pair.second);
+                bindPattern<INFERRED>(expr_str, pattern.first .get(), pair.first );
+                bindPattern<INFERRED>(expr_str, pattern.second.get(), pair.second);
             }
         }
     }
@@ -1255,14 +1260,13 @@ public:
 
     ValueType operator()(const expr::Unpackment *unpack) {
         auto rhs = std::visit(*this, unpack->rhs->variant());
+        constexpr auto INFERRED = true;
 
         if (unpack->inferred) {
-            constexpr auto INFERRED = true;
-            bindPattern<INFERRED>(unpack, unpack->pattern.get(), rhs);
+            bindPattern<    INFERRED>(wrapStringify(unpack), unpack->pattern.get(), rhs);
         }
         else {
-            constexpr auto INFERRED = false;
-            bindPattern<INFERRED>(unpack, unpack->pattern.get(), rhs);
+            bindPattern<not INFERRED>(wrapStringify(unpack), unpack->pattern.get(), rhs);
         }
 
 
@@ -1394,26 +1398,11 @@ public:
 
         if (not std::holds_alternative<value::Object>(left))
             util::error("Can't access a non-class type!");
-        
+
 
         return objectAccess(get<value::Object>(left), acc->name);
     }
 
-
-    ValueType operator()(const expr::Cascade *) {
-        util::error();
-    }
-
-
-    // static std::string NSName(const std::vector<std::string>& spaces) {
-    //     if (spaces.size() == 1) return spaces[0];
-
-    //     std::string s = spaces[0];
-    //     for (const auto& space : spaces | std::views::drop(1))
-    //         s += "::" + space;
-
-    //     return s;
-    // }
 
 
     NameSpace* matchChain(const std::vector<std::string>& names, NameSpace *space) {
@@ -1946,9 +1935,14 @@ public:
     };
 
 
-    ValueType operator()(const expr::Loop *loop) {
-        if (const auto& var = getVar(loop->var_ID); var) return *var;
-
+    void handleLoop(
+        expr::Expr *body,
+        expr::Unpackment::Pattern *var,
+        expr::Expr *kind,
+        expr::Expr *els,
+        std::invocable<ValueType> auto handle,
+        const auto& expr_str
+    ) {
 
         enum class Type { NONE = 0, INT, BOOL, LIST, STR, PACK, OBJECT };
         const auto classify = [](const value::Value& v) {
@@ -1967,33 +1961,29 @@ public:
         // push
         const auto current_counter = loop_counter;
 
-        value::Value ret;
-        type::TypePtr type;
+        if (constexpr auto CREATE_NEW_VAR = true; kind) {
+            const auto& [kind_value, kind_type] = std::visit(*this, kind->variant());
 
-        if (constexpr auto CREATE_NEW_VAR = true; loop->kind) {
-            const auto& [kind, kind_type] = std::visit(*this, loop->kind->variant());
-
-            switch (classify(kind)) {
+            switch (classify(kind_value)) {
                 // for loop
                 case Type::INT: {
-                    const auto limit = get<BigInt>(kind);
+                    const auto limit = get<BigInt>(kind_value);
                     if (limit <= 0) {
-                        if (not loop->els) util::error("Loop which didn't run doesn't have else branch: " + loop->stringify());
-                        return std::visit(*this, loop->els->variant());
+                        if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
+                        handle(std::visit(*this, els->variant()));
+                        return;
                     }
 
 
-                    if (loop->var) {
+                    if (var) {
 
                         for (loop_counter = 0; loop_counter < limit; ++loop_counter) {
                             continued = false;
 
-                            bindPattern<CREATE_NEW_VAR>(loop, loop->var.get(), {loop_counter, type::builtins::Int()});
+                            bindPattern<CREATE_NEW_VAR>(expr_str, var, {loop_counter, type::builtins::Int()});
 
 
-                            auto [v, t] = std::visit(*this, loop->body->variant());
-                            ret  = std::move(v);
-                            type = std::move(t);
+                            handle(std::visit(*this, body->variant()));
 
                             if (broken) break;
                             // if (continued) continue;
@@ -2002,9 +1992,7 @@ public:
                     else for (loop_counter = 0; loop_counter < limit; ++loop_counter) {
                         continued = false;
 
-                        auto [v, t] = std::visit(*this, loop->body->variant());
-                        ret  = std::move(v);
-                        type = std::move(t);
+                        handle(std::visit(*this, body->variant()));
 
                         if (broken) break;
                     }
@@ -2013,70 +2001,64 @@ public:
 
                 // while loop
                 case Type::BOOL: {
-                    if (not get<bool>(kind)) {
-                        if (not loop->els) util::error("Loop which didn't run doesn't have else branch: " + loop->stringify());
-                        return std::visit(*this, loop->els->variant());
+                    if (not get<bool>(kind_value)) {
+                        if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
+                        handle(std::visit(*this, els->variant()));
+                        return;
                     }
 
-                    if (auto cond = kind; loop->var) {
+                    if (auto cond = kind_value; var) {
 
                         for (loop_counter = 0; get<bool>(cond); ++loop_counter) {
                             continued = false;
 
-                            bindPattern<CREATE_NEW_VAR>(loop, loop->var.get(), {loop_counter, type::builtins::Int()});
+                            bindPattern<CREATE_NEW_VAR>(expr_str, var, {loop_counter, type::builtins::Int()});
 
-                            auto [v, t] = std::visit(*this, loop->body->variant());
-                            ret  = std::move(v);
-                            type = std::move(t);
+                            handle(std::visit(*this, body->variant()));
 
 
                             if (broken) break;
                             // if (continued) continue;
 
-                            cond = std::visit(*this, loop->kind->variant()).value;
+                            cond = std::visit(*this, kind->variant()).value;
                         }
 
                     }
                     else for (loop_counter = 0; get<bool>(cond); ++loop_counter) {
                         continued = false;
 
-                        auto [v, t] = std::visit(*this, loop->body->variant());
-                        ret  = std::move(v);
-                        type = std::move(t);
-
+                        handle(std::visit(*this, body->variant()));
 
                         if (broken) break;
 
-                        cond = std::visit(*this, loop->kind->variant()).value;
+                        cond = std::visit(*this, kind->variant()).value;
                     }
                 } break;
 
                 case Type::LIST: {
-                    const auto& list = get<value::List>(kind);
+                    const auto& list = get<value::List>(kind_value);
                     if (list.elts->values.empty()) {
-                        if (not loop->els) util::error("Loop which didn't run doesn't have else branch: " + loop->stringify());
-                        return std::visit(*this, loop->els->variant());
+                        if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
+                        handle(std::visit(*this, els->variant()));
+                        return;
                     }
 
 
-                    if (loop->var) {
+                    if (var) {
                         auto list_type = type::isList(kind_type); // this is effectively a cast
                         // a place for the type to live in so that it doesn't "die" before `list_type`
                         type::TypePtr memory;
                         if (not list_type) {
-                            memory = typeOf(kind);
+                            memory = typeOf(kind_value);
                             list_type = type::isList(memory);
                         }
 
                         for (const auto& elt : list.elts->values) {
                             continued = false;
 
-                            bindPattern<CREATE_NEW_VAR>(loop, loop->var.get(), {elt, list_type->type});
+                            bindPattern<CREATE_NEW_VAR>(expr_str, var, {elt, list_type->type});
 
-                            auto [v, t] = std::visit(*this, loop->body->variant());
-                            ret  = std::move(v);
-                            type = std::move(t);
-
+                            handle(std::visit(*this, body->variant()));
 
                             if (broken) break;
                         }
@@ -2085,33 +2067,28 @@ public:
                     else for ([[maybe_unused]] const auto& _ : list.elts->values) {
                         continued = false;
 
-                        auto [v, t] = std::visit(*this, loop->body->variant());
-                        ret  = std::move(v);
-                        type = std::move(t);
-
+                        handle(std::visit(*this, body->variant()));
 
                         if (broken) break;
                     }
                 } break;
 
                 case Type::STR: {
-                    const auto& str = get<std::string>(kind);
+                    const auto& str = get<std::string>(kind_value);
                     if (str.empty()) {
-                        if (not loop->els) util::error("Loop which didn't run doesn't have else branch: " + loop->stringify());
-                        return std::visit(*this, loop->els->variant());
+                        if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
+                        handle(std::visit(*this, els->variant()));
+                        return;
                     }
 
 
-                    if (loop->var) {
+                    if (var) {
                         for (const auto& elt : str) {
                             continued = false;
 
-                            bindPattern<CREATE_NEW_VAR>(loop, loop->var.get(), {std::string{elt}, type::builtins::String()});
+                            bindPattern<CREATE_NEW_VAR>(expr_str, var, {std::string{elt}, type::builtins::String()});
 
-                            auto [v, t] = std::visit(*this, loop->body->variant());
-                            ret  = std::move(v);
-                            type = std::move(t);
-
+                            handle(std::visit(*this, body->variant()));
 
                             if (broken) break;
                         }
@@ -2120,40 +2097,36 @@ public:
                     else for ([[maybe_unused]] const auto& _ : str) {
                         continued = false;
 
-                        auto [v, t] = std::visit(*this, loop->body->variant());
-                        ret  = std::move(v);
-                        type = std::move(t);
+                        handle(std::visit(*this, body->variant()));
 
                         if (broken) break;
                     }
                 } break;
 
                 case Type::PACK: {
-                    const auto& pack = get<value::Pack>(kind);
+                    const auto& pack = get<value::Pack>(kind_value);
                     if (pack->values.empty()) {
-                        if (not loop->els) util::error("Loop which didn't run doesn't have else branch: " + loop->stringify());
-                        return std::visit(*this, loop->els->variant());
+                        if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
+                        handle(std::visit(*this, els->variant()));
+                        return;
                     }
 
 
-                    if (loop->var) {
+                    if (var) {
                         auto pack_type = type::isVariadic(kind_type);
                         // a place for the type to live in so that it doesn't "die" before `list_type`
                         type::TypePtr memory;
                         if (not pack_type) {
-                            memory = typeOf(kind);
+                            memory = typeOf(kind_value);
                             pack_type = type::isVariadic(memory);
                         }
 
                         for (const auto& elt : pack->values) {
                             continued = false;
 
-                            bindPattern<CREATE_NEW_VAR>(loop, loop->var.get(), {elt, pack_type->type});
+                            bindPattern<CREATE_NEW_VAR>(expr_str, var, {elt, pack_type->type});
 
-                            auto [v, t] = std::visit(*this, loop->body->variant());
-                            ret  = std::move(v);
-                            type = std::move(t);
-
+                            handle(std::visit(*this, body->variant()));
 
                             if (broken) break;
                         }
@@ -2162,17 +2135,14 @@ public:
                     else for ([[maybe_unused]] const auto& _ : pack->values) {
                         continued = false;
 
-                        auto [v, t] = std::visit(*this, loop->body->variant());
-                        ret  = std::move(v);
-                        type = std::move(t);
-
+                        handle(std::visit(*this, body->variant()));
 
                         if (broken) break;
                     }
                 } break;
 
                 case Type::OBJECT: {
-                    const auto& obj = get<value::Object>(kind);
+                    const auto& obj = get<value::Object>(kind_value);
 
                     // const auto& next_it    = std::ranges::find_if(obj.second->members, [](const auto& p) { return p.first.name == "next";    });
                     // const auto& hasNext_it = std::ranges::find_if(obj.second->members, [](const auto& p) { return p.first.name == "hasNext"; });
@@ -2185,24 +2155,15 @@ public:
                     const value::Value    next = objectAccess(obj,    "next").value;
 
                     if (not std::holds_alternative<expr::Closure>(hasNext) or not std::holds_alternative<expr::Closure>(next))
-                        util::error("Object in loop: " + loop->stringify() + " doesn't follow the iterator protocol!");
+                        util::error("Object in loop: " + expr_str() + " doesn't follow the iterator protocol!");
 
                     const auto& hasNext_func = get<expr::Closure>(hasNext);
                     const auto&    next_func = get<expr::Closure>(next   );
 
-                    // relaxing this. Allowing the user to not type-annotate iterator protocol functions
-                    // I can check the return type later
-                    // if (
-                    //     not hasNext_func.type.params.empty() or hasNext_func.type.ret->text() != "Bool"
-                    //     or not next_func.type.params.empty()
-                    // )
-                    //     util::error("Object in loop: " + loop->stringify() + " doesn't follow the iterator protocol!");
-
-
                     expr::Call hasNext_call{std::make_shared<expr::Closure>(hasNext_func)};
                     expr::Call    next_call{std::make_shared<expr::Closure>(   next_func)};
 
-                    if (loop->var) {
+                    if (var) {
 
 
                         value::Value cond = std::visit(*this, hasNext_call.variant()).value;
@@ -2218,12 +2179,9 @@ public:
                             //     std::make_shared<value::Value>(std::visit(*this, next_call.variant()).value)
                             // );
 
-                            bindPattern<CREATE_NEW_VAR>(loop, loop->var.get(), std::visit(*this, next_call.variant()));
+                            bindPattern<CREATE_NEW_VAR>(expr_str, var, std::visit(*this, next_call.variant()));
 
-                            auto [v, t] = std::visit(*this, loop->body->variant());
-                            ret  = std::move(v);
-                            type = std::move(t);
-
+                            handle(std::visit(*this, body->variant()));
 
                             if (broken) break;
 
@@ -2242,10 +2200,7 @@ public:
 
                             std::visit(*this, next_call.variant());
 
-                            auto [v, t] = std::visit(*this, loop->body->variant());
-                            ret  = std::move(v);
-                            type = std::move(t);
-
+                            handle(std::visit(*this, body->variant()));
 
                             if (broken) break;
 
@@ -2259,20 +2214,17 @@ public:
                 } break;
 
                 case Type::NONE:
-                    util::error("Loop type no supported: " + loop->stringify());
+                    util::error("Loop type no supported: " + expr_str());
             }
         }
         // loop till break
-        else if (loop->var) {
+        else if (var) {
             continued = false;
 
             for (loop_counter = 0; ; ++loop_counter) {
-                bindPattern<CREATE_NEW_VAR>(loop, loop->var.get(), {loop_counter, type::builtins::Int()});
+                bindPattern<CREATE_NEW_VAR>(expr_str, var, {loop_counter, type::builtins::Int()});
 
-                auto [v, t] = std::visit(*this, loop->body->variant());
-                ret  = std::move(v);
-                type = std::move(t);
-
+                handle(std::visit(*this, body->variant()));
 
                 if (broken) break;
             }
@@ -2281,10 +2233,7 @@ public:
         else for (loop_counter = 0; ; ++loop_counter) {
             continued = false;
 
-            auto [v, t] = std::visit(*this, loop->body->variant());
-            ret  = std::move(v);
-            type = std::move(t);
-
+            handle(std::visit(*this, body->variant()));
 
             if (broken) break;
         }
@@ -2293,7 +2242,75 @@ public:
         loop_counter = current_counter;
 
         broken = continued = false;
-        return {std::move(ret), std::move(type)};
+    }
+
+
+
+    ValueType operator()(const expr::Loop *loop) {
+        if (const auto& var = getVar(loop->var_ID); var) return *var;
+
+        value::Value value;
+        type::TypePtr type;
+
+        handleLoop(
+            loop->body.get(),
+            loop->var.get(),
+            loop->kind.get(),
+            loop->els.get(),
+            [&value, &type] (ValueType valuetype) {
+                value = std::move(valuetype).value;
+                type  = std::move(valuetype).type ;
+            },
+            wrapStringify(loop)
+        );
+
+        return {std::move(value), std::move(type)};
+    }
+
+
+    ValueType operator()(const expr::ListComp *comp) {
+        if (const auto& var = getVar(comp->var_ID); var) return *var;
+
+
+        auto list = value::makeList();
+
+        handleLoop(
+            comp->body.get(),
+            comp->var.get(),
+            comp->kind.get(),
+            nullptr,
+            [&list] (ValueType valuetype) {
+                list.elts->values.push_back(std::move(valuetype).value);
+            },
+            wrapStringify(comp)
+        );
+
+
+        auto type = typeOf(list);
+        return {std::move(list), std::move(type)};
+    }
+
+
+    ValueType operator()(const expr::MapComp *comp) {
+        if (const auto& var = getVar(comp->var_ID); var) return *var;
+
+
+        auto list = value::makeList();
+
+        // handleLoop(
+        //     comp->body.get(),
+        //     comp->var.get(),
+        //     comp->kind.get(),
+        //     nullptr,
+        //     [&list] (ValueType valuetype) {
+        //         list.elts->values.push_back(std::move(valuetype).value);
+        //     },
+        //     wrapStringify(comp)
+        // );
+
+
+        auto type = typeOf(list);
+        return {std::move(list), std::move(type)};
     }
 
 
@@ -4752,7 +4769,8 @@ public:
                 }
             );
             // checking this here instead of wasting time checking the values too
-            if (keys.empty()) return std::make_shared<type::MapType>(type::builtins::_(), type::builtins::_());
+            // if (keys.empty()) return std::make_shared<type::MapType>(type::builtins::_(), type::builtins::_());
+            if (keys.empty()) return std::make_shared<type::MapType>(type::builtins::Any(), type::builtins::Any());
 
             auto values = std::ranges::fold_left(
                 get<value::Map>(value).items->map,

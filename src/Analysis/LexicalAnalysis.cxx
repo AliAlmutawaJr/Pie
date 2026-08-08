@@ -193,15 +193,6 @@ void LexicalAnalysis::operator()(expr::String *s) {
 
 
 
-void LexicalAnalysis::operator()(expr::Cascade *c) {
-    if (auto id = findVariable(c->stringify())) {
-        c->var_ID = *id;
-        return;
-    }
-}
-
-
-
 void LexicalAnalysis::operator()(expr::Fix *f) {
     if (auto id = findVariable(f->stringify())) {
         f->var_ID = *id;
@@ -261,7 +252,8 @@ void LexicalAnalysis::operator()(expr::Assignment *ass) {
     // this allows for recursion
     const bool is_closure = dynamic_cast<expr::Closure*>(ass->rhs.get());
     const bool is_class   = dynamic_cast<expr::Class  *>(ass->rhs.get());
-    if (is_closure or is_class) {
+    const bool is_union   = dynamic_cast<expr::Union  *>(ass->rhs.get());
+    if (is_closure or is_class or is_union) {
         // if there is a type explicitly stated, then a new variable should be create no matter what
         if (not type::shouldReassign(ass->type)) {
             ass->lhs->var_ID = variable_index++;
@@ -283,7 +275,7 @@ void LexicalAnalysis::operator()(expr::Assignment *ass) {
     else std::visit(*this, expr::Type{ass->type}.variant());
 
 
-    if (not is_closure and not is_class) {
+    if (not is_closure and not is_class and not is_union) {
         // if there is a type explicitly stated, then a new variable should be create no matter what
         if (not type::shouldReassign(ass->type)) {
             ass->lhs->var_ID = variable_index++;
@@ -502,6 +494,40 @@ void LexicalAnalysis::operator()(expr::Map *map) {
 
     for (const auto& [key, value] : map->items)
         std::visit(*this, key->variant()), std::visit(*this, value->variant());
+}
+
+
+
+void LexicalAnalysis::operator()(expr::ListComp *comp) {
+    if (auto id = findVariable(comp->stringify())) {
+        comp->var_ID = *id;
+        return;
+    }
+
+    ScopeGuard sg{this};
+
+    if (comp->kind) std::visit(*this, comp->kind->variant());
+
+    // the extra argument `{}` acts as a tag for static dispatch
+    // is means "introduce new names instead of acting as assignment"
+    if (comp->var) checkPattern(comp->var.get(), {});
+
+
+    const auto was_in_loop = in_loop;
+    in_loop = true;
+    std::visit(*this, comp->body->variant());
+    in_loop = was_in_loop;
+}
+
+
+
+void LexicalAnalysis::operator()(expr::MapComp *comp) {
+    if (auto id = findVariable(comp->stringify())) {
+        comp->var_ID = *id;
+        return;
+    }
+
+    util::error();
 }
 
 

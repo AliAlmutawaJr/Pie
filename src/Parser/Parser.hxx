@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <memory>
 #include <source_location>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -77,11 +78,11 @@ class Parser {
         SPACE,
     };
 
-    std::filesystem::path root;
+    const std::filesystem::path root;
 
 
     token::Tokens tokens;
-    const typename token::Tokens::iterator iterator_beginning;
+    typename token::Tokens::iterator iterator_beginning;
     typename token::Tokens::iterator token_iterator;
     const size_t tokens_size{};
     // deque instead of vector for pop_front
@@ -271,21 +272,55 @@ public:
             }
 
 
-            // case CASCADE: {
+            case CASCADE: {
+                std::vector<expr::ExprPtr> cascaders;
 
-            //     util::error();
+                do {
+                    // cascaders.push_back(parseExpr(prec::CASCADE_VALUE));
 
-            //     std::vector<expr::ExprPtr> cascaders;
+                    auto cascader = parseExpr(prec::CASCADE_VALUE);
 
-            //     do
-            //         cascaders.push_back(parseExpr(prec::CASCADE_VALUE));
-            //     while (match(CASCADE));
+                    if (match(ASSIGN))
+                        cascader = std::make_shared<expr::Assignment>(
+                            std::move(cascader), type::builtins::Any(), parseExpr(prec::CASCADE_VALUE)
+                        );
 
-            //     // // auto accessee_ptr = dynamic_cast<expr::Name*>(accessee.get());
-            //     // // if (not accessee_ptr) util::error("Can only follow a '.' with a name: " + accessee->stringify());
+                    cascaders.push_back(std::move(cascader));
 
-            //     // return std::make_shared<expr::Access>(std::move(left), std::move(accessee_ptr)->name);
-            // }
+                } while (match(CASCADE));
+
+                auto name = std::make_shared<expr::Name>("__tmp");
+                std::vector<expr::ExprPtr> cas = {
+                    std::make_shared<expr::Assignment>(
+                        name, type::builtins::Any(), std::move(left)
+                    )
+                };
+
+                for (auto& cascader : cascaders) {
+                    if (auto n = dynamic_cast<expr::Name*>(cascader.get())) {
+                        cas.push_back(std::make_shared<expr::Access>(name, n->name));
+                    }
+                    else if (auto c = dynamic_cast<expr::Call*>(cascader.get())){
+                        if (not dynamic_cast<expr::Name*>(c->func.get()))
+                            util::error("Can only Cascade Access a name: " + c->stringify());
+
+                        c->func = std::make_shared<expr::Access>(name, c->func->stringify());
+                        cas.push_back(std::move(cascader));
+                    }
+                    else if (auto a = dynamic_cast<expr::Assignment*>(cascader.get())) {
+                        if (not dynamic_cast<expr::Name*>(a->lhs.get()))
+                            util::error("Can only Cascade Access a name: " + a->lhs->stringify());
+
+                        a->lhs = std::make_shared<expr::Access>(name, a->lhs->stringify());
+                        cas.push_back(std::move(cascader));
+                    }
+                    else util::error("Cannot Cascade Access a non-name: " + cascader->stringify());
+                }
+
+                cas.push_back(name);
+
+                return std::make_shared<expr::Block>(std::move(cas));
+            }
 
             case COLON: {
                 auto type = parseType();
@@ -317,6 +352,9 @@ public:
             }
 
             case WALRUS: {
+                if (not dynamic_cast<expr::Name*>(left.get()))
+                    util::error("Only proper names may appear on the LHS of the walrus operator `:=`: " + left->stringify());
+
                 return std::make_shared<expr::InferredAssignment>(
                     std::move(left)->stringify(),
                     parseExpr(prec::ASSIGNMENT_VALUE - 1)
@@ -1095,22 +1133,12 @@ public:
         }
 
 
-        // still could have a kind:
-        auto kind = parseExpr();
 
-        if (check(SEMI)) {
-            // `kind` was actually the body
-            return std::make_shared<expr::Loop>(
-                std::move(kind),
-                std::move(loop_var)
-            );
-        }
-
-
+        auto kind_or_body = parseExpr();
         if (match(FAT_ARROW)) {
-            // `kind` was actually the body, but this time with an else
+            // `kind_or_body` was actually the body, but this time with an else
             return std::make_shared<expr::Loop>(
-                std::move(kind),
+                std::move(kind_or_body),
                 std::move(loop_var),
                 nullptr,
                 parseExpr()
@@ -1118,15 +1146,25 @@ public:
         }
 
 
-        auto body = parseExpr();
-
-        return std::make_shared<expr::Loop>(
-            std::move(body),
-            std::move(loop_var),
-            std::move(kind),
-            match(FAT_ARROW) ? parseExpr() : nullptr
-        );
-
+        auto snapshot = checkpoint();
+        try {
+            // test to see if there is one more expression (for the body)
+            return std::make_shared<expr::Loop>(
+                parseExpr(),
+                std::move(loop_var),
+                std::move(kind_or_body)
+            );
+        }
+        catch(std::runtime_error&) {
+            restore(std::move(snapshot));
+            // no more expression. `kind_or_body` was itself the body
+            return std::make_shared<expr::Loop>(
+                std::move(kind_or_body),
+                std::move(loop_var),
+                nullptr,
+                match(FAT_ARROW) ? parseExpr() : nullptr
+            );
+        }
 
         // auto kind = match(FAT_ARROW) ? nullptr : parseExpr();
 
@@ -1256,7 +1294,7 @@ public:
     }
 
 
-    expr::ExprPtr listLiteral() {
+    expr::ExprPtr list() {
         using enum token::TokenKind;
 
         std::vector<expr::ExprPtr> exprs = { parseExpr(), };
@@ -1291,6 +1329,83 @@ public:
         consume(R_BRACE);
 
         return std::make_shared<expr::Map>(std::move(exprs));
+    }
+
+    expr::ExprPtr comprehension() {
+        using enum token::TokenKind;
+
+        consume(LOOP);
+
+        expr::Unpackment::PatternPtr loop_var;
+
+        const bool has_var = [this] {
+            using enum token::TokenKind;
+
+            for (size_t i{}; /* not atEnd(i) */; ++i) {
+                if (check(COLON  , i)) return true;
+                if (check(SEMI   , i)) return false;
+                if (check(R_BRACE, i)) return false;
+                if (check(R_PAREN, i)) return false;
+
+
+                for (ssize_t balance = check(L_BRACE, i); balance; ) {
+                    balance += check(L_BRACE, ++i);
+                    balance -= check(R_BRACE, i);
+                }
+
+                for (ssize_t balance = check(L_PAREN, i); balance; ) {
+                    balance += check(L_PAREN, ++i);
+                    balance -= check(R_PAREN, i);
+                }
+            }
+        }();
+
+        // indicates a loop variable
+        if (has_var) {
+            loop_var = parseUnpackmentPattern();
+            consume(COLON);
+        }
+
+
+        // non-expr patterns MUST have loop kind to destructure!
+        if (loop_var and not dynamic_cast<expr::Unpackment::Expr*>(loop_var.get())) {
+            auto kind = parseExpr();
+            consume(FAT_ARROW);
+            auto body = parseExpr();
+
+            consume(R_BRACE);
+
+            return std::make_shared<expr::ListComp>(
+                std::move(body    ),
+                std::move(loop_var),
+                std::move(kind    )
+            );
+        }
+
+
+        // body after the `=>`. No kind.
+        if (match(FAT_ARROW)) {
+            auto body = parseExpr();
+            consume(R_BRACE);
+            return std::make_shared<expr::ListComp>(
+                std::move(body),
+                std::move(loop_var)
+            );
+        }
+
+        // loop variable is a regular expression
+        // loop could still have a kind:
+        auto kind = parseExpr();
+        consume(FAT_ARROW);
+        auto body = parseExpr();
+
+        consume(R_BRACE);
+
+        return std::make_shared<expr::ListComp>(
+            std::move(body),
+            std::move(loop_var),
+            std::move(kind)
+        );
     }
 
 
@@ -1377,6 +1492,28 @@ public:
     }
 
 
+    bool isScope() {
+        using enum token::TokenKind;
+
+        for (size_t i{}; /* not atEnd(i) */; ++i) {
+            if (check(SEMI   , i)) return true;
+
+            if (check(R_BRACE, i)) return false;
+            if (check(R_PAREN, i)) return false;
+
+
+            for (ssize_t balance = check(L_BRACE, i); balance; ) {
+                balance += check(L_BRACE, ++i);
+                balance -= check(R_BRACE, i);
+            }
+
+            for (ssize_t balance = check(L_PAREN, i); balance; ) {
+                balance += check(L_PAREN, ++i);
+                balance -= check(R_PAREN, i);
+            }
+        }
+    }
+
 
     bool isUnpackment() {
         using enum token::TokenKind;
@@ -1415,15 +1552,15 @@ public:
             if (check(COLON, i)) {
                 for (size_t a = i + 1; /* not atEnd(a) */; ++a) {
                     // onto next element, it's a map
-                    if (check(COMMA  , a)) return true ;
+                    if (check(COMMA  , a)) return true;
 
                     // closed the map, it's a map
-                    if (check(R_BRACE, a)) return true ;
+                    if (check(R_BRACE, a)) return true;
 
                     // this time the colon indicates a declaration {n1: n2: n3 = 4};
                     // this does NOT indicate a qualified name (namespace accesss)
                     // since 2 colons back to back are tokenized as TokenKind::SPACE_RESOLVE
-                    if (check(COLON  , a)) return true ;
+                    if (check(COLON  , a)) return true;
 
                     // proly a declaration, it's a scope..i think :c
                     if (check(SEMI   , a)) return false;
@@ -1460,45 +1597,42 @@ public:
     }
 
 
+
     expr::ExprPtr LBrace() {
         using enum token::TokenKind;
 
+        // empty list `{}`
         if (match(R_BRACE)) return std::make_shared<expr::List>();
 
-        if (match(COLON)) {
-            consume(R_BRACE);
-            return std::make_shared<expr::Map>();
-        }
-
-
-        if (isUnpackment()) return unpackment();
-        if (       isMap()) return        map();
+        // empty map `{:}`
+        if (match(COLON)) return consume(R_BRACE), std::make_shared<expr::Map>();
 
 
         // if there is at least one top-level semicolon, it's a scope!
-        const bool is_scope = [this] {
-            using enum token::TokenKind;
-
-            for (size_t i{}; /* not atEnd(i) */; ++i) {
-                if (check(SEMI   , i)) return true;
-
-                if (check(R_BRACE, i)) return false;
-                if (check(R_PAREN, i)) return false;
+        if (isScope()     ) return handleScope();
 
 
-                for (ssize_t balance = check(L_BRACE, i); balance; ) {
-                    balance += check(L_BRACE, ++i);
-                    balance -= check(R_BRACE, i);
-                }
+        if (isUnpackment()) return  unpackment();
 
-                for (ssize_t balance = check(L_PAREN, i); balance; ) {
-                    balance += check(L_PAREN, ++i);
-                    balance -= check(R_PAREN, i);
-                }
+
+        const auto funcs = {
+            &Parser::comprehension,
+            &Parser::map,
+            &Parser::list,
+        };
+
+        for (const auto& func : funcs) {
+            auto snapshot = checkpoint();
+            try {
+                return (this->*func)();
             }
-        }();
+            catch(const std::runtime_error&) {
+                restore(std::move(snapshot));
+            }
+        }
 
-        return is_scope? handleScope() : listLiteral();
+
+        throw; // throw last error 
     }
 
 
@@ -1653,6 +1787,7 @@ public:
         return std::make_shared<expr::Name>(std::move(token).text);
     }
 
+
     expr::ExprPtr parsePrefixOperator(token::Token token) {
         switch (const auto& op = findPrefixOp(token.text); op->type()) {
             using enum token::TokenKind;
@@ -1712,6 +1847,7 @@ public:
             p += ']';
         }
     }
+
 
 
     void checkOperatpr(const token::TokenKind kind, const std::string& name, const std::string& high, const std::string& low) {
@@ -1836,6 +1972,7 @@ public:
 
         return p;
     }
+
 
     expr::ExprPtr exfixOperator() {
         using enum token::TokenKind;
@@ -2070,6 +2207,7 @@ public:
         );
     }
 
+
     token::Token consume() {
         lookAhead();
 
@@ -2077,6 +2215,7 @@ public:
         red.pop_front();
         return token;
     }
+
 
     token::Token consume(const token::TokenKind exp, const std::source_location& loc = std::source_location::current()) {
         using std::operator""s;
@@ -2089,6 +2228,7 @@ public:
 		return consume();
 	}
 
+
     token::Token consume(const std::string& exp, const std::source_location& loc = std::source_location::current()) {
         using std::operator""s;
 
@@ -2100,6 +2240,7 @@ public:
 		return consume();
 	}
 
+
     [[nodiscard]] bool match(const token::TokenKind exp) {
 		const token::Token token = lookAhead();
 
@@ -2109,6 +2250,7 @@ public:
 		return true;
 	}
 
+
     [[nodiscard]] bool match(const std::string_view text) {
 		const token::Token token = lookAhead();
 
@@ -2117,6 +2259,7 @@ public:
 		consume();
 		return true;
     }
+
 
     token::Token lookAhead(const size_t distance = 0, const std::source_location& loc = std::source_location::current()) {
         while (distance >= red.size()) {
@@ -2128,13 +2271,16 @@ public:
         return red[distance];
     }
 
+
     [[nodiscard]] bool check(const token::TokenKind exp, const size_t i = {}, const std::source_location& loc = std::source_location::current()) {
         return lookAhead(i, loc).kind == exp;
     }
 
+
     [[nodiscard]] bool check(const std::string_view exp, const size_t i = {}, const std::source_location& loc = std::source_location::current()) {
         return lookAhead(i, loc).text == exp;
     }
+
 
     [[nodiscard]] int getPrecedence() {
 
@@ -2265,12 +2411,6 @@ public:
         }
 
 
-        // for (const auto& [_, ns] : env.front().first.spaces) {
-        //     if (const auto s = matchChain(names, ns.get()))
-        //         return s;
-        // }
-
-
         for (const auto& [_, ns] : global_spaces) {
             if (const auto s = matchChain(names, ns.get()))
                 return s;
@@ -2288,12 +2428,14 @@ public:
         return false;
     }
 
+
     bool opsContain(const std::string& op) const {
         for (const auto& ops : env)
             if (ops.first.op_env.contains(op)) return true;
 
         return false;
     }
+
 
     bool prefixOpsContain(const std::string& op) const {
         for (const auto &e : env)
@@ -2338,6 +2480,45 @@ public:
         return consolidated;
     }
 
+
+
+    struct Snapshot {
+        token::Tokens tokens;
+        typename std::iterator_traits<token::Tokens::iterator>::difference_type token_index;
+        std::deque<token::Token> red;
+
+
+
+        std::vector<std::pair<Env, EnvTag>> env;
+
+
+        // std::unordered_map<std::string, std::shared_ptr<NameSpace>> global_spaces;
+        // std::vector<NameSpace*> current_space;
+
+        Snapshot(
+            token::Tokens ts,
+            typename std::iterator_traits<token::Tokens::iterator>::difference_type i,
+            std::deque<token::Token> read,
+            std::vector<std::pair<Env, EnvTag>> env
+        ) :
+        tokens{std::move(ts)}             ,
+        token_index{i},
+        red{std::move(read)},
+        env{std::move(env)}
+        { }
+    };
+
+    [[nodiscard]] Snapshot checkpoint() {
+        return {tokens, std::distance(iterator_beginning, token_iterator), red, env};
+    }
+
+    void restore(Snapshot&& snapshot) {
+        tokens             = std::move(snapshot).tokens;
+        iterator_beginning = tokens.begin();
+        token_iterator     = std::next(iterator_beginning, std::move(snapshot).token_index);
+        red                = std::move(snapshot).red;
+        env                = std::move(snapshot).env;
+    }
 
 };
 

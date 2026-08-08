@@ -828,7 +828,6 @@ make
  | |                     
 (___)                    
  -->
-- [ ] Cascade operator `..`
 - [ ] Fix variadic expansion
 - [ ] Breaking Out of Nested Loops
 - [ ] Use Big Int instead of `int64_t`
@@ -846,6 +845,7 @@ make
 ---
 
 ### Done
+- [x] Cascade operator `..`
 - [x] Importing Operators
 - [x] Compile to WASM & a web interface (YAAAY)
 - [x] Remove preprocessor

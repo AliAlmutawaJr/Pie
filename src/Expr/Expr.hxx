@@ -170,6 +170,7 @@ struct Map : Expr {
 };
 
 
+
 struct Expansion : Expr {
     ExprPtr pack;
 
@@ -657,22 +658,11 @@ struct Loop : Expr {
     : kind{std::move(k)}, var{std::move(v)}, body{std::move(b)}, els{std::move(e)}
     { }
 
-    // Loop(ExprPtr b, ExprPtr v = nullptr, ExprPtr k = nullptr, ExprPtr e = nullptr) noexcept
-    // : kind{std::move(k)}, var{std::move(v)}, body{std::move(b)}, els{std::move(e)}
-    // { }
-
-    // Loop(ExprPtr b, Unpackment::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr e = nullptr) noexcept
-    // : kind{std::move(k)}, var{std::move(v)}, body{std::move(b)}, els{std::move(e)}
-    // { }
-
-
-
-
 
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "loop ";
 
-        if (var) s += Unpackment::stringifyPattern(var.get()) + (kind ? " : " : ": ");
+        if (var) s += Unpackment::stringifyPattern(var.get(), indent + 4) + (kind ? " : " : ": ");
 
         if (kind) s += kind->stringify(indent + 4) + ' ';
 
@@ -688,13 +678,13 @@ struct Loop : Expr {
     }
 
     bool involvesName(const std::string_view sv) const override {
-            if (var and Unpackment::patternInvolves(var.get(), sv)) return true;
+        if (sv == stringify()) return true;
+        if (var and Unpackment::patternInvolves(var.get(), sv)) return true;
+        if (kind and kind->involvesName(sv)) return true;
+        if (body->involvesName(sv)) return true;
+        if (els and els->involvesName(sv)) return true;
 
-
-        return sv == stringify()
-            or kind->involvesName(sv)
-            or body->involvesName(sv)
-            or els ->involvesName(sv);
+        return false;
     }
 
     Node variant() override { return this; }
@@ -739,6 +729,41 @@ struct Continue : Expr {
 };
 
 
+struct ListComp : Expr {
+    Unpackment::PatternPtr var;
+    ExprPtr kind;
+    ExprPtr body;
+
+    ListComp(ExprPtr b, Unpackment::PatternPtr v = nullptr, ExprPtr k = nullptr) noexcept
+    : var{std::move(v)}, kind{std::move(k)}, body{std::move(b)}
+    { }
+
+
+    std::string stringify(const size_t indent = 0) const override {
+        std::string s = "{loop ";
+
+        if (var ) s += Unpackment::stringifyPattern(var.get(), indent + 4);
+        if (kind) s += ' ' + kind->stringify(indent + 4);
+
+        return s + " => " + body->stringify(indent + 4) + "}";
+    }
+
+
+    bool involvesName(const std::string_view sv) const override {
+        return sv == stringify()
+            or (var and sv == Unpackment::stringifyPattern(var.get()))
+            or (kind and kind->involvesName(sv))
+            or body->involvesName(sv);
+    }
+
+    Node variant() override { return this; }
+};
+
+struct MapComp : Expr {
+
+};
+
+
 struct Access : Expr {
     ExprPtr var;
     std::string name;
@@ -758,28 +783,6 @@ struct Access : Expr {
     Node variant() override { return this; }
 };
 
-
-struct Cascade : Expr {
-    ExprPtr var;
-    std::vector<ExprPtr> members;
-    // ExprPtr member;
-
-    Cascade(ExprPtr v, std::vector<ExprPtr> m) noexcept
-    : var{std::move(v)}, members{std::move(m)}
-    {}
-
-    std::string stringify(const size_t = 0) const override {
-        // return var->stringify(indent) + ".." + 
-        return "cascade";
-    }
-
-    bool involvesName(const std::string_view) const override {
-        // return sv == stringify() or var->involvesName(sv) or sv == member->involvesName(sv);
-        return false;
-    }
-
-    Node variant() override { return this; }
-};
 
 
 struct Namespace : Expr {
@@ -924,8 +927,10 @@ struct Import : Expr {
     : path{std::move(p)} {}
 
     std::string stringify(const size_t = 0) const override {
-        std::string s;
-        for (const char c : path.string())
+        auto path_str = path.string();
+        std::string s = path_str[0] == '/' ? "" : std::string{path_str[0]};
+
+        for (const char c : path.string() | std::views::drop(1)) 
             s.push_back(c == '/' ? '.' : c);
 
         return "import " + s;

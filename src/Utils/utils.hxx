@@ -1,11 +1,9 @@
 #pragma once
 
-#include <iostream>
 #include <filesystem>
 #include <string>
 #include <source_location>
 #include <format>
-#include <print>
 #include <concepts>
 #include <stdexcept>
 
@@ -36,14 +34,17 @@ template <typename Except = std::runtime_error, bool print_loc = true>
 {
     // if the err msg is empty, print the location no matter what
     if (msg == " ") {
-        std::print(std::cerr, "\033[1m{}:{}:{}: \033[31merror:\033[0m ", location.file_name(), location.line(), location.column());
-        throw Except{std::string{"[no diagnostic]. If you see this, please file a bug report!"}};
+        std::string err_loc = std::format("\033[1m{}:{}:{}: \033[31merror:\033[0m ", location.file_name(), location.line(), location.column());
+        throw Except{err_loc + "[no diagnostic]. If you see this, please file a bug report!"};
     }
 
 
     #if not NO_ERR_LOC
-    if constexpr (print_loc)
-        std::print(std::cerr, "\033[1m{}:{}:{}: \033[31merror:\033[0m ", location.file_name(), location.line(), location.column());
+    if constexpr (print_loc) {
+        std::string err_loc = std::format("\033[1m{}:{}:{}: \033[31merror:\033[0m ", location.file_name(), location.line(), location.column());
+        throw Except{err_loc + std::string{msg}};
+    }
+    else // attaches the throw expression bellow
     #endif
 
 

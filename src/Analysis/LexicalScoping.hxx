@@ -90,9 +90,8 @@ public:
     void operator()(expr::Call*);
 
     void operator()(expr::List*);
+
     void operator()(expr::Map*);
-    void operator()(expr::ListComp*);
-    void operator()(expr::MapComp*);
 
     void operator()(expr::Expansion*);
 
