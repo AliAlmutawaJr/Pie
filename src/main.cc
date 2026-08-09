@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
         else if (argv[1] == "-a"sv or argv[1] == "--ast"sv    ) print_parsed       = true ;
         else if (argv[1] == "-h"sv or argv[1] == "--help"sv   ) print_help         = true ;
         else if (argv[1] == "-r"sv or argv[1] == "--norun"sv  ) norun              = true;
-        else if (argv[1] == "-c"sv or argv[1] == "--vm"sv     ) vm                 = true ;
+        else if (argv[1] == "--vm"sv                          ) vm                 = true ;
         else if (argv[1] == "-c"sv or argv[1] == "--command"sv) command            = true ;
         else if (argv[1] == "-repl"sv                         ) repl               = true ;
         else fname = argv[1];
