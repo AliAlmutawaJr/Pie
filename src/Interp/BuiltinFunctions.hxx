@@ -560,7 +560,10 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             TypeList<double, BigInt>,
             TypeList<double, double>
         >
-    >{},
+    >{}
+
+#if not WEB_PIE
+,
 
     //* FFI 
     MapEntry<
@@ -741,6 +744,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             TypeList<BigInt>
         >
     >{}
+
+#endif
+
 );
 
 

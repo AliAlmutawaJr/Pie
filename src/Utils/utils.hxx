@@ -17,6 +17,7 @@
     #include <windows.h>
 #elif defined(__linux__)
     #include <unistd.h>
+#elif WEB_PIE
 #else
     #error "unkown operating system!"
 #endif

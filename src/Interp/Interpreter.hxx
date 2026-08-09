@@ -20,11 +20,13 @@
 #include <dlfcn.h>
 
 #include <stdx/tuple.hpp>
-#include <ffi.h>
 
+#if not WEB_PIE
+#include <ffi.h>
+#include "FFI.hxx"
+#endif
 
 #include "BuiltinFunctions.hxx"
-#include "FFI.hxx"
 
 #include "../Utils/utils.hxx"
 #include "../Utils/Exceptions.hxx"
@@ -4076,6 +4078,8 @@ There are no mistakes with art.)";
             arity_check(0);
             if (name == "input_str"           ) return execute<0>(stdx::get<S<"input_str"       >>(functions).value, {}, this);
             if (name == "input_int"           ) return execute<0>(stdx::get<S<"input_int"       >>(functions).value, {}, this);
+
+            #if not WEB_PIE
             if (name == "ffi_type_int"        ) return execute<0>(stdx::get<S<"ffi_type_int"    >>(functions).value, {}, this);
             if (name == "ffi_type_pointer"    ) return execute<0>(stdx::get<S<"ffi_type_pointer">>(functions).value, {}, this);
             if (name == "ffi_type_cstring"    ) return execute<0>(stdx::get<S<"ffi_type_cstring">>(functions).value, {}, this);
@@ -4093,6 +4097,7 @@ There are no mistakes with art.)";
             if (name == "ffi_type_sint64"     ) return execute<0>(stdx::get<S<"ffi_type_sint64" >>(functions).value, {}, this);
             if (name == "ffi_type_struct"     ) return execute<0>(stdx::get<S<"ffi_type_struct" >>(functions).value, {}, this);
             if (name == "ffi_type_complex"    ) return execute<0>(stdx::get<S<"ffi_type_complex">>(functions).value, {}, this);
+            #endif
         }
 
         if (name == "panic") {
@@ -4152,9 +4157,11 @@ There are no mistakes with art.)";
             return builtinConcat(std::move(args));
         }
 
+        #if not WEB_PIE
         if (name == "ffi_call") {
             return ffiCall(call, std::move(args), std::move(expand_at));
         }
+        #endif
 
 
 
@@ -4240,8 +4247,11 @@ There are no mistakes with art.)";
         if (name == "read_line" ) return execute<1>(stdx::get<S<"read_line" >>(functions).value, {value1}, this);
         if (name == "read_word" ) return execute<1>(stdx::get<S<"read_word" >>(functions).value, {value1}, this);
 
+
+        #if not WEB_PIE
         if (name == "dlopen"       ) return execute<1>(stdx::get<S<"dlopen"    >>(functions).value, {value1}, this);
         if (name == "ptr_to_string") return execute<1>(stdx::get<S<"ptr_to_string">>(functions).value, {value1}, this);
+        #endif
 
         // all the rest of those funcs expect 2 arguments
 
@@ -4291,7 +4301,10 @@ There are no mistakes with art.)";
             if (name == "eq"      ) return execute<2>(stdx::get<S<"eq"      >>(functions).value, {value1, value2}, this);
             if (name == "leq"     ) return execute<2>(stdx::get<S<"leq"     >>(functions).value, {value1, value2}, this);
             if (name == "lt"      ) return execute<2>(stdx::get<S<"lt"      >>(functions).value, {value1, value2}, this);
+
+            #if not WEB_PIE
             if (name == "dlsym"   ) return execute<2>(stdx::get<S<"dlsym"   >>(functions).value, {value1, value2}, this);
+            #endif
 
             util::error();
         }
@@ -4441,6 +4454,7 @@ There are no mistakes with art.)";
     }
 
 
+    #if not WEB_PIE
     value::Value ffiCall(
         const expr::Call *call,
         std::vector<expr::ExprPtr> args,
@@ -4705,6 +4719,7 @@ There are no mistakes with art.)";
 
         return ret_value;
     }
+    #endif
 
 
 
