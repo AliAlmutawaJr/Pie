@@ -14,15 +14,19 @@
 
 ### Index:
 - [Variables](#variables)
+- [Unpackments](#unpackments)
 - [Closures](#closures)
 - [Classes](#classes)
+- [Cascade](#cascade)
 - [Unions](#unions)
 - [Collections](#collections)
+- [Comprehensions](#comprehensions)
 - [Loops](#loops)
 - [Match Expressions](#match-expressions)
 - [Namespaces](#namespaces)
 - [Scopes](#scopes)
 - [Import System](#import-system)
+- [The Standard Library](#the-standard-library)
 - [Operators](#operators)
 - [Overloading](#overloading)
 - [Packs](#packs)
@@ -52,6 +56,39 @@ For type inference, use the walrus operator `:=`:
 x := 1;
 ```
 `x` has type `Int`.
+
+
+## Unpackments
+Aka "Structured Bindings" in C++, and "Object destructuring" in JS.
+
+You can unpack an Object/List using the following syntax:
+```pie
+list = {1, 2, 3};
+{first, second, third} = list;
+```
+
+Unpackments may also introduce a pack:
+```pie
+list = {1, 2, 3};
+{first, ...rest} = list;
+```
+Note that packs may be empty!
+
+
+For maps, the syntax differs to match the map syntax in Pie:
+```pie
+map = {"one": 1, "two": 2, "three": 3};
+{key1: val1, key2: val2} = map;
+```
+Map unpackments may **NOT** introduce a pack.
+
+Unpackments may be used with the walrus operator to infer the type of the RHS.
+
+<!--
+I see you poking here
+If you wanna know, the name unpackments comes from:
+unpack + assignment = unpackment
+-->
 
 ## Closures
 
@@ -148,6 +185,23 @@ z: U = "Hello";
 Unions also work with user-defined types.
 
 
+## Cascade
+The cascade operator allows accessing a data member on an object while also yielding the original object bacl:
+```pie
+Human = class {
+    name = "";
+    age  = 0 ;
+
+    setName = (n) => name = n;
+    setAge  = (a) => age  = a;
+};
+
+h = Human()..setName("Pie")..setAge(3);
+```
+
+This allows for builder pattern baked-into the language.
+
+
 ## Collections
 There are 2 collections in Pie
 
@@ -169,20 +223,34 @@ __builtin_set(map, key2, value4); .: changes key2's value
 __builtin_set(map, key3, value3); .: inserts a new value
 ```
 
+## Comprehensions:
+There are 2 comprehensions in Pie
+
+#### List Comprehensions
+```pie
+l = { loop i : 10 => i };
+```
+This creates a list with elements from `0` to `9`.
+
+#### Map Comprehensions
+```pie
+map = { loop i : 10 => i : i * 2 };
+```
+This creates a map from numbers from `0` to `9` to their doubles.
 
 ## Loops
 First, let's explore the general syntax of the loop construct, then we'll explore the other kinds.
 
 
 ```pie
-loop 10 => {
+loop 10 {
     __builtin_print("Hi");
 };
 ```
 This program prints "Hi" 10 times.\
 We can also introduce a loop variable:
 ```pie
-loop 10 => i {
+loop i : 10 {
     __builtin_print(i);
 };
 ```
@@ -371,6 +439,22 @@ use space ns;
 __builtin_print(x);
 ```
 
+### `use x::` directive
+
+The `use x::` directive pulls operators the names in from a namespace into the current namespace. It works as if all the names inside the given namespace had a `use` declaration applied on them:
+```pie
+space ns {
+    x = 1;
+    y = "hi";
+    z = 3.14;
+};
+
+use space ns;
+
+__builtin_print(x);
+```
+
+
 ## Scopes
 
 Since everything is an expression, so are scopes! They take the value of the last expression in them.\
@@ -434,6 +518,15 @@ in module
 `local_space` is not accessible from `main.pie` since it isn't a top level namespace.
 The `import` expression yields the last expression inside the imported file.
 Note that `.pie` is omitted in the `import` directive.
+
+
+
+## The Standard Library
+### The `std` Module
+todo
+
+### The `ffi` Module
+todo
 
 
 ## Operators
@@ -775,11 +868,14 @@ this isn't
 - `{ }`
 - `,`
 - `.`
+- `..`
 - `...`
-- `=`
-- `=>`
 - `:`
+- `::`
 - `;`
+- `=`
+- `:=`
+- `=>`
 <!-- - `..` -->
 
 ## Install
@@ -810,7 +906,7 @@ make
 #### in order of priority
 
 
-- [ ] File IO
+
 - [ ] Simplify Closure Captures without performance penalty (internal)
 - [ ] Simplify Pack Expansion (internal)
 - [ ] Fix variadic expansion
@@ -830,6 +926,7 @@ make
 ---
 
 ### Done
+- [x] File IO
 - [x] Zen of Pie (with the pie ascii art):
 - [x] Cascade operator `..`
 - [x] Importing Operators
