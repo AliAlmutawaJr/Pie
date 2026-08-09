@@ -116,16 +116,21 @@ test: checklibs run_tests
 
 # ============================== Web target ==============================
 
-$(web_OBJ_DIR)/main.o: src/main.cc
-	@mkdir -p $(dir $@)
-	$(WEBCC) $(ARGS) $(VER) $(INCLUDE) $(OPT) -DWEB_PIE -MMD -MP -c $< -o $@
+web: checklibs
+	$(WEBCC) $(WEB_ARGS) $(VER) $(INCLUDE)  $(OPT) src/main.cc $(SRC) -o $(WEB_OUTPUT_NAME) -DWEB_PIE
 
--include $(web_OBJ_DIR)/main.d
 
-$(WEB_OUTPUT_NAME): $(web_OBJS) $(web_OBJ_DIR)/main.o
-	$(WEBCC) $(VER) $(web_OBJS) $(web_OBJ_DIR)/main.o $(WEB_ARGS) $(INCLUDE) $(LIBS) $(OPT) -o $(WEB_OUTPUT_NAME)
 
-web: checklibs $(WEB_OUTPUT_NAME)
+# $(web_OBJ_DIR)/main.o: src/main.cc
+# 	@mkdir -p $(dir $@)
+# 	$(WEBCC) $(ARGS) $(VER) $(INCLUDE) $(OPT) -DWEB_PIE -MMD -MP -c $< -o $@
+
+# -include $(web_OBJ_DIR)/main.d
+
+# $(WEB_OUTPUT_NAME): $(web_OBJS) $(web_OBJ_DIR)/main.o
+# 	$(WEBCC) $(VER) $(web_OBJS) $(web_OBJ_DIR)/main.o $(WEB_ARGS) $(INCLUDE) $(LIBS) $(OPT) -o $(WEB_OUTPUT_NAME)
+
+# web: checklibs $(WEB_OUTPUT_NAME)
 
 
 # ============================== GH Actions ==============================
