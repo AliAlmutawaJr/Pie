@@ -64,7 +64,7 @@ public:
                 instructions.pop_back();
                 break;
 
-                default:
+                default:;
                 // instructions.push_back(Code::POP);
             }
         }
