@@ -69,6 +69,8 @@ inline const char* stringify(const Code code) {
         case JUMP      : return "JUMP"      ;
         case HALT      : return "HALT"      ;
     }
+
+    return "<UNKOWN>";
 }
 
 
