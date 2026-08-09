@@ -759,18 +759,6 @@ public:
         // was this a bug??
         // *get<value::ValuePtr>(space->members[sa->name.ID]) = std::move(value);
         return {*get<value::ValuePtr>(space->members[sa->name.ID]), type};
-
-
-        // auto value = std::visit(*this, ass->rhs->variant());
-
-        // auto& [name, val_ptr, type] = env[sa->name.ID];
-
-        // *val_ptr = typeCheck(value, std::move(type),
-        //     "In assignment: " + ass->stringify() +
-        //     "\nType mis-match! Expected: " + type->text() + ", got: " + typeOf(value)->text()
-        // );
-
-        // return *val_ptr;
     }
 
 
@@ -1058,7 +1046,8 @@ public:
         const auto& expr_str,
         std::vector<ValueType>& valuetypes,
         const value::Value& value,
-        const size_t at_least
+        const size_t at_least,
+        const bool has_pack = false
     ) {
 
         if (std::holds_alternative<value::Object>(value)) {
@@ -1090,6 +1079,17 @@ public:
             for (const auto& [key, value] : map.items->map) {
                 auto list = value::makeList({key, value});
                 valuetypes.emplace_back(list, typeOf(list));
+            }
+        }
+        else if (std::holds_alternative<value::Pack>(value)) {
+            const auto& list = get<value::Pack>(value);
+
+            if (not has_pack and list->values.size() != at_least) 
+                util::error("Packs must be unpacked exactly: " + expr_str());
+
+
+            for (const auto& value : list->values) {
+                valuetypes.emplace_back(value, typeOf(value));
             }
         }
     }
@@ -1198,7 +1198,7 @@ public:
 
 
             std::vector<ValueType> valuetypes;
-            unpackIntoList(expr_str, valuetypes, valuetype.value, list->patterns.size() - pack_index.has_value());
+            unpackIntoList(expr_str, valuetypes, valuetype.value, list->patterns.size() - pack_index.has_value(), pack_index.has_value());
             const size_t size = valuetypes.size(); // true size
 
             if (not pack_index) {
@@ -1877,14 +1877,14 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::SpaceAccess *sa) {
-        if (const auto& var = getVar(sa->var_ID); var) return *var;
+        // x::z` Don't need to check if `z` is inside space `x`.
+        // Lexical Analysis should already have taken care of it
+
+        // Assigning to qualified names doesn't assign to the stringification of the expression,
+        // So, need to check for this.
+        // if (const auto& var = getVar(sa->var_ID); var) return *var;
 
         const auto space = findNS(sa->spaces, sa->global);
-
-        // lexical scopign must've taken care of that!
-        // if (not namespaces[space].contains(sa->name.ID)) util::error("Name `" + sa->name.name + "` with ID [" + std::to_string(sa->name.ID) + "] not found in space " + space);
-
-
         const auto& member = space->members[sa->name.ID];
         return {*get<value::ValuePtr>(member), get<type::TypePtr>(member)};
     }
@@ -1913,13 +1913,25 @@ There are no mistakes with art.)";
 
         const auto& [type_name, patterns] = get<expr::Match::Case::Pattern::Structure>(pattern.pattern);
 
-        const auto var = getVar(type_name.ID);
+        std::optional<ValueType> var;
+        if (dynamic_cast<expr::Name*>(type_name.get())) {
+            var = getVar(type_name->var_ID);
+        }
+        else {
+            auto sa = dynamic_cast<expr::SpaceAccess*>(type_name.get());
+
+            const auto space = findNS(sa->spaces, sa->global);
+            const auto& member = space->members[sa->name.ID];
+            var = {*get<value::ValuePtr>(member), get<type::TypePtr>(member)};
+        }
+
+        // shouldn't happen now that we have lexical analysis
         if (not var)
-            util::error("Name `" + type_name.name + "` in match expression does not name a constructor"); // shouldn't happen now that we have lexical analysis
+            util::error("Name `" + type_name->stringify() + "` in match expression does not name a constructor");
 
 
         if (not std::holds_alternative<type::TypePtr>(var->value) and not type::isClass(get<type::TypePtr>(var->value)))
-            util::error("Name `" + type_name.name + "` in match expression does not name a constructor");
+            util::error("Name `" + type_name->stringify() + "` in match expression does not name a constructor");
 
 
         const auto& type = get<type::TypePtr>(var->value);

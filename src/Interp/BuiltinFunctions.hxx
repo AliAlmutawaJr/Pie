@@ -335,14 +335,18 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
                     return a.elts->values[ind]; 
                 }
-
                 else if constexpr (std::is_same_v<T, value::Map>) {
                     if (not a.items->map.contains(ind))
                         util::error("Accessing Map '" + stringify(a) + "' at key `" + stringify(ind) + "` which doesn't exist!");
 
                     return a.items->map.at(ind);
                 }
+                else if constexpr (std::is_same_v<T, value::Pack>) {
+                    if (ind < 0 or size_t(ind) >= a->values.size())
+                        util::error("Accessing list '" + stringify(a) + "' at index '" + std::to_string(ind) + "' which is out of bounds!");
 
+                    return a->values[ind]; 
+                }
                 else { // if constexpr (std::is_same_v<std::remove_cvref_t<decltype(a)>, std::string>) {
                     if (ind < 0 or size_t(ind) >= a.length())
                         util::error("Accessing string '" + a + "' at index '" + std::to_string(ind) + "' which is out of bounds!");

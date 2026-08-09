@@ -210,9 +210,9 @@ public:
                 if (match(NAMESPACE)) return useSpace();
                 if (
                     check(PREFIX) or
-                    check(INFIX)  or
+                    check(INFIX ) or
                     check(SUFFIX) or
-                    check(EXFIX)  or
+                    check(EXFIX ) or
                     check(MIXFIX)
                 )
                     return useFix(consume().kind);
@@ -221,15 +221,8 @@ public:
 
             // global namespace
             case SCOPE_RESOLVE: {
-                constexpr bool is_global_access = true;
-
-                std::vector<std::string> spaces = {consume(NAME).text};
-                while (match(SCOPE_RESOLVE)) spaces.push_back(consume(NAME).text);
-
-                std::string name = std::move(spaces).back();
-                spaces.pop_back();
-
-                return std::make_shared<expr::SpaceAccess>(is_global_access, std::move(spaces), std::move(name));
+                constexpr auto GLOBAL_ACCESS = true;
+                return namespaceAccess<GLOBAL_ACCESS>(consume(NAME).text);
             }
 
             case COLON: return std::make_shared<expr::Type>(parseType());
@@ -338,20 +331,12 @@ public:
 
 
             case SCOPE_RESOLVE: {
-                constexpr bool is_global_access = false;
-
+                constexpr bool NOT_GLOBAL_ACCESS = false;
 
                 auto accessee_ptr = dynamic_cast<expr::Name*>(left.get());
                 if (not accessee_ptr) util::error<except::SyntaxError>("Scope resolution operator '::' applied on non-name: " + left->stringify());
 
-
-                std::vector<std::string> spaces = {accessee_ptr->name, consume(NAME).text};
-                while (match(SCOPE_RESOLVE)) spaces.push_back(consume(NAME).text);
-
-                std::string name = std::move(spaces).back();
-                spaces.pop_back();
-
-                return std::make_shared<expr::SpaceAccess>(is_global_access, std::move(spaces), std::move(name));
+                return namespaceAccess<NOT_GLOBAL_ACCESS>(accessee_ptr->name);
             }
 
             case WALRUS: {
@@ -533,29 +518,31 @@ public:
         using Patterns  = expr::Match::Case::Pattern::Patterns;
 
         bool has_name{}, has_type{}, has_valu{};
+        bool is_name_expr{};
 
-        std::string name;
-
-        // const bool name_expr = not check(ASSIGN) and not check(COLON) and [this] {
-        //     for (size_t i{}; not atEnd(); ++i) {
-        //         if (check(  L_PAREN, i)) return false; // pattern, not a name
-        //         if (check(   ASSIGN, i)) return true;
-        //         if (check(    COLON, i)) return true;
-        //         if (check(FAT_ARROW, i)) return true;
-        //     }
-        //     return true;
-        // }();
-
-        // // if (not check(ASSIGN) and not check(COLON))
-        // if (name_expr) {
-        //     constexpr auto in_match = true;
-        //     name = parseExpr<in_match>(0)->stringify();
+        // std::string name;
+        // if (check(NAME)) {
+        //     name = consume(NAME).text;
         //     has_name = true;
         // }
-        // else
 
-        if (check(NAME)) {
-            name = consume(NAME).text;
+
+        expr::ExprPtr name;
+        if (check(NAME) and check(SCOPE_RESOLVE, 1)) {
+            constexpr auto NOT_GLOBAL_ACCESS = false;
+            auto text = consume(NAME).text;
+            consume(SCOPE_RESOLVE);
+            name = namespaceAccess<NOT_GLOBAL_ACCESS>(std::move(text));
+            has_name = true;
+        }
+        else if (check(NAME)) { // just a name
+            name = std::make_shared<expr::Name>(consume(NAME).text);
+            has_name = true;
+            is_name_expr = true;
+        }
+        else if (match(SCOPE_RESOLVE)) {
+            constexpr auto GLOBAL_ACCESS = true;
+            name = namespaceAccess<GLOBAL_ACCESS>(consume(NAME).text);
             has_name = true;
         }
 
@@ -563,6 +550,9 @@ public:
         // base case
         if (not match(L_PAREN)) {
             // trying to write code that avoids move
+
+            if (has_name and not is_name_expr)
+                util::error<except::SyntaxError>("Cannot introduce a qualified name in a pattern: " + name->stringify());
 
             auto type = type::builtins::_();
             if (match(COLON)) {
@@ -577,16 +567,17 @@ public:
             }
 
             if (not (has_name or has_type or has_valu))
-                util::error<except::SyntaxError>("Match expression case doesn't contain a pattern");
+                util::error<except::SyntaxError>("Match expression case doesn't contain a pattern!");
 
             return std::make_unique<Pattern>(
                 Single{
-                    {std::move(name)},
+                    {name ? name->stringify() : ""},
                     std::move(type),
                     std::move(value),
                 }
             );
         }
+
 
         Patterns patterns{};
         if (match(R_PAREN)) return std::make_unique<Pattern>(std::move(name), std::move(patterns));
@@ -803,6 +794,23 @@ public:
     }
 
 
+    template <bool GLOBAL_ACCESS>
+    expr::ExprPtr namespaceAccess(std::string first) {
+        using enum token::TokenKind;
+
+        std::vector<std::string> spaces;
+        spaces.push_back(std::move(first)); // not initialized with std::init_list bc it can't be moved from
+
+        // non-global access have already parsed the 1st SCOPE_RESOLVE
+        if constexpr (not GLOBAL_ACCESS) spaces.push_back(consume(NAME).text);
+
+        while (match(SCOPE_RESOLVE)) spaces.push_back(consume(NAME).text);
+
+        std::string name = std::move(spaces).back();
+        spaces.pop_back();
+
+        return std::make_shared<expr::SpaceAccess>(GLOBAL_ACCESS, std::move(spaces), std::move(name));
+    }
 
 
     expr::ExprPtr use() {

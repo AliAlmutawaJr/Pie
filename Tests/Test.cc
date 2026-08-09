@@ -19,6 +19,38 @@
 
 
 
+TEST_CASE("Qualified Names As Type Names in Match Expression", "[Match][Space]") {
+    const auto src1 = R"(
+
+space std {
+    Some = class { data = 0; };
+    None = "Some Sentinal Value";
+    Result = union { Some; None; };
+};
+
+divide = (n, m) => __builtin_conditional(
+        __builtin_eq(m, 0),
+        std::None,
+        std::Some(__builtin_div(n, m))
+    );
+
+a = 1.0;
+b = 2;
+
+match divide(a, b) {
+    std::Some(value) => __builtin_print(a, "/", b, " = ", value, sep = "");
+    = std::None      => __builtin_print("Cannot divide by zero!!");
+};
+
+
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src1));
+}
+
+
+
+
 TEST_CASE("Guarded Map and List Comprehensions", "[Comp]") {
     const auto src1 = R"(
 isEven = (n) => __builtin_eq(__builtin_mod(n, 2), 0);

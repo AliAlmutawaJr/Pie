@@ -45,5 +45,47 @@ space std {
             {ind, __builtin_get(collection, ind)};
         };
     };
+
+
+    __Iota = class {
+        limit = 0;
+        index = 0;
+        step  = 1;
+
+        hasNext = () => __builtin_lt(index, limit);
+        next = () => {
+            ind = index;
+            index = __builtin_add(index, step);
+            ind;
+        };
+    };
+
+    .: Factory Function..
+    .: probably means I need some form of constructors :)
+    Iota = (args: ...) => {
+        __builtin_conditional(
+            __builtin_gt(__builtin_len(args), 3),
+            __builtin_panic("Can't pass more than 3 arguments to std::Iota"),
+            {
+                match __builtin_len(args) {
+                    = 3 => {
+                        {begin, limit, step} = args;
+                        __Iota(limit, begin, step);
+                    };
+                    _ => {
+                        {first, ...rest} = args;
+                        __Iota(rest..., first);
+                    };
+                };
+            }
+        );
+    };
+
+
+
+    Some = class { data = 0; };
+    None = "Some Sentinal Value";
+
+    Result = union { Some; None; };
 };
 

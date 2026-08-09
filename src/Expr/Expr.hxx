@@ -544,7 +544,10 @@ struct Match : Expr {
 
             using PatternPtr = std::unique_ptr<Pattern>;
             using Patterns = std::vector<PatternPtr>;
-            struct Structure { StringID type_name; Patterns patterns; };
+            struct Structure {
+                ExprPtr type_name;  // either a expr::Name or expr::SpaceAccess
+                Patterns patterns;
+            };
 
 
             std::variant<
@@ -554,7 +557,7 @@ struct Match : Expr {
 
             explicit Pattern(Single single) : pattern{std::move(single)} {}
 
-            Pattern(std::string name, Patterns structure)
+            Pattern(ExprPtr name, Patterns structure)
             : pattern{Structure{{std::move(name)}, std::move(structure)}}
             {}
         };
@@ -616,7 +619,7 @@ private:
 
         const auto& [name, patterns] = get<Case::Pattern::Structure>(pattern.pattern);
 
-        std::string s = name.name + '(';
+        std::string s = name->stringify() + '(';
 
         for (std::string comma = ""; const auto& pat : patterns) {
             s += comma + stringifyPattern(*pat, indent);

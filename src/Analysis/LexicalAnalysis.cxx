@@ -668,9 +668,11 @@ void LexicalAnalysis::checkPattern(expr::Match::Case::Pattern& pat) {
     else { // holds expr::Match::Case::Pattern::Structure
         auto& [name, patterns] = get<expr::Match::Case::Pattern::Structure>(pat.pattern);
 
-        if (const auto id = findVariable(name.name); not id)
-            util::error<except::NameLookup>("Name `" + name.name + "` not found!");
-        else name.ID = *id;
+        std::visit(*this, name->variant());
+
+        // if (const auto id = findVariable(name.name); not id)
+        //     util::error<except::NameLookup>("Name `" + name.name + "` not found!");
+        // else name.ID = *id;
 
         for (const auto& pat : patterns) checkPattern(*pat);
     }
