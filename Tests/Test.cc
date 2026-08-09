@@ -19,6 +19,36 @@
 
 
 
+TEST_CASE("Guarded Map and List Comprehensions", "[Comp]") {
+    const auto src1 = R"(
+isEven = (n) => __builtin_eq(__builtin_mod(n, 2), 0);
+
+l = { loop i: 10, __builtin_not(isEven(i)) => i };
+m = { loop i: 10, isEven(i) => i: __builtin_mul(i, 2) };
+
+__builtin_print(l);
+
+when = (cond, expr: Syntax) =>
+    __builtin_conditional(cond, __builtin_eval(expr), 0);
+
+loop key : 10 {
+    when(__builtin_not(isEven(key)), `continue`);
+
+    value = __builtin_get(m, key);
+    __builtin_print(key, ": ", value, sep = "");
+};
+
+)";
+
+    REQUIRE(pie::test::run(src1) == R"({1, 3, 5, 7, 9}
+0: 0
+2: 4
+4: 8
+6: 12
+8: 16)");
+}
+
+
 TEST_CASE("Map and List Comprehensions", "[Comp]") {
     const auto src1 = R"(
 l = { loop i: 10 => i };

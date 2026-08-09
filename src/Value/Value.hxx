@@ -17,9 +17,13 @@ inline namespace pie {
 namespace value {
 
 struct Fields;
+
+// idealy, should be defined in Type.cxx/hxx
 struct ClassValue {
     std::shared_ptr<Fields> blueprint;
+    // captured environment
     value::Env env;
+    // the namespace the class was declared in
     std::vector<interp::NameSpace*> spaces;
 };
 
@@ -75,7 +79,7 @@ inline namespace pie {
 namespace value {
 
 struct Fields   { std::vector<std::tuple<expr::Name, type::TypePtr, expr::ExprPtr  >> fields;  };
-struct Members  { std::vector<std::tuple<expr::Name, type::TypePtr, value::ValuePtr>> members; };
+struct Members  { std::vector<std::tuple<expr::Name, type::TypePtr, ValuePtr>> members; };
 struct Elements { std::vector<Value> values;                                                   };
 struct Items    { std::unordered_map<Value, Value> map;                                        };
 
@@ -97,6 +101,27 @@ template <typename ...Ts>
 
 [[nodiscard]] inline Map makeMap(std::unordered_map<Value, Value> items = {}) {
     return {std::make_shared<Items>(std::move(items))};
+}
+
+
+[[nodiscard]] inline Object makeObject(
+    type::TypePtr type,
+    std::vector<std::tuple<expr::Name, type::TypePtr, Value>> members
+) {
+
+    std::vector<std::tuple<expr::Name, type::TypePtr, ValuePtr>> actual_members;
+    for (auto& [name, type, value] : members)
+        actual_members.emplace_back(
+            std::move(name),
+            std::move(type),
+            std::make_shared<Value>(std::move(value))
+        );
+
+
+    return {
+        std::move(type),
+        std::make_shared<Members>(std::move(actual_members))
+    };
 }
 
 

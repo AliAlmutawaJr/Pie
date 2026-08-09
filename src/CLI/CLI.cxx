@@ -127,7 +127,7 @@ namespace cli {
                 compiler.output(std::cout);
             }
             else {
-                interp::Visitor visitor{std::move(anal).indeces};
+                interp::Visitor visitor{std::move(anal).indeces, fname};
                 for (const auto& expr : exprs)
                     std::visit(visitor, expr->variant());
             }

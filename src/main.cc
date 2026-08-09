@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
     bool command            = false;
 
 
-    std::string_view content;
+    std::string_view fname;
 
     // this would leave file name at argv[1]
     for(; argc > 1; --argc, ++argv) {
@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
         else if (argv[1] == "-c"sv or argv[1] == "--vm"sv     ) vm                 = true ;
         else if (argv[1] == "-c"sv or argv[1] == "--command"sv) command            = true ;
         else if (argv[1] == "-repl"sv                         ) repl               = true ;
-        else content = argv[1];
+        else fname = argv[1];
     }
 
 
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
         if (vm) {
 
             pie::cli::runFile(
-                std::filesystem::path(content),
+                std::filesystem::path(fname),
                 print_tokens,
                 print_parsed,
                 norun,
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (command) {
-            pie::cli::run(std::string{content}, print_tokens, print_parsed, norun);
+            pie::cli::run(std::string{fname}, print_tokens, print_parsed, norun);
             return 0;
         }
 
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
         }
 
         #if not WEB_PIE
-        if (content.empty() or repl) {
+        if (fname.empty() or repl) {
             pie::cli::REPL(
                 std::move(canonical_root),
                 print_tokens, print_parsed, norun
@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
         }
         else {
             pie::cli::runFile(
-                std::filesystem::path(content),
+                std::filesystem::path(fname),
                 print_tokens,
                 print_parsed,
                 norun

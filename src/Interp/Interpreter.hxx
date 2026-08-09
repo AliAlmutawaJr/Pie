@@ -1,6 +1,7 @@
 #pragma once
 
 #include <concepts>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -61,6 +62,8 @@ struct NameSpace {
 
 class Visitor {
 
+    const std::filesystem::path root;
+
     std::vector<value::Env> env;
     std::unordered_map<std::string, std::shared_ptr<NameSpace>> global_spaces;
     std::vector<NameSpace*> current_space;
@@ -77,14 +80,13 @@ class Visitor {
     // v_table ahh name
     std::unordered_map<std::string, std::vector<size_t>> co_map;
 
-
-
-public:
     std::vector<size_t> import_indices;
 
+public:
 
-    Visitor(std::vector<size_t> indices) noexcept
-    : env(1), import_indices{std::move(indices)}
+
+    Visitor(std::vector<size_t> indices, std::filesystem::path r = ".") noexcept
+    : root{r.parent_path()}, env(1), import_indices{std::move(indices)}
     { }
 
     // void addOperators(Operators os) {
@@ -3983,10 +3985,10 @@ There are no mistakes with art.)";
 
             //* File IO
             "open_file",
-            "read_word",
-            "read_line",
-            "read_file",
             "close_file",
+            "read_file",
+            "read_line",
+            "read_word",
 
 
             //* FFI shit
@@ -4157,19 +4159,24 @@ There are no mistakes with art.)";
 
 
         const auto unary_funcs = {
-            "type"     ,
-            "len"      ,
-            "eval"     ,
-            "abs"      ,
-            "neg"      ,
-            "not"      ,
-            "pop"      ,
-            "pop_front",
-            "to_int"   ,
-            "to_double",
-            "to_string",
-            "dlopen"   ,
+            "type"         ,
+            "len"          ,
+            "eval"         ,
+            "abs"          ,
+            "neg"          ,
+            "not"          ,
+            "pop"          ,
+            "pop_front"    ,
+            "to_int"       ,
+            "to_double"    ,
+            "to_string"    ,
+            "dlopen"       ,
             "ptr_to_string",
+            "open_file"    ,
+            "close_file"   ,
+            "read_file"    ,
+            "read_line"    ,
+            "read_word"    ,
         };
 
         if (std::ranges::find(unary_funcs, name) != unary_funcs.end()) arity_check(1); // just for now..
@@ -4189,18 +4196,39 @@ There are no mistakes with art.)";
         }
 
 
-        if (name == "type"         ) return execute<1>(stdx::get<S<"type"         >>(functions).value, {value1}, this);
-        if (name == "len"          ) return execute<1>(stdx::get<S<"len"          >>(functions).value, {value1}, this);
-        if (name == "eval"         ) return execute<1>(stdx::get<S<"eval"         >>(functions).value, {value1}, this);
-        if (name == "abs"          ) return execute<1>(stdx::get<S<"abs"          >>(functions).value, {value1}, this);
-        if (name == "neg"          ) return execute<1>(stdx::get<S<"neg"          >>(functions).value, {value1}, this);
-        if (name == "not"          ) return execute<1>(stdx::get<S<"not"          >>(functions).value, {value1}, this);
-        if (name == "pop"          ) return execute<1>(stdx::get<S<"pop"          >>(functions).value, {value1}, this);
-        if (name == "pop_front"    ) return execute<1>(stdx::get<S<"pop_front"    >>(functions).value, {value1}, this);
-        if (name == "to_int"       ) return execute<1>(stdx::get<S<"to_int"       >>(functions).value, {value1}, this);
-        if (name == "to_double"    ) return execute<1>(stdx::get<S<"to_double"    >>(functions).value, {value1}, this);
-        if (name == "to_string"    ) return execute<1>(stdx::get<S<"to_string"    >>(functions).value, {value1}, this);
-        if (name == "dlopen"       ) return execute<1>(stdx::get<S<"dlopen"       >>(functions).value, {value1}, this);
+        if (name == "type"         ) return execute<1>(stdx::get<S<"type"      >>(functions).value, {value1}, this);
+        if (name == "len"          ) return execute<1>(stdx::get<S<"len"       >>(functions).value, {value1}, this);
+        if (name == "eval"         ) return execute<1>(stdx::get<S<"eval"      >>(functions).value, {value1}, this);
+        if (name == "abs"          ) return execute<1>(stdx::get<S<"abs"       >>(functions).value, {value1}, this);
+        if (name == "neg"          ) return execute<1>(stdx::get<S<"neg"       >>(functions).value, {value1}, this);
+        if (name == "not"          ) return execute<1>(stdx::get<S<"not"       >>(functions).value, {value1}, this);
+        if (name == "pop"          ) return execute<1>(stdx::get<S<"pop"       >>(functions).value, {value1}, this);
+        if (name == "pop_front"    ) return execute<1>(stdx::get<S<"pop_front" >>(functions).value, {value1}, this);
+        if (name == "to_int"       ) return execute<1>(stdx::get<S<"to_int"    >>(functions).value, {value1}, this);
+        if (name == "to_double"    ) return execute<1>(stdx::get<S<"to_double" >>(functions).value, {value1}, this);
+        if (name == "to_string"    ) return execute<1>(stdx::get<S<"to_string" >>(functions).value, {value1}, this);
+
+        if (name == "open_file") {
+            // gotta normalize the file path first
+
+            if (not std::holds_alternative<std::string>(value1))
+                util::error<except::InvalidArgument>(
+                    "`__builtin_open_file` expected a string for the first argument, got `" +
+                    stringify(value1) + "`:\n" + call->stringify()
+                );
+
+            std::filesystem::path path = get<std::string>(value1);
+
+            if (not path.is_absolute()) path = root / path;
+
+            return execute<1>(stdx::get<S<"open_file" >>(functions).value, {value::Value(path.string())}, this);
+        }
+        if (name == "close_file") return execute<1>(stdx::get<S<"close_file">>(functions).value, {value1}, this);
+        if (name == "read_file" ) return execute<1>(stdx::get<S<"read_file" >>(functions).value, {value1}, this);
+        if (name == "read_line" ) return execute<1>(stdx::get<S<"read_line" >>(functions).value, {value1}, this);
+        if (name == "read_word" ) return execute<1>(stdx::get<S<"read_word" >>(functions).value, {value1}, this);
+
+        if (name == "dlopen"       ) return execute<1>(stdx::get<S<"dlopen"    >>(functions).value, {value1}, this);
         if (name == "ptr_to_string") return execute<1>(stdx::get<S<"ptr_to_string">>(functions).value, {value1}, this);
 
         // all the rest of those funcs expect 2 arguments
@@ -4340,7 +4368,7 @@ There are no mistakes with art.)";
         std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at,
         std::unordered_map<std::string, expr::ExprPtr> named_args
     ) {
-        if (args.empty()) util::error("'print' requires at least 1 positional argument passed!");
+        // if (args.empty()) util::error("'print' requires at least 1 positional argument passed!");
 
         using std::operator""sv;
         const auto allowed_params = {"sep"sv, "end"sv};

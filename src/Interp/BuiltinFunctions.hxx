@@ -1,6 +1,8 @@
 #pragma once
 
-// #include <fstream>
+#include <fstream>
+#include <iterator>
+#include <cstdio>
 #include <random>
 #include <cmath>
 
@@ -12,8 +14,10 @@
 
 #include "../Utils/ConstexprLookup.hxx"
 #include "../Utils/Exceptions.hxx"
+#include "../Utils/utils.hxx"
 
 
+// for libffi
 #ifndef FFI_TYPE_CSTRING 
 #define FFI_TYPE_CSTRING 100
 #endif
@@ -180,17 +184,102 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         >
     >{},
 
-    // MapEntry<
-    //     S<"open_file">,
-    //     Func<"open_file",
-    //         decltype([](const auto& fname, const auto& mode, const auto&) -> BigInt {
-    //             // if (mode)
-    //             return 0;
-    //         }),
-    //         TypeList<std::string, std::string>
-    //     >
-    // >{},
 
+    MapEntry<
+        S<"open_file">,
+        Func<
+            decltype([](const auto& fname, const auto&) {
+                auto file = new std::fstream{
+                    fname,
+                    std::ios::in | std::ios::out
+                };
+
+                if (not file->is_open()) util::error("Couldn't open file: " + fname);
+
+                return reinterpret_cast<BigInt>(file);
+            }),
+            TypeList<std::string, std::string>
+        >
+    >{},
+
+    MapEntry<
+        S<"close_file">,
+        Func<
+            decltype([](const auto& stream, const auto&) {
+                auto file = reinterpret_cast<std::fstream*>(stream);
+                file->close();
+
+                delete file;
+                return stream;
+            }),
+            TypeList<BigInt>
+        >
+    >{},
+
+    MapEntry<
+        S<"read_file">,
+        Func<
+            decltype([](const auto& stream, const auto&) -> value::Value {
+                auto file = reinterpret_cast<std::fstream*>(stream);
+                // std::stringstream ss;
+                // ss << file->rdbuf();
+                // return ss.str();
+
+                std::string content{
+                    std::istreambuf_iterator<char>{*file},
+                    std::istreambuf_iterator<char>{}
+                };
+
+                return content;
+            }),
+            TypeList<BigInt>
+        >
+    >{},
+
+    MapEntry<
+        S<"read_line">,
+        Func<
+            decltype([](const auto& stream, const auto&) -> value::Value {
+                auto file = reinterpret_cast<std::fstream*>(stream);
+
+                std::string line;
+                std::getline(*file, line);
+
+                return line;
+            }),
+            TypeList<BigInt>
+        >
+    >{},
+
+    MapEntry<
+        S<"read_word">,
+        Func<
+            decltype([](const auto& stream, const auto&) -> value::Value {
+                auto file = reinterpret_cast<std::fstream*>(stream);
+
+                std::string word;
+                *file >> word;
+
+                return word;
+            }),
+            TypeList<BigInt>
+        >
+    >{},
+
+    MapEntry<
+        S<"read_char">,
+        Func<
+            decltype([](const auto& stream, const auto&) -> value::Value {
+                auto file = reinterpret_cast<std::fstream*>(stream);
+
+                char c;
+                if(not file->get(c)) util::error("Tried to read EOF");
+
+                return std::string{c};
+            }),
+            TypeList<BigInt>
+        >
+    >{},
 
 
 
@@ -208,6 +297,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"pop">,
         Func<
             decltype([](const auto& cont, const auto&) -> value::Value {
+                if (cont.elts->values.empty()) util::error("Cannot `pop` from an empty list!");
+
                 const auto back = cont.elts->values.back();
                 cont.elts->values.pop_back();
                 return back;
@@ -220,6 +311,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"pop_front">,
         Func<
             decltype([](const auto& cont, const auto&) -> value::Value {
+                if (cont.elts->values.empty()) util::error("Cannot `pop_front` from an empty list!");
+
                 const auto front = cont.elts->values.front();
                 cont.elts->values.erase(cont.elts->values.begin());
                 return front;

@@ -1,4 +1,4 @@
-x = 1;
+
 space std {
     print    = __builtin_print   ;
     type     = __builtin_type    ;

@@ -80,10 +80,10 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
 
         // //* File IO
         "__builtin_open_file",
-        "__builtin_read_word",
-        "__builtin_read_line",
-        "__builtin_read_file",
         "__builtin_close_file",
+        "__builtin_read_file",
+        "__builtin_read_line",
+        "__builtin_read_word",
 
         //* FFI shit
         "__builtin_dlopen"          ,
