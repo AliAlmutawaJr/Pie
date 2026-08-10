@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <print>
 #include <ostream>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -33,23 +34,37 @@ public:
     { }
 
 
+    Chunk getInstructions() const noexcept { return instructions; }
+
+
     // ============== instructions ============== 
+
+
+    void emitID(const ssize_t id) {
+        instructions.push_back(static_cast<Code>(id));
+    }
 
     void emitLoadConst(const ssize_t id) {
         instructions.push_back(Code::LOAD_CONST);
-        instructions.push_back(static_cast<Code>(id));
+        emitID(id);
+    }
+
+
+    void emitLoadGlobal(const ssize_t id) {
+        instructions.push_back(Code::LOAD_GLOBAL);
+        emitID(id);
     }
 
 
     void emitLoad(const ssize_t id) {
         instructions.push_back(Code::LOAD);
-        instructions.push_back(static_cast<Code>(id));
+        emitID(id);
     }
 
 
     void emitStore(const ssize_t id) {
         instructions.push_back(Code::STORE);
-        instructions.push_back(static_cast<Code>(id));
+        emitID(id);
     }
 
 
@@ -79,7 +94,10 @@ public:
 
 
 
+    void halt() { instructions.push_back(Code::HALT); }
+
     // ============== visitor ============== 
+
 
     void operator()(const expr::Expr*) { }
 
@@ -118,7 +136,12 @@ public:
 
 
     void operator()(const expr::Name *name) {
-        emitLoad(name->var_ID);
+        if (isGlobal(name->name)) {
+            emitLoadGlobal(name->var_ID);
+        }
+        else {
+            emitLoad(name->var_ID);
+        }
     }
 
 
@@ -154,6 +177,7 @@ public:
                 case LOAD:
                 case STORE:
                 case LOAD_CONST:
+                case LOAD_GLOBAL:
                 case CALL:
                     std::println(os, "{} {}", stringify(op), static_cast<size_t>(instructions[++i]));
                 break;
@@ -163,6 +187,98 @@ public:
             }
         }
     }
+
+
+    bool isGlobal(const std::string_view name) {
+        for (const auto& g : GS)
+            if (name == value::stringify(g)) return true;
+
+        return false;
+    }
+
+    inline static const std::initializer_list<value::Value> GS = {
+        type::builtins::Any(),
+        type::builtins::Int(),
+        type::builtins::Double(),
+        type::builtins::String(),
+        type::builtins::Bool(),
+        type::builtins::Syntax(),
+        type::builtins::Type(),
+
+
+        value::BuiltinFunction{"__builtin_rand_int"},
+
+        value::BuiltinFunction{"__builtin_print"      },
+        value::BuiltinFunction{"__builtin_concat"     },
+        value::BuiltinFunction{"__builtin_print_env"  },
+        value::BuiltinFunction{"__builtin_panic"      },
+        value::BuiltinFunction{"__builtin_id"         },
+        value::BuiltinFunction{"__builtin_input_str"  },
+        value::BuiltinFunction{"__builtin_input_int"  },
+        value::BuiltinFunction{"__builtin_decltype"   },
+        value::BuiltinFunction{"__builtin_type"       },
+        value::BuiltinFunction{"__builtin_len"        },
+        value::BuiltinFunction{"__builtin_reset"      },
+        value::BuiltinFunction{"__builtin_eval"       },
+        value::BuiltinFunction{"__builtin_neg"        },
+        value::BuiltinFunction{"__builtin_abs"        },
+        value::BuiltinFunction{"__builtin_not"        },
+        value::BuiltinFunction{"__builtin_to_int"     },
+        value::BuiltinFunction{"__builtin_to_double"  },
+        value::BuiltinFunction{"__builtin_to_string"  },
+        value::BuiltinFunction{"__builtin_get"        },
+        value::BuiltinFunction{"__builtin_push"       },
+        value::BuiltinFunction{"__builtin_push"       },
+        value::BuiltinFunction{"__builtin_pop"        },
+        value::BuiltinFunction{"__builtin_pop_front"  },
+        value::BuiltinFunction{"__builtin_add"        },
+        value::BuiltinFunction{"__builtin_sub"        },
+        value::BuiltinFunction{"__builtin_mul"        },
+        value::BuiltinFunction{"__builtin_div"        },
+        value::BuiltinFunction{"__builtin_mod"        },
+        value::BuiltinFunction{"__builtin_pow"        },
+        value::BuiltinFunction{"__builtin_gt"         },
+        value::BuiltinFunction{"__builtin_geq"        },
+        value::BuiltinFunction{"__builtin_eq"         },
+        value::BuiltinFunction{"__builtin_leq"        },
+        value::BuiltinFunction{"__builtin_lt"         },
+        value::BuiltinFunction{"__builtin_and"        },
+        value::BuiltinFunction{"__builtin_or"         },
+        value::BuiltinFunction{"__builtin_set"        },
+        value::BuiltinFunction{"__builtin_conditional"},
+        value::BuiltinFunction{"__builtin_str_slice"  },
+        value::BuiltinFunction{"__builtin_str_split"  },
+
+        //* File IO
+        value::BuiltinFunction{"__builtin_open_file" },
+        value::BuiltinFunction{"__builtin_close_file"},
+        value::BuiltinFunction{"__builtin_read_file" },
+        value::BuiltinFunction{"__builtin_read_line" },
+        value::BuiltinFunction{"__builtin_read_word" },
+
+        //* FFI shit
+        value::BuiltinFunction{"__builtin_dlopen"          },
+        value::BuiltinFunction{"__builtin_dlsym"           },
+        value::BuiltinFunction{"__builtin_ffi_call"        },
+        value::BuiltinFunction{"__builtin_ffi_type_void"   },
+        value::BuiltinFunction{"__builtin_ffi_type_int"    },
+        value::BuiltinFunction{"__builtin_ffi_type_float"  },
+        value::BuiltinFunction{"__builtin_ffi_type_double" },
+        value::BuiltinFunction{"__builtin_ffi_type_uint8"  },
+        value::BuiltinFunction{"__builtin_ffi_type_sint8"  },
+        value::BuiltinFunction{"__builtin_ffi_type_uint16" },
+        value::BuiltinFunction{"__builtin_ffi_type_sint16" },
+        value::BuiltinFunction{"__builtin_ffi_type_uint32" },
+        value::BuiltinFunction{"__builtin_ffi_type_sint32" },
+        value::BuiltinFunction{"__builtin_ffi_type_uint64" },
+        value::BuiltinFunction{"__builtin_ffi_type_sint64" },
+        value::BuiltinFunction{"__builtin_ffi_type_struct" },
+        value::BuiltinFunction{"__builtin_ffi_type_pointer"},
+        value::BuiltinFunction{"__builtin_ffi_type_cstring"},
+        value::BuiltinFunction{"__builtin_ffi_type_complex"},
+
+        value::BuiltinFunction{"__builtin_ptr_to_string"},
+    };
 };
 
 

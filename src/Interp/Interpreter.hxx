@@ -26,7 +26,7 @@
 #include "FFI.hxx"
 #endif
 
-#include "BuiltinFunctions.hxx"
+#include "../Functions/BuiltinFunctions.hxx"
 
 #include "../Utils/utils.hxx"
 #include "../Utils/Exceptions.hxx"

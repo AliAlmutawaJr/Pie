@@ -117,7 +117,7 @@ test: checklibs run_tests
 # ============================== Web target ==============================
 
 web: checklibs
-	$(WEBCC) $(WEB_ARGS) $(VER) $(INCLUDE)  $(OPT) src/main.cc $(SRC) -o $(WEB_OUTPUT_NAME) -DWEB_PIE
+	$(WEBCC) $(WEB_ARGS) $(VER) $(INCLUDE) $(OPT) src/main.cc $(SRC) -o $(WEB_OUTPUT_NAME) -DWEB_PIE
 
 
 

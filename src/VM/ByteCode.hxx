@@ -12,15 +12,19 @@ enum class Code : size_t {
 
     STORE         , // `STORE x` creates a variable `x` with the latest value on stack
 
+// Globals
+    LOAD_GLOBAL ,
+    STORE_GLOBAL,
+
+
+// for objects, lists, and maps
+    LOAD_ACC , // `LOAD_ACC x, y` pushes `x.y` onto stack?
+    STORE_ACC, // maybe `STORE_ACC x, y` stores top value in `x.y`
+
 
 // Stack Operations
     // PUSH,  // `PUSH 1` pushes 1 onto the stack
     POP ,  // `POP` pops one value off the stack
-
-
-    // for objects, lists, and maps
-    LOAD_ACC , // `LOAD_ACC x, y` pushes `x.y` onto stack?
-    STORE_ACC, // maybe `STORE_ACC x, y` stores top value in `x.y`
 
 
 // Functions
@@ -52,25 +56,27 @@ constexpr auto BYTECODE_SIZE = static_cast<size_t>(Code::HALT);
 inline const char* stringify(const Code code) {
     switch (code) {
         using enum Code;
-        case LOAD      : return "LOAD"      ;
-        case LOAD_CONST: return "LOAD_CONST";
-        case STORE     : return "STORE"     ;
-        case POP       : return "POP"       ;
-        case LOAD_ACC  : return "LOAD_ACC"  ;
-        case STORE_ACC : return "STORE_ACC" ;
-        case CALL      : return "CALL"      ;
-        case RET       : return "RET"       ;
-        case EQ        : return "EQ"        ;
-        case GT        : return "GT"        ;
-        case LT        : return "LT"        ;
-        case GEQ       : return "GEQ"       ;
-        case LEQ       : return "LEQ"       ;
-        case JUMP_IF   : return "JUMP_IF"   ;
-        case JUMP      : return "JUMP"      ;
-        case HALT      : return "HALT"      ;
+        case LOAD        : return "LOAD"        ;
+        case STORE       : return "STORE"       ;
+        case LOAD_ACC    : return "LOAD_ACC"    ;
+        case STORE_ACC   : return "STORE_ACC"   ;
+        case LOAD_GLOBAL : return "LOAD_GLOBAL" ;
+        case STORE_GLOBAL: return "STORE_GLOBAL";
+        case LOAD_CONST  : return "LOAD_CONST"  ;
+        case POP         : return "POP"         ;
+        case CALL        : return "CALL"        ;
+        case RET         : return "RET"         ;
+        case EQ          : return "EQ"          ;
+        case GT          : return "GT"          ;
+        case LT          : return "LT"          ;
+        case GEQ         : return "GEQ"         ;
+        case LEQ         : return "LEQ"         ;
+        case JUMP_IF     : return "JUMP_IF"     ;
+        case JUMP        : return "JUMP"        ;
+        case HALT        : return "HALT"        ;
     }
 
-    return "<UNKOWN>";
+    // return "<UNKOWN>";
 }
 
 

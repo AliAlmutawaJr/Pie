@@ -5,6 +5,9 @@
 #include <unordered_map>
 #include <variant>
 #include <memory>
+#include <vector>
+
+#include "VM/ByteCode.hxx"
 
 
 #ifdef WEB_PIE
@@ -131,6 +134,12 @@ struct Expr {
 };
 
 
-
 } // namespace expr
+
+
+namespace vm {
+    enum class Code : size_t;
+    using Chunk = std::vector<Code>;
+};
+
 } // namespace pie

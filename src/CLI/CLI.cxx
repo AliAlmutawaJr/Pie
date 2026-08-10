@@ -9,6 +9,7 @@
 #include "../Analysis/LexicalAnalysis.hxx"
 #include "../Interp/Interpreter.hxx"
 #include "../Compiler/Compiler.hxx"
+#include "../VM/VM.hxx"
 
 
 inline namespace pie {
@@ -117,14 +118,19 @@ namespace cli {
                     std::println("constant: {} with ID {}", id, value::stringify(constant));
                 }
 
-                vm::Compiler compiler{anal.extractConstantMap()};
 
+                vm::Compiler compiler{anal.extractConstantMap()};
                 for (const auto& expr : exprs) {
                     std::visit(compiler, expr->variant());
                     compiler.emitPop(); // disregard the last expression (semi colon)
                 }
+                compiler.halt();
 
                 compiler.output(std::cout);
+
+
+                vm::Machine vm{compiler.getInstructions(), anal.extractConstantMap()};
+                vm.execute();
             }
             else {
                 interp::Visitor visitor{std::move(anal).indeces, fname};
