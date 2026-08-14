@@ -22,7 +22,8 @@ namespace cli {
         const bool print_tokens,
         const bool print_parsed,
         const bool norun,
-        const bool vm = false
+        const bool print_ins,
+        const bool vm
     );
 
     void run(

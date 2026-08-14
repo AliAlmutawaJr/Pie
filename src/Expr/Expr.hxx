@@ -274,9 +274,11 @@ struct Assignment : Expr {
     type::TypePtr type;
     ExprPtr rhs;
 
+    bool is_syntax;
 
-    Assignment(ExprPtr l, type::TypePtr t, ExprPtr r) noexcept
-    : lhs{std::move(l)}, type{std::move(t)}, rhs{std::move(r)}
+
+    Assignment(ExprPtr l, type::TypePtr t, ExprPtr r, const bool s = false) noexcept
+    : lhs{std::move(l)}, type{std::move(t)}, rhs{std::move(r)}, is_syntax{s}
     {}
 
     std::string stringify(const size_t indent = 0) const override {
@@ -1223,7 +1225,13 @@ struct Call : Expr {
 
 
 struct Closure : Expr {
-    std::vector<StringID> params;
+    struct Param {
+        std::string name;
+        ssize_t ID = -1;
+        bool is_syntax = false;
+    };
+
+    std::vector<Param> params;
     ExprPtr body;
     type::FuncType type;
 
@@ -1241,19 +1249,19 @@ struct Closure : Expr {
 
     std::vector<interp::NameSpace*> spaces;
 
-    Closure(std::vector<StringID> ps, ExprPtr b, type::FuncType t) noexcept
+    Closure(std::vector<Param> ps, ExprPtr b, type::FuncType t) noexcept
     : params{std::move(ps)}, body{std::move(b)}, type{std::move(t)} { }
 
-    Closure(std::vector<std::string> ps, ExprPtr b, type::FuncType t)
-    :
-    // params{std::move(ps)},
-    body{std::move(b)}, type{std::move(t)} {
-        for (auto& s : ps)
-            params.emplace_back(std::move(s));
+    // Closure(std::vector<std::string> ps, ExprPtr b, type::FuncType t)
+    // :
+    // // params{std::move(ps)},
+    // body{std::move(b)}, type{std::move(t)} {
+    //     for (auto& s : ps)
+    //         params.emplace_back(std::move(s));
 
 
-        if(params.size() != type.params.size()) util::error(); // should never happen anyway
-    }
+    //     if(params.size() != type.params.size()) util::error(); // should never happen anyway
+    // }
 
 
     void inSpace(const std::vector<interp::NameSpace*>& sps) {
@@ -1542,6 +1550,9 @@ struct Operator : Fix {
 
     Node variant() override { return this; }
 };
+
+template <typename T>
+T* is(expr::Expr* e) { return dynamic_cast<T*>(e); }
 
 } // namespace expr
 

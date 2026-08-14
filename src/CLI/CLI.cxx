@@ -85,6 +85,7 @@ namespace cli {
         const bool print_tokens,
         const bool print_parsed,
         const bool norun,
+        const bool print_ins,
         const bool vm
     ) {
         auto src = util::readFile(fname.string());
@@ -114,9 +115,10 @@ namespace cli {
 
 
             if (vm) {
-                for (const auto& [id, constant] : anal.extractConstantMap()) {
-                    std::println("constant: {} with ID {}", id, value::stringify(constant));
-                }
+                if (print_ins)
+                    for (const auto& [id, constant] : anal.extractConstantMap()) {
+                        std::println("constant: {} with ID {}", id, value::stringify(constant));
+                    }
 
 
                 vm::Compiler compiler{anal.extractConstantMap()};
@@ -126,7 +128,8 @@ namespace cli {
                 }
                 compiler.halt();
 
-                compiler.output(std::cout);
+
+                if (print_ins) compiler.output(std::cout);
 
 
                 vm::Machine vm{compiler.getInstructions(), anal.extractConstantMap()};

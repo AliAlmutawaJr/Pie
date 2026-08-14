@@ -1,10 +1,24 @@
 
 space std {
     print    = __builtin_print   ;
+    panic    = __builtin_panic   ;
+
+    eval     = __builtin_eval    ;
+    reset    = __builtin_reset   ;
+
     type     = __builtin_type    ;
     decltype = __builtin_decltype;
-    reset    = __builtin_reset   ;
-    eval     = __builtin_eval    ;
+
+    input = (args: ...) => {
+        __builtin_conditional(
+            __builtin_gt(__builtin_len(args), 0),
+            __builtin_print(args..., end = ""),
+            ""
+        );
+
+        __builtin_input_str();
+    };
+
 
     infix + = (a: String, b: String) => __builtin_concat(a, b);
     infix + = (a, b) => __builtin_add(a, b);
@@ -28,7 +42,19 @@ space std {
     infix >  = (a, b) => __builtin_gt(a, b);
     infix >= = (a, b) => __builtin_geq(a, b);
 
+    infix as = (expr, type) => match type {
+        = Int    => __builtin_to_int   (expr);
+        = Double => __builtin_to_double(expr);
+        = String => __builtin_to_string(expr);
+        _ => __builtin_panic("Unknown type in `as` cast:", type);
+    };
+ 
 
+    mixfix(LOW +) if : : else : =
+        (cond, `thn`, `els`) =>
+            __builtin_eval(
+                __builtin_conditional(cond, thn, els)
+            );
 
     mixfix([]) : [ : ] = (cont, at) => __builtin_get(cont, at);
 
@@ -81,11 +107,5 @@ space std {
         );
     };
 
-
-
-    Some = class { data = 0; };
-    None = "Some Sentinal Value";
-
-    Result = union { Some; None; };
 };
 

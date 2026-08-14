@@ -865,6 +865,18 @@ public:
             return changeThis(ass->lhs->stringify(), val);
         }
 
+
+        if (ass->is_syntax) {
+            addVar(
+                ass->lhs->stringify(),
+                ass->lhs->var_ID,
+                std::make_shared<value::Value>(ass->rhs->variant())
+            );
+
+            return {ass->rhs->variant(), type::builtins::Syntax()};
+        }
+
+
         // assigning to x.y should never create a variable "x.y" bu access x and change y;
         if (auto *acc = dynamic_cast<expr::Access*>(ass->lhs.get())) return accessAssign(ass, acc);
 
@@ -875,11 +887,12 @@ public:
         if (auto name = dynamic_cast<expr::Name*>(ass->lhs.get())) return nameAssign(ass, name);
 
 
-        // can't assign non-names to namespaces
-        // makes 1::2::3 impossible, which is consistent with the fact that 1 + 2::3 + 4; is ambiguous
-        // ... unless! (1 + 2)::3 is different than 1 + 2::3
-        if (dynamic_cast<expr::Namespace*>(ass->rhs.get()) and not dynamic_cast<expr::Name*>(ass->lhs.get()))
-            util::error("Cannot assign namespaces to non-names: " + ass->stringify());
+        // // can't assign non-names to namespaces
+        // // makes 1::2::3 impossible, which is consistent with the fact that 1 + 2::3 + 4; is ambiguous
+        // // ... unless! (1 + 2)::3 is different than 1 + 2::3
+        // if (dynamic_cast<expr::Namespace*>(ass->rhs.get()) and not dynamic_cast<expr::Name*>(ass->lhs.get()))
+        //     util::error("Cannot assign namespaces to non-names: " + ass->stringify());
+
 
         // assign to the serialization (stringification) of the AST node
         const value::Value value = std::visit(*this, ass->rhs->variant()).value;
@@ -1785,6 +1798,9 @@ public:
                 );
                 iter != spaces.cend()
             ) {
+                for (auto& [id, val] : new_space->members)
+                    spaces[new_space_name]->members[id] = std::move(val);
+
                 addNamespaces((*iter).second->children, new_space->children);
             }
             // in this case, just push the new space with all its children
@@ -2454,20 +2470,21 @@ There are no mistakes with art.)";
     }
 
 
-    // static void checkNoSyntaxType(const std::vector<expr::ExprPtr>& funcs) {
-    //     for (const auto& func : funcs) {
-    //         const auto& closure = dynamic_cast<const expr::Closure*>(func.get());
-    //         for (const auto& param_type : closure->type.params) {
-    //             if (param_type->text() == "Syntax") util::error("Cannot have paramater of 'Syntax' in an overload set!");
-    //         }
-    //     }
-
-    //     return;
-    // }
+    static void checkNoSyntaxType(const std::vector<expr::ExprPtr>& funcs) {
+        for (const auto& func : funcs) {
+            const auto& closure = dynamic_cast<const expr::Closure*>(func.get());
+            for (
+                const auto& param :closure->params
+            ) {
+                if (param.is_syntax) util::error("Cannot have a 'Syntax' paramater in an overload set!");
+            }
+        }
+        return;
+    }
 
     expr::Closure* resolveOverloadSet(
         const std::string& name,
-        const std::vector< expr::ExprPtr >& funcs,
+        const std::vector<expr::ExprPtr>& funcs,
         // const std::vector< type::TypePtr >& types,
         const std::vector<value::Value>& values
     ) {
@@ -2495,11 +2512,14 @@ There are no mistakes with art.)";
 
         if (set.size() > 1) {
             // remove the functions that take Any's to favour the concrete functions rather than "templates"
-            std::erase_if(set, [] (const expr::Closure *c) { return std::ranges::any_of(c->type.params, &type::isAny); });
+            std::erase_if(set, [] (const expr::Closure *c) { return std::ranges::all_of(c->type.params, &type::isAny); });
         }
 
 
-        if (set.size() != 1) util::error("Could not resolve overload set for operator: " + name);
+        if (set.empty())
+            util::error("No overload was found in overload set of operator: " + name);
+        else if (set.size() != 1)
+            util::error("Could not resolve overload set for operator: " + name);
 
         return set[0];
     }
@@ -2536,23 +2556,30 @@ There are no mistakes with art.)";
         if (op->funcs.size() == 1) {
             func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
 
-            func->type.params[0] = validateType(std::move(func)->type.params[0]);
+            if (func->params[0].is_syntax) {
+                args_env[func->params[0].ID] = {
+                    {func->params[0].name},
+                    std::make_shared<value::Value>(up->expr->variant()),
+                    type::builtins::Syntax()
+                };
+            }
+            else {
+                func->type.params[0] = validateType(std::move(func)->type.params[0]);
+                const auto arg = std::visit(*this, up->expr->variant()).value;
 
-            const value::Value arg = std::visit(*this, up->expr->variant()).value;
+                typeCheck(arg, func->type.params[0],
+                    "Type mis-match! Prefix operator '" + up->op + 
+                    "' expected: " + func->type.params[0]->text() +
+                    ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+                );
 
-            typeCheck(arg, func->type.params[0],
-                "Type mis-match! Prefix operator '" + up->op + 
-                "' expected: " + func->type.params[0]->text() +
-                ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
-            );
+                args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+            }
 
-            // addVar(func->params.front(), arg);
-            //* maybe should use Syntax() instead of Any();
-            args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
-
+            //* maybe should use Syntax() instead of Any() for all operators?
         }
         else { // do selection based on type
-            // checkNoSyntaxType(op->funcs);
+            checkNoSyntaxType(op->funcs);
 
             const value::Value arg = std::visit(*this, up->expr->variant()).value;
 
@@ -2580,7 +2607,6 @@ There are no mistakes with art.)";
 
         checkReturnType(ret, func->type.ret);
         return {ret, func->type.ret};
-        // return checkReturnType(std::visit(*this, func->body->variant()), func->type.ret);
     }
 
 
@@ -2592,40 +2618,59 @@ There are no mistakes with art.)";
         expr::Closure* func;
         value::Environment args_env;
 
+
+        // LHS
         if (op->funcs.size() == 1) {
             func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
 
-            // LHS
-            func->type.params[0] = validateType(std::move(func)->type.params[0]);
+            if (func->params[0].is_syntax) {
+                args_env[func->params[0].ID] = {
+                    {func->params[0].name},
+                    std::make_shared<value::Value>(bp->lhs->variant()),
+                    type::builtins::Syntax()
+                };
+            }
+            else {
+                func->type.params[0] = validateType(std::move(func)->type.params[0]);
 
-            const value::Value arg1 = std::visit(*this, bp->lhs->variant()).value;
+                const value::Value arg1 = std::visit(*this, bp->lhs->variant()).value;
 
-            typeCheck(arg1, func->type.params[0],
-                "Type mis-match! Infix operator '" + bp->op + 
-                "', parameter '" + func->params[0].name +
-                "' expected: " + func->type.params[0]->text() +
-                ", got: " + stringify(arg1) + " which is " + typeOf(arg1)->text()
-            );
+                typeCheck(arg1, func->type.params[0],
+                    "Type mis-match! Infix operator '" + bp->op + 
+                    "', parameter '" + func->params[0].name +
+                    "' expected: " + func->type.params[0]->text() +
+                    ", got: " + stringify(arg1) + " which is " + typeOf(arg1)->text()
+                );
 
-            args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg1), func->type.params[0]};
+                args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg1), func->type.params[0]};
+            }
 
 
             // RHS
-            func->type.params[1] = validateType(std::move(func)->type.params[1]);
+            if (func->params[1].is_syntax) {
+                args_env[func->params[1].ID] = {
+                    {func->params[1].name},
+                    std::make_shared<value::Value>(bp->lhs->variant()),
+                    type::builtins::Syntax()
+                };
+            }
+            else {
+                func->type.params[1] = validateType(std::move(func)->type.params[1]);
 
-            const value::Value arg2 = std::visit(*this, bp->rhs->variant()).value;
+                const value::Value arg2 = std::visit(*this, bp->rhs->variant()).value;
 
-            typeCheck(arg2, func->type.params[1],
-                "Type mis-match! Infix operator '" + bp->op + 
-                "', parameter '" + func->params[1].name +
-                "' expected: " + func->type.params[1]->text() +
-                ", got: " + stringify(arg2) + " which is " + typeOf(arg2)->text()
-            );
+                typeCheck(arg2, func->type.params[1],
+                    "Type mis-match! Infix operator '" + bp->op + 
+                    "', parameter '" + func->params[1].name +
+                    "' expected: " + func->type.params[1]->text() +
+                    ", got: " + stringify(arg2) + " which is " + typeOf(arg2)->text()
+                );
 
-            args_env[func->params[1].ID] = {{func->params[1].name}, std::make_shared<value::Value>(arg2), func->type.params[1]};
+                args_env[func->params[1].ID] = {{func->params[1].name}, std::make_shared<value::Value>(arg2), func->type.params[1]};
+            }
         }
         else {
-            // checkNoSyntaxType(op->funcs);
+            checkNoSyntaxType(op->funcs);
 
             const value::Value arg1  = std::visit(*this, bp->lhs->variant()).value;
             const value::Value arg2  = std::visit(*this, bp->rhs->variant()).value;
@@ -2687,21 +2732,30 @@ There are no mistakes with art.)";
         if (op->funcs.size() == 1) {
             func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
 
-            func->type.params[0] = validateType(std::move(func)->type.params[0]);
+            if (func->params[0].is_syntax) {
+                args_env[func->params[0].ID] = {
+                    {func->params[0].name},
+                    std::make_shared<value::Value>(pp->expr->variant()),
+                    type::builtins::Syntax()
+                };
+            }
+            else {
+                func->type.params[0] = validateType(std::move(func)->type.params[0]);
 
-            const value::Value arg = std::visit(*this, pp->expr->variant()).value;
+                const value::Value arg = std::visit(*this, pp->expr->variant()).value;
 
-            typeCheck(arg, func->type.params[0],
-                "Type mis-match! Suffix operator '" + pp->op + 
-                "', parameter '" + func->params[0].name +
-                "' expected: " + func->type.params[0]->text() +
-                ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
-            );
+                typeCheck(arg, func->type.params[0],
+                    "Type mis-match! Suffix operator '" + pp->op + 
+                    "', parameter '" + func->params[0].name +
+                    "' expected: " + func->type.params[0]->text() +
+                    ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+                );
 
-            args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+                args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+            }
         }
         else {
-            // checkNoSyntaxType(op->funcs);
+            checkNoSyntaxType(op->funcs);
 
             const value::Value arg  = std::visit(*this, pp->expr->variant()).value;
 
@@ -2743,21 +2797,30 @@ There are no mistakes with art.)";
         if (op->funcs.size() == 1) {
             func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
 
-            func->type.params[0] = validateType(std::move(func)->type.params[0]);
+            if (func->params[0].is_syntax) {
+                args_env[func->params[0].ID] = {
+                    {func->params[0].name},
+                    std::make_shared<value::Value>(cp->expr->variant()),
+                    type::builtins::Syntax()
+                };
+            }
+            else {
+                func->type.params[0] = validateType(std::move(func)->type.params[0]);
 
-            const value::Value arg = std::visit(*this, cp->expr->variant()).value;
+                const value::Value arg = std::visit(*this, cp->expr->variant()).value;
 
-            typeCheck(arg, func->type.params[0],
-                "Type mis-match! Suffix operator '" + cp->op1 + 
-                "', parameter '" + func->params[0].name +
-                "' expected: " + func->type.params[0]->text() +
-                ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
-            );
+                typeCheck(arg, func->type.params[0],
+                    "Type mis-match! Suffix operator '" + cp->op1 + 
+                    "', parameter '" + func->params[0].name +
+                    "' expected: " + func->type.params[0]->text() +
+                    ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+                );
 
-            args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+                args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+            }
         }
         else {
-            // checkNoSyntaxType(op->funcs);
+            checkNoSyntaxType(op->funcs);
 
             const value::Value arg  = std::visit(*this, cp->expr->variant()).value;
 
@@ -2813,23 +2876,32 @@ There are no mistakes with art.)";
                 :
                 std::views::zip(oc->exprs, func->params, func->type.params)
             ) {
-                param_type = validateType(std::move(param_type));
 
-                const value::Value arg = std::visit(*this, arg_expr->variant()).value;
+                if (param.is_syntax) {
+                    args_env[param.ID] = {
+                        {param.name},
+                        std::make_shared<value::Value>(arg_expr->variant()),
+                        type::builtins::Syntax()
+                    };
+                }
+                else {
+                    param_type = validateType(std::move(param_type));
 
-                const auto op_name = op->OpName();
-                typeCheck(arg, param_type,
-                    "Type mis-match! Parameter '" +
-                    op_name + "' expected type: " + param_type->text() + ", got: " + typeOf(arg)->text()
-                );
+                    const value::Value arg = std::visit(*this, arg_expr->variant()).value;
+
+                    const auto op_name = op->OpName();
+                    typeCheck(arg, param_type,
+                        "Type mis-match! Parameter '" +
+                        op_name + "' expected type: " + param_type->text() + ", got: " + typeOf(arg)->text()
+                    );
 
 
-                // addVar(func->params[0], std::visit(*this, co->expr->variant()));
-                args_env[param.ID] = {{param.name}, std::make_shared<value::Value>(arg), param_type}; //? fix Any Type!!
+                    args_env[param.ID] = {{param.name}, std::make_shared<value::Value>(arg), param_type};
+                }
             }
         }
         else {
-            // checkNoSyntaxType(op->funcs);
+            checkNoSyntaxType(op->funcs);
 
             std::vector<value::Value> args;
             // std::vector<type::TypePtr> types;
@@ -2935,13 +3007,18 @@ There are no mistakes with art.)";
         }
 
 
-
-
         if (std::holds_alternative<value::Object>(var)) {
             const auto& obj = get<value::Object>(var);
             if (const auto callable = objectIsCallable(obj); callable) {
                 return closureCall(call, get<expr::Closure>(*std::move(callable)), std::move(args), std::move(expand_at));
             }
+        }
+
+
+        if (std::holds_alternative<expr::Node>(var)) {
+            if (not args.empty()) util::error("Cannot pass arguments to syntax objects: " + call->stringify());
+
+            return std::visit(*this, get<expr::Node>(var));
         }
 
 
@@ -2968,7 +3045,7 @@ There are no mistakes with art.)";
 
     void variadicCall(
         const expr::Closure& func,
-        std::vector<std::pair<expr::StringID, type::TypePtr>>& pos_params,
+        std::vector<std::pair<expr::Closure::Param, type::TypePtr>>& pos_params,
         const std::vector<std::pair<size_t, std::vector<value::Value>>>& expand_at,
         const std::vector<pie::expr::ExprPtr>& args,
         const size_t args_size,
@@ -3014,7 +3091,7 @@ There are no mistakes with art.)";
             arg_index < args.size(); // can't be args_size since arg_index is only used to index into args
         ) {
             auto [sid, type] = pos_params[param_index];
-            const auto& [name, id] = sid;
+            const auto& [name, id, is_syntax] = sid;
             type = type->clone();
 
             value::Value value;
@@ -3139,7 +3216,7 @@ There are no mistakes with art.)";
     // sets up the arguments
     void regularCall(
         const expr::Closure& func,
-        std::vector<std::pair<expr::StringID, type::TypePtr>>& pos_params,
+        std::vector<std::pair<expr::Closure::Param, type::TypePtr>>& pos_params,
         std::vector<std::pair<size_t, std::vector<value::Value>>>& expand_at,
         const std::vector<pie::expr::ExprPtr>& args,
         const size_t args_size,
@@ -3172,7 +3249,7 @@ There are no mistakes with art.)";
             if (curr < expand_at.size() and i == expand_at[curr].first) {
                 for (auto& val : expand_at[curr++].second) {
                     auto& [sid, type] = pos_params[p];
-                    const auto& [name, id] = sid;
+                    const auto& [name, id, is_syntax] = sid;
                     if (findType(p, type)) {
                         // ScopeGuard sg{this, func.args_env, args_env};
                         ScopeGuard sg{this, func.envs.env.env, args_env};
@@ -3196,7 +3273,6 @@ There are no mistakes with art.)";
             }
             else {
                 auto& [sid, type] = pos_params[p];
-                const auto& [name, id] = sid;
                 if (findType(p, type)) {
                     // ScopeGuard sg{this, func.args_env, args_env};
                     ScopeGuard sg{this, func.envs.env.env, args_env};
@@ -3205,15 +3281,22 @@ There are no mistakes with art.)";
 
                 const auto& expr = args[i];
 
-                value::Value value = std::visit(*this, expr->variant()).value;
+                const auto& [name, id, is_syntax] = sid;
 
-                value = typeCheck(value, type,
-                    "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
-                );
+                value::Value value;
+                if (is_syntax) {
+                    value = expr->variant();
+                }
+                else {
+                    value = std::visit(*this, expr->variant()).value;
 
+                    value = typeCheck(value, type,
+                        "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+                    );
 
-                if (std::holds_alternative<expr::Closure>(value))
-                    captureEnvForPassedClosure(get<expr::Closure>(value));
+                    if (std::holds_alternative<expr::Closure>(value))
+                        captureEnvForPassedClosure(get<expr::Closure>(value));
+                }
 
 
                 // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
@@ -3259,7 +3342,7 @@ There are no mistakes with art.)";
 
         // check for invalid named arguments
         for (const auto& [name, _] : call->named_args) {
-            if (std::ranges::find(func.params, name, &expr::StringID::name) == func.params.end())
+            if (std::ranges::find(func.params, name, &expr::Closure::Param::name) == func.params.end())
                 util::error("Named argument '" + name + "' does not name a parameter name!");
         }
 
@@ -3308,7 +3391,7 @@ There are no mistakes with art.)";
         }
 
 
-        std::vector<std::pair<expr::StringID, type::TypePtr>> pos_params;
+        std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params;
         for (const auto& [param, type] : std::views::zip(func.params, func.type.params))
             pos_params.push_back({param, type});
 
@@ -3456,7 +3539,7 @@ There are no mistakes with art.)";
         }
 
 
-        std::vector<std::pair<expr::StringID, type::TypePtr>> pos_params;
+        std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params;
         for (const auto& [param, type] : std::views::zip(func.params, func.type.params))
             pos_params.push_back({param, type});
 
@@ -3464,7 +3547,7 @@ There are no mistakes with art.)";
             return std::ranges::find_if(named_args, [&p] (const auto& n) { return n.first == p.first.name; }) != named_args.cend();
         });
 
-        std::vector<expr::StringID> new_params;
+        std::vector<expr::Closure::Param> new_params;
         for (const auto& [name, _] : pos_params | std::views::drop(args_size))
             new_params.push_back(name);
 
@@ -3525,7 +3608,7 @@ There are no mistakes with art.)";
                     if (curr < expand_at.size() and i == expand_at[curr].first) {
                         for (auto& val : expand_at[curr++].second) {
                             auto& [sid, type] = pos_params[p];
-                            const auto& [name, id] = sid;
+                            const auto& [name, id, is_syntax] = sid;
                             // if (findType(p, type)) type = validateType(std::move(type));
                             ++p;
 
@@ -3543,7 +3626,7 @@ There are no mistakes with art.)";
                     }
                     else {
                         auto& [sid, type] = pos_params[p];
-                        const auto& [name, id] = sid;
+                        const auto& [name, id, is_syntax] = sid;
                         const auto& expr = args[i];
                         // if (findType(p, type)) type = validateType(std::move(type));
 
@@ -3588,7 +3671,7 @@ There are no mistakes with art.)";
                 if (curr < expand_at.size() and i == expand_at[curr].first) {
                     for (auto& val : expand_at[curr++].second) {
                         auto& [sid, type] = pos_params[p];
-                        const auto& [name, id] = sid;
+                        const auto& [name, id, is_syntax] = sid;
 
                         if (findType(p, type)) {
                             // ScopeGuard sg{this, func.args_env, args_env};
@@ -3611,7 +3694,7 @@ There are no mistakes with art.)";
                 }
                 else {
                     auto& [sid, type] = pos_params[p];
-                    const auto& [name, id] = sid;
+                    const auto& [name, id, is_syntax] = sid;
                     if (findType(p, type)) {
                         // ScopeGuard sg{this, func.args_env, args_env};
                         ScopeGuard sg{this, func.envs.env.env, args_env};

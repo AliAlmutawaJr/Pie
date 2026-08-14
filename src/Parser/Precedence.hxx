@@ -1,9 +1,13 @@
 #pragma once
 
+#include <numeric>
+
+
 #include "../Utils/utils.hxx"
+#include "../Utils/Exceptions.hxx"
+#include "../Declarations.hxx"
 #include "../Expr/Expr.hxx"
 
-#include <numeric>
 
 inline namespace pie {
 
@@ -55,127 +59,131 @@ namespace prec {
 
 
 //todo: continue refactoring!!!!!!!
-  inline int precedenceOf(const std::string& p, const Operators& ops) {
-    if (p == LOW)
-      return LOW_VALUE;
+  	inline int precedenceOf(const std::string& p, const Operators& ops) {
+		if (p == LOW)
+			return LOW_VALUE;
 
-    if (p == ASSIGNMENT)
-      return ASSIGNMENT_VALUE;
+		if (p == ASSIGNMENT)
+			return ASSIGNMENT_VALUE;
 
-    if (p == OR)
-      return OR_VALUE;
+		if (p == OR)
+			return OR_VALUE;
 
-    if (p == AND)
-      return AND_VALUE;
+		if (p == AND)
+			return AND_VALUE;
 
-    if (p == BITOR)
-      return BITOR_VALUE;
+		if (p == BITOR)
+			return BITOR_VALUE;
 
-    if (p == BITXOR)
-      return BITXOR_VALUE;
+		if (p == BITXOR)
+			return BITXOR_VALUE;
 
-    if (p == BITAND)
-      return BITAND_VALUE;
+		if (p == BITAND)
+			return BITAND_VALUE;
 
-    if (p == "!=" or p == "==")
-      return EQ_VALUE;
+		if (p == "!=" or p == "==")
+			return EQ_VALUE;
 
-    if (p == ">" or p == ">=" or p == "<" or p == "<=")
-      return CMP_VALUE;
+		if (p == ">" or p == ">=" or p == "<" or p == "<=" or p == "is" or p == "as")
+			return CMP_VALUE;
 
-    if (p == "<=>")
-      return SPACESHIP_VALUE;
+		if (p == "<=>")
+			return SPACESHIP_VALUE;
 
-    if (p == "<<" or p == ">>")
-      return SHIFT_VALUE;
+		if (p == "<<" or p == ">>")
+			return SHIFT_VALUE;
 
-    if (p == "+" or p == "-")
-      return SUM_VALUE;
+		if (p == "+" or p == "-")
+			return SUM_VALUE;
 
-    if (p == "*" or p == "/" or p == "%")
-      return PROD_VALUE;
+		if (p == "*" or p == "/" or p == "%")
+			return PROD_VALUE;
 
-    if (p == "!" or p == "~")
-      return PREFIX_VALUE;
+		if (p == "!" or p == "~")
+			return PREFIX_VALUE;
 
-    if (p == "[]")
-      return SUFFIX_VALUE;
+		if (p == "[]")
+			return SUFFIX_VALUE;
 
-    if (p == "()")
-      return CALL_VALUE;
+		if (p == "()")
+			return CALL_VALUE;
 
-    if (p == "::")
-      return SCOPE_RESOLUTION_VALUE;
+		if (p == "::")
+			return SCOPE_RESOLUTION_VALUE;
 
-    if (p == "HIGH")
-      return HIGH_VALUE;
+		if (p == "HIGH")
+			return HIGH_VALUE;
 
-    if (not ops.contains(p)) pie::util::error('\'' + p + "' does not name any operator name or precedende level!");
+		if (not ops.contains(p)) pie::util::error('\'' + p + "' does not name any operator name or precedende level!");
 
-    const auto& op = ops.at(p);
-    return std::midpoint(precedenceOf(op->high, ops), precedenceOf(op->low, ops));
-  }
+		const auto& op = ops.at(p);
+		return std::midpoint(precedenceOf(op->high, ops), precedenceOf(op->low, ops));
+  	}
 
-  inline auto calculate(const std::string& high, const std::string& low, const Operators& ops) {
-    return std::midpoint(precedenceOf(high, ops), precedenceOf(low, ops));
-  }
-
-
-  inline std::string higher(const std::string& p, const Operators& ops) {
-    if (p == "LOW")                                     return "=";
-    if (p == "=")                                       return "..";
-    if (p == "..")                                      return "||";
-    if (p == "||")                                      return "&&";
-    if (p == "&&")                                      return "|";
-    if (p == "|")                                       return "^";
-    if (p == "^")                                       return "&";
-    if (p == "&")                                       return "==";
-    if (p == "!=" or p == "==")                         return "<=";
-    if (p == ">" or p == ">=" or p == "<" or p == "<=") return "<=>";
-    if (p == "<=>")                                     return ">>";
-    if (p == "<<" or p == ">>")                         return "-";
-    if (p == "+" or p == "-")                           return "%";
-    if (p == "*" or p == "/" or p == "%")               return "~";
-    if (p == "!" or p == "~")                           return "[]";
-    if (p == "[]" or p == "?")                          return "()";
-    if (p == "()")                                      return "::";
-    if (p == "::")                                      return "HIGH";
-    if (p == "HIGH") pie::util::error("Can't go higher than HIGH!");
-
-    // should I assume it already contains?
-    if (not ops.contains(p)) pie::util::error('\'' + p + "' not name any precedende level or operator!");
-
-    const auto& op = ops.at(p);
-    return op->high == op->low ? higher(op->low /*or op->high*/, ops) : op->high;
-  }
-
-  inline std::string lower(const std::string& p, const Operators& ops) {
-    if (p == "LOW") pie::util::error("Can't go lower than LOW!");
-    if (p == "=")                                       return "LOW";
-    if (p == "..")                                      return "=";
-    if (p == "||")                                      return "..";
-    if (p == "&&")                                      return "||";
-    if (p == "|")                                       return "&&";
-    if (p == "^")                                       return "|";
-    if (p == "&")                                       return "^";
-    if (p == "!=" or p == "==")                         return "&";
-    if (p == ">" or p == ">=" or p == "<" or p == "<=") return "==";
-    if (p == "<=>")                                     return "<=";
-    if (p == "<<" or p == ">>")                         return "<=>";
-    if (p == "+" or p == "-")                           return ">>";
-    if (p == "*" or p == "/" or p == "%")               return "-";
-    if (p == "!" or p == "~")                           return "%";
-    if (p == "[]" or p == "?")                          return "~";
-    if (p == "()")                                      return "[]";
-    if (p == "::")                                      return "()";
-    if (p == "HIGH")                                    return "::";
+  	inline auto calculate(const std::string& high, const std::string& low, const Operators& ops) {
+    	return std::midpoint(precedenceOf(high, ops), precedenceOf(low, ops));
+  	}
 
 
-    //? should I assume it already contains?
-    if (not ops.contains(p)) pie::util::error('\'' + p + "' not name any precedende level or operator!");
-    const auto& op = ops.at(p);
-    return op->high == op->low ? lower(op->high /*or op->high*/, ops) : op->low;
-  }
+	inline std::string higher(const std::string& p, const Operators& ops) {
+		if (p == "LOW")             return "=";
+		if (p == "=")               return "..";
+		if (p == "..")              return "||";
+		if (p == "||")              return "&&";
+		if (p == "&&")              return "|";
+		if (p == "|")               return "^";
+		if (p == "^")               return "&";
+		if (p == "&")               return "==";
+		if (p == "!=" or p == "==") return "<=";
+
+		if (p == ">" or p == ">=" or p == "<" or p == "<=" or p == "is" or p == "as") return "<=>";
+
+		if (p == "<=>")                       return ">>";
+		if (p == "<<" or p == ">>")           return "-";
+		if (p == "+" or p == "-")             return "%";
+		if (p == "*" or p == "/" or p == "%") return "~";
+		if (p == "!" or p == "~")             return "[]";
+		if (p == "[]" or p == "?")            return "()";
+		if (p == "()")                        return "::";
+		if (p == "::")                        return "HIGH";
+		if (p == "HIGH") pie::util::error("Can't go higher than HIGH!");
+
+		// should I assume it already contains?
+		if (not ops.contains(p)) pie::util::error<except::OperatorError>('\'' + p + "' not name any precedende level or operator!");
+
+		const auto& op = ops.at(p);
+		return op->high == op->low ? higher(op->low /*or op->high*/, ops) : op->high;
+	}
+
+	inline std::string lower(const std::string& p, const Operators& ops) {
+		if (p == "LOW") pie::util::error("Can't go lower than LOW!");
+		if (p == "=")               return "LOW";
+		if (p == "..")              return "=";
+		if (p == "||")              return "..";
+		if (p == "&&")              return "||";
+		if (p == "|")               return "&&";
+		if (p == "^")               return "|";
+		if (p == "&")               return "^";
+		if (p == "!=" or p == "==") return "&";
+
+		if (p == ">" or p == ">=" or p == "<" or p == "<=" or p == "is" or p == "as") return "==";
+
+		if (p == "<=>")                       return "<=";
+		if (p == "<<" or p == ">>")           return "<=>";
+		if (p == "+" or p == "-")             return ">>";
+		if (p == "*" or p == "/" or p == "%") return "-";
+		if (p == "!" or p == "~")             return "%";
+		if (p == "[]" or p == "?")            return "~";
+		if (p == "()")                        return "[]";
+		if (p == "::")                        return "()";
+		if (p == "HIGH")                      return "::";
+
+
+		//? should I assume it already contains?
+		if (not ops.contains(p)) pie::util::error('\'' + p + "' not name any precedende level or operator!");
+		const auto& op = ops.at(p);
+		return op->high == op->low ? lower(op->high /*or op->high*/, ops) : op->low;
+	}
 
 } // namespace prec
 } // namespace pue

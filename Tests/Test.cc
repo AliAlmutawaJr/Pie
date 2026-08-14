@@ -19,6 +19,133 @@
 
 
 
+TEST_CASE("Syntax Operators!", "[Operator][Syntax]") {
+
+{
+    const auto src = R"(
+infix + = (a, b) => __builtin_add(a, b);
+
+prefix(LOW +) log = (`expr`) => {
+    __builtin_print("Logging:", expr);
+    __builtin_eval(expr);
+};
+
+x = log 1 + 2;
+
+__builtin_print(x);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(Logging: Syntax {
+    (1 + 2)
+}
+3)");
+}
+
+{
+    const auto src = R"(
+infix + = (a, b) => __builtin_add(a, b);
+
+prefix(LOW +) log = (expr: Int) => {
+    __builtin_print("Logging:", expr);
+    expr;
+};
+
+x = log 1 + 2;
+
+__builtin_print(x);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(Logging: 3
+3)");
+}
+
+{
+    const auto src = R"(
+infix + = (a, b) => __builtin_add(a, b);
+
+prefix(LOW +) log = (`expr`) => {
+    __builtin_print("Logging:", expr);
+    __builtin_eval(expr);
+};
+
+prefix(LOW +) log = (expr: Int) => {
+    __builtin_print("Logging:", expr);
+    expr;
+};
+
+x = log 1 + 2;
+
+__builtin_print(x);
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+
+}
+
+
+
+TEST_CASE("Assigning Namespaces to Improper Names!", "[Func]") {
+{
+    const auto src = R"(
+1 = space x {
+    "meow";
+    "woof!";
+};
+
+__builtin_print(1);
+)";
+
+    REQUIRE(pie::test::run(src) == "woof!");
+}
+}
+
+
+
+TEST_CASE("Not IILE", "[Func]") {
+    const auto src1 = R"(
+    () => __builtin_print("World!");
+)";
+
+    REQUIRE(pie::test::run(src1) == "");
+
+
+    const auto src2 = R"(
+    () => (__builtin_print)("World!");
+)";
+
+    REQUIRE(pie::test::run(src2) == "");
+
+
+    const auto src3 = R"(
+    () => ({__builtin_print;})("World!");
+)";
+
+    REQUIRE(pie::test::run(src3) == "");
+
+
+    const auto src4 = R"(
+    (() => __builtin_print)("Hellope!");
+)";
+
+    REQUIRE_THROWS(pie::test::run(src4));
+}
+
+
+
+TEST_CASE("IILEs", "[Func]") {
+    const auto src1 = R"(
+() => {
+    __builtin_print("Hello!");
+    __builtin_print("World!");
+}();
+)";
+
+    REQUIRE(pie::test::run(src1) == "Hello!\nWorld!");
+}
+
+
+
 TEST_CASE("Qualified Names As Type Names in Match Expression", "[Match][Space]") {
     const auto src1 = R"(
 

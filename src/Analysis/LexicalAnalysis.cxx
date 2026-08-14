@@ -3,6 +3,7 @@
 #include "../Lex/Lexer.hxx"
 #include "../Parser/Parser.hxx"
 #include "../Utils/Exceptions.hxx"
+#include <ios>
 #include <optional>
 #include <variant>
 
@@ -1186,7 +1187,7 @@ void LexicalAnalysis::addNamespaces(
 ) {
     for (const auto& [new_space_name, new_space] : new_spaces) {
         if (spaces.contains(new_space_name)) {
-            for (const auto& [name, id] : spaces[new_space_name]->members) {
+            for (const auto& [name, id] : new_space->members) {
                 spaces[new_space_name]->members[name] = id;
             }
 

@@ -1,0 +1,4 @@
+
+space std {
+    abs = __builtin_abs;
+};

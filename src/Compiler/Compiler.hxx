@@ -165,6 +165,16 @@ public:
 
 
 
+    void operator()(const expr::Loop *loop) {
+        if (loop->kind) {
+            compile(loop->kind->variant());
+        }
+        else {
+
+        }
+    }
+
+
 
     // ============== Utility ============== 
     void output(std::ostream& os) {

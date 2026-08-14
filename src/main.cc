@@ -18,6 +18,7 @@ int main(int argc, char *argv[]) {
     bool print_tokens       = false;
     bool print_parsed       = false;
     bool print_help         = false;
+    bool print_ins          = false;
     bool norun              = false;
     bool repl               = false;
     bool vm                 = false;
@@ -28,31 +29,19 @@ int main(int argc, char *argv[]) {
 
     // this would leave file name at argv[1]
     for(; argc > 1; --argc, ++argv) {
-        if      (argv[1] == "-t"sv or argv[1] == "--tokens"sv ) print_tokens       = true ;
-        else if (argv[1] == "-a"sv or argv[1] == "--ast"sv    ) print_parsed       = true ;
-        else if (argv[1] == "-h"sv or argv[1] == "--help"sv   ) print_help         = true ;
+        if      (argv[1] == "-t"sv or argv[1] == "--tokens"sv ) print_tokens       = true;
+        else if (argv[1] == "-a"sv or argv[1] == "--ast"sv    ) print_parsed       = true;
+        else if (argv[1] == "-h"sv or argv[1] == "--help"sv   ) print_help         = true;
+        else if (argv[1] == "-i"sv or argv[1] == "--ins"sv    ) print_ins          = true;
         else if (argv[1] == "-r"sv or argv[1] == "--norun"sv  ) norun              = true;
-        else if (argv[1] == "--vm"sv                          ) vm                 = true ;
-        else if (argv[1] == "-c"sv or argv[1] == "--command"sv) command            = true ;
-        else if (argv[1] == "-repl"sv                         ) repl               = true ;
+        else if (argv[1] == "--vm"sv                          ) vm                 = true;
+        else if (argv[1] == "-c"sv or argv[1] == "--command"sv) command            = true;
+        else if (argv[1] == "-repl"sv                         ) repl               = true;
         else fname = argv[1];
     }
 
 
     try {
-
-        if (vm) {
-
-            pie::cli::runFile(
-                std::filesystem::path(fname),
-                print_tokens,
-                print_parsed,
-                norun,
-                true
-            );
-
-            return 0;
-        }
 
         if (command) {
             pie::cli::run(std::string{fname}, print_tokens, print_parsed, norun);
@@ -76,7 +65,9 @@ int main(int argc, char *argv[]) {
                 std::filesystem::path(fname),
                 print_tokens,
                 print_parsed,
-                norun
+                norun,
+                print_ins,
+                vm
             );
         }
         #endif

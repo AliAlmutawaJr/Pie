@@ -268,55 +268,7 @@ public:
             }
 
 
-            case CASCADE: {
-                std::vector<expr::ExprPtr> cascaders;
-
-                do {
-                    // cascaders.push_back(parseExpr(prec::CASCADE_VALUE));
-
-                    auto cascader = parseExpr(prec::CASCADE_VALUE);
-
-                    if (match(ASSIGN))
-                        cascader = std::make_shared<expr::Assignment>(
-                            std::move(cascader), type::builtins::Any(), parseExpr(prec::CASCADE_VALUE)
-                        );
-
-                    cascaders.push_back(std::move(cascader));
-
-                } while (match(CASCADE));
-
-                auto name = std::make_shared<expr::Name>("__tmp");
-                std::vector<expr::ExprPtr> cas = {
-                    std::make_shared<expr::Assignment>(
-                        name, type::builtins::Any(), std::move(left)
-                    )
-                };
-
-                for (auto& cascader : cascaders) {
-                    if (auto n = dynamic_cast<expr::Name*>(cascader.get())) {
-                        cas.push_back(std::make_shared<expr::Access>(name, n->name));
-                    }
-                    else if (auto c = dynamic_cast<expr::Call*>(cascader.get())){
-                        if (not dynamic_cast<expr::Name*>(c->func.get()))
-                            util::error<except::SyntaxError>("Can only Cascade Access a name: " + c->stringify());
-
-                        c->func = std::make_shared<expr::Access>(name, c->func->stringify());
-                        cas.push_back(std::move(cascader));
-                    }
-                    else if (auto a = dynamic_cast<expr::Assignment*>(cascader.get())) {
-                        if (not dynamic_cast<expr::Name*>(a->lhs.get()))
-                            util::error<except::SyntaxError>("Can only Cascade Access a name: " + a->lhs->stringify());
-
-                        a->lhs = std::make_shared<expr::Access>(name, a->lhs->stringify());
-                        cas.push_back(std::move(cascader));
-                    }
-                    else util::error<except::SyntaxError>("Cannot Cascade Access a non-name: " + cascader->stringify());
-                }
-
-                cas.push_back(name);
-
-                return std::make_shared<expr::Block>(std::move(cas));
-            }
+            case CASCADE: return cascade(std::move(left));
 
             case COLON: {
                 auto type = parseType();
@@ -358,6 +310,16 @@ public:
                     // env.back().insert(fix->stringify());
                     env.back().first.vars.insert(fix->stringify());
                     unAddOp(fix);
+                }
+
+                if (auto s = expr::is<expr::Syntax>(left.get())) {
+                    constexpr auto SYNTAX = true;
+                    return std::make_shared<expr::Assignment>(
+                        std::move(s)->expr,
+                        type::builtins::_(),
+                        parseExpr(prec::ASSIGNMENT_VALUE - 1),
+                        SYNTAX
+                    );
                 }
 
                 return std::make_shared<expr::Assignment>(
@@ -508,6 +470,59 @@ public:
 
         // or an expression
         return std::make_shared<type::ExprType>(parseExpr<false>(prec::ASSIGNMENT_VALUE));
+    }
+
+
+    expr::ExprPtr cascade(expr::ExprPtr expr) {
+        using enum token::TokenKind;
+
+        std::vector<expr::ExprPtr> cascaders;
+
+        do {
+            // cascaders.push_back(parseExpr(prec::CASCADE_VALUE));
+
+            auto cascader = parseExpr(prec::CASCADE_VALUE);
+
+            if (match(ASSIGN))
+                cascader = std::make_shared<expr::Assignment>(
+                    std::move(cascader), type::builtins::Any(), parseExpr(prec::CASCADE_VALUE)
+                );
+
+            cascaders.push_back(std::move(cascader));
+
+        } while (match(CASCADE));
+
+        auto name = std::make_shared<expr::Name>("__tmp");
+        std::vector<expr::ExprPtr> cas = {
+            std::make_shared<expr::Assignment>(
+                name, type::builtins::Any(), std::move(expr)
+            )
+        };
+
+        for (auto& cascader : cascaders) {
+            if (auto n = dynamic_cast<expr::Name*>(cascader.get())) {
+                cas.push_back(std::make_shared<expr::Access>(name, n->name));
+            }
+            else if (auto c = dynamic_cast<expr::Call*>(cascader.get())){
+                if (not dynamic_cast<expr::Name*>(c->func.get()))
+                    util::error<except::SyntaxError>("Can only Cascade Access a name: " + c->stringify());
+
+                c->func = std::make_shared<expr::Access>(name, c->func->stringify());
+                cas.push_back(std::move(cascader));
+            }
+            else if (auto a = dynamic_cast<expr::Assignment*>(cascader.get())) {
+                if (not dynamic_cast<expr::Name*>(a->lhs.get()))
+                    util::error<except::SyntaxError>("Can only Cascade Access a name: " + a->lhs->stringify());
+
+                a->lhs = std::make_shared<expr::Access>(name, a->lhs->stringify());
+                cas.push_back(std::move(cascader));
+            }
+            else util::error<except::SyntaxError>("Cannot Cascade Access a non-name: " + cascader->stringify());
+        }
+
+        cas.push_back(name);
+
+        return std::make_shared<expr::Block>(std::move(cas));
     }
 
 
@@ -1208,17 +1223,26 @@ public:
     expr::ExprPtr closure() {
         using enum token::TokenKind;
 
-        std::vector<std::string> params;
+        std::vector<expr::Closure::Param> params;
         std::vector<type::TypePtr> params_types;
 
         if (not match(R_PAREN)) {
             do {
-                params.push_back(parseExpr<false>()->stringify());
+                constexpr auto DONT_PARSE_TYPE = false;
+                auto param = parseExpr<DONT_PARSE_TYPE>();
 
-                if (match(COLON))
-                    params_types.push_back(parseType());
-                else 
-                    params_types.push_back(type::builtins::_()); // not `Any`, but `_` in case `Any` was assigned to
+                if (auto s = expr::is<expr::Syntax>(param.get())) {
+                    params.push_back({s->expr->stringify(), -1, true});
+                    params_types.push_back(type::builtins::_());
+                }
+                else {
+                    params.push_back({param->stringify()});
+
+                    if (match(COLON))
+                        params_types.push_back(parseType());
+                    else 
+                        params_types.push_back(type::builtins::_()); // not `Any`, but `_` in case `Any` was assigned to
+                }
             }
             while (match(COMMA));
 
@@ -1238,13 +1262,26 @@ public:
 
         consume(FAT_ARROW);
 
+        return std::make_shared<expr::Closure>(
+            std::move(params), closureBody(), type::FuncType{std::move(params_types), std::move(return_type)}
+        );
+    }
+
+
+    expr::ExprPtr closureBody() {
         scope();
-        auto body = parseExpr(); // allows to pass closures as parameters nicely
+        expr::ExprPtr body;
+        if (match(token::TokenKind::L_BRACE)) {
+            if (isScope()) body = handleScope();
+            else {
+                unconsume();
+                body = parseExpr();
+            }
+        }
+        else body = parseExpr();
         unscope();
 
-        return std::make_shared<expr::Closure>(
-            std::move(params), std::move(body), type::FuncType{std::move(params_types), std::move(return_type)}
-        );
+        return body;
     }
 
 
@@ -1791,8 +1828,7 @@ public:
 
             consume(FAT_ARROW);
             // It's a closure
-            auto body = parseExpr();
-            return std::make_shared<expr::Closure>(std::vector<std::string>{}, std::move(body), type::FuncType{{}, std::move(return_type)});
+            return std::make_shared<expr::Closure>(std::vector<expr::Closure::Param>{}, closureBody(), type::FuncType{{}, std::move(return_type)});
         }
 
         // todo: fix this algorithm
@@ -2067,8 +2103,6 @@ public:
             name = consume(NAME).text;
         }
         else name = low = high = consume(NAME).text;
-
-
 
 
         // technically I can report this error 2 lines earlier, but printing out the operator name could be very handy!
