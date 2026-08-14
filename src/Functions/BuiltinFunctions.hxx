@@ -366,10 +366,13 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 using T = std::remove_cvref_t<decltype(cont)>;
 
                 if constexpr (std::is_same_v<T, value::List>) {
+                    const auto type = that->typeOf(cont);
+                    const auto& list_type = dynamic_cast<const type::ListType&>(*type);
+
                     if (at < 0 or size_t(at) >= cont.elts->values.size())
                         util::error("Accessing list '" + stringify(cont) + "' at index '" + std::to_string(at) + "' which is out of bounds!");
 
-                    return cont.elts->values[at] = that->typeCheck(elt, that->typeOf(cont));
+                    return cont.elts->values[at] = that->typeCheck(elt, list_type.type);
                 }
 
                 else if constexpr (std::is_same_v<T, value::Map>) {
@@ -441,7 +444,11 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"div">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a / b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                if (b == 0) util::error("Division by 0(!)");
+
+                return a / b;
+            }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
             TypeList<double, BigInt>,

@@ -1,10 +1,13 @@
 
 space std {
-    print    = __builtin_print   ;
-    panic    = __builtin_panic   ;
+    print = __builtin_print;
+    panic = __builtin_panic;
 
-    eval     = __builtin_eval    ;
-    reset    = __builtin_reset   ;
+    len   = __builtin_len;
+    isEmpty  = (cont) => __builtin_eq(__builtin_len(cont), 0);
+
+    eval  = __builtin_eval ;
+    reset = __builtin_reset;
 
     type     = __builtin_type    ;
     decltype = __builtin_decltype;
@@ -51,6 +54,12 @@ space std {
  
 
     mixfix(LOW +) if : : else : =
+        (cond, `thn`, `els`) =>
+            __builtin_eval(
+                __builtin_conditional(cond, thn, els)
+            );
+
+    mixfix(LOW +) : ? : else : =
         (cond, `thn`, `els`) =>
             __builtin_eval(
                 __builtin_conditional(cond, thn, els)

@@ -1188,6 +1188,7 @@ public:
         // catch (const except::UnexpectedToken&) { }
 
         restore(std::move(snapshot));
+
         // no more expression. `kind_or_body` was itself the body
         return std::make_shared<expr::Loop>(
             std::move(kind_or_body),

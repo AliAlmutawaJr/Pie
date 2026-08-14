@@ -910,6 +910,7 @@ make
 - [ ] Simplify Closure Captures without performance penalty (internal)
 - [ ] Simplify Pack Expansion (internal)
 - [ ] Fix variadic expansion
+- [ ] f-strings
 - [ ] Breaking Out of Nested Loops
 - [ ] Use Big Int instead of `int64_t`
 - [ ] `Expr::involveName()` seems to be not exhastive, espacially with Closure. Check it.
