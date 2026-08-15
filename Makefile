@@ -10,8 +10,8 @@ OPT = -O2
 ARGS = -Wall -Wextra -Wpedantic -Wno-missing-braces #-Wnrvo
 
 # -sENVIRONMENT=node -sNODERAWFS=1
-WEB_ARGS = -sWASM=1 -sFORCE_FILESYSTEM -sEXPORTED_RUNTIME_METHODS='["callMain"]' \
-	 -sASSERTIONS -sENVIRONMENT=web -INVOKE_RUN_AT_START=0 -sEXIT_RUNTIME=0 -sNO_DISABLE_EXCEPTION_CATCHING
+WEB_ARGS = -sWASM=1 -sFORCE_FILESYSTEM -sEXPORTED_RUNTIME_METHODS='["callMain", "ccall"]' \
+	 -sASSERTIONS -sENVIRONMENT=web -sSTACK_SIZE=8388608 -INVOKE_RUN_AT_START=0 -sEXIT_RUNTIME=0 -sNO_DISABLE_EXCEPTION_CATCHING
 
 SRC_DIRS = src/Lex src/Parser src/Analysis src/Interp src/Utils src/CLI src/Preprocessor src/Type src/Value
 SRC = $(wildcard $(SRC_DIRS:=/*.cxx))

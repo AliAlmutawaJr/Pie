@@ -11,6 +11,7 @@
 #include <ranges>
 #include <stdx/tuple.hpp>
 #include <ffi.h>
+#include <type_traits>
 
 #include "../Utils/ConstexprLookup.hxx"
 #include "../Utils/Exceptions.hxx"
@@ -324,16 +325,43 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"remove_at">,
         Func<
-            decltype([](const auto& cont, const auto& ind, const auto&) -> value::Value {
-                if (cont.elts->values.empty()) util::error("Cannot `remove_at` from an empty list!");
-                if (ind >= cont.elts->values.size()) util::error("Index out of range inside call to `remove_at`!");
+            decltype([](auto& cont, const auto& ind, const auto&) -> value::Value {
+                using T = std::remove_cvref_t<decltype(cont)>;
+
+                if constexpr (std::is_same_v<T, value::List>) {
+                    if (size_t(ind) >= cont.elts->values.size()) {
+                        if (cont.elts->values.empty()) util::error("Cannot `remove_at` from an empty list!");
+                        else util::error("Index out of range inside call to `remove_at`!");
+                    }
+
+                    const auto value = cont.elts->values[ind];
+                    cont.elts->values.erase(std::next(cont.elts->values.begin(), ind));
+                    return value;
+                }
+                else if constexpr (std::is_same_v<T, value::Map>) {
+                    if (not cont.items->map.contains(ind))
+                        util::error("Tried to remove element that doesn't exist from map!");
 
 
-                const auto value = cont.elts->values[ind];
-                cont.elts->values.erase(std::next(cont.elts->values.begin(), ind));
-                return value;
+                    const auto item = cont.items->map.at(ind);
+                    cont.items->map.erase(ind);
+                    return item;
+                }
+                else { // has to be a std::string
+                    if (size_t(ind) >= cont.size()) {
+                        if (cont.empty()) util::error("Cannot `remove_at` from an empty string!");
+                        else util::error("Index out of range inside call to `remove_at`!");
+                    }
+
+                    const std::string elt = {cont[ind]};
+                    cont.erase(ind, 1);
+                    return elt;
+                }
+
             }),
-            TypeList<value::List, BigInt>
+            TypeList<value::List, BigInt>,
+            TypeList<value::Map , Any>,
+            TypeList<std::string, BigInt>
         >
     >{},
 

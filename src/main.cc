@@ -4,16 +4,24 @@
 #include <string_view>
 #include <filesystem>
 
+#if WEB_PIE
+#include <emscripten.h>
+#endif
 
 #include "CLI/CLI.hxx"
 
 
-int main(int argc, char *argv[]) {
+#if WEB_PIE
+extern "C" EMSCRIPTEN_KEEPALIVE void execute(const char *code) {
+    pie::cli::run(std::string{code}, false, false, false);
+}
+#endif
 
+
+static int pieMain(int argc, char *argv[]) {
     using std::operator""sv;
-    #if not WEB_PIE
+
     const auto canonical_root = std::filesystem::canonical(*argv);
-    #endif
 
     bool print_tokens       = false;
     bool print_parsed       = false;
@@ -53,7 +61,6 @@ int main(int argc, char *argv[]) {
             return 0;
         }
 
-        #if not WEB_PIE
         if (fname.empty() or repl) {
             pie::cli::REPL(
                 std::move(canonical_root),
@@ -70,10 +77,19 @@ int main(int argc, char *argv[]) {
                 vm
             );
         }
-        #endif
     }
     catch(const std::exception& e) {
         std::println(std::cerr, "{}", e.what());
         return 1;
     }
+
+    return 0;
+}
+
+
+
+int main(int argc, char *argv[]) {
+    #if not WEB_PIE
+        return pieMain(argc, argv);
+    #endif
 }

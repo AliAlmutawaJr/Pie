@@ -1008,3 +1008,10 @@ make
 ## Quotes About Pie Lang:
 - "The whole language is a bug"
 - "can't have your ~~cake~~ Pie and eat it too!"
+- "the syntax is similar to Rust"
+- "is this like forth?"
+- "kinda like smalltalk"
+- "Elixer does this better"
+- "ugly js"
+- "better js"
+- "is this C++"
