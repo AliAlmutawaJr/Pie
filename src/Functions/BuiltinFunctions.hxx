@@ -321,6 +321,22 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         >
     >{},
 
+    MapEntry<
+        S<"remove_at">,
+        Func<
+            decltype([](const auto& cont, const auto& ind, const auto&) -> value::Value {
+                if (cont.elts->values.empty()) util::error("Cannot `remove_at` from an empty list!");
+                if (ind >= cont.elts->values.size()) util::error("Index out of range inside call to `remove_at`!");
+
+
+                const auto value = cont.elts->values[ind];
+                cont.elts->values.erase(std::next(cont.elts->values.begin(), ind));
+                return value;
+            }),
+            TypeList<value::List, BigInt>
+        >
+    >{},
+
 
     //* BINARY FUNCTIONS
     MapEntry<
@@ -355,6 +371,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             }),
             TypeList<value::List, BigInt>,
             TypeList<value::Map, Any>,
+            TypeList<value::Pack, BigInt>,
             TypeList<std::string, BigInt>
         >
     >{},

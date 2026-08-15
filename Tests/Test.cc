@@ -2641,17 +2641,18 @@ f(Any());
 // }
 
 
-// ! Fix this..at some point
+
+// * No NaNs at this point
 // TEST_CASE("Class + Object Equality with NaN", "[Object][Class][Type]") {
 //     const auto src = R"(
 // print = __builtin_print;
-
+//
 // A = class { value = __builtin_div(0.0, 0.0); };
 // x = __builtin_div(0.0, 0.0);
 // print(__builtin_eq(A(), A()));
 // print(__builtin_eq(x, x));
 // )";
-
+//
 //     REQUIRE(pie::test::run(src) == "false\nfalse");
 // }
 

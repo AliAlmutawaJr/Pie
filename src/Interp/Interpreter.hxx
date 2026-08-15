@@ -4062,7 +4062,7 @@ There are no mistakes with art.)";
             "type", "decltype", "len", "reset", "eval","neg", "abs", "not", "to_int", "to_double", "to_string", //"read_file"
 
             //* binary
-            "get", "push", "pop", "pop_front",
+            "get", "push", "pop", "pop_front", "remove_at",
             "add", "sub", "mul", "div", "mod",
             "pow",
             "gt", "geq", "eq", "leq", "lt",
@@ -4341,6 +4341,7 @@ There are no mistakes with art.)";
         const auto eager = {
             "get"sv,
             "push"sv,
+            "remove_at"sv,
             "str_split"sv,
             "add"sv,
             "sub"sv,
@@ -4367,6 +4368,7 @@ There are no mistakes with art.)";
             // this is disgusting..I know
             if (name == "get"      ) return execute<2>(stdx::get<S<"get"      >>(functions).value, {value1, value2}, this);
             if (name == "push"     ) return execute<2>(stdx::get<S<"push"     >>(functions).value, {value1, value2}, this);
+            if (name == "remove_at") return execute<2>(stdx::get<S<"remove_at">>(functions).value, {value1, value2}, this);
             if (name == "str_split") return execute<2>(stdx::get<S<"str_split">>(functions).value, {value1, value2}, this);
 
             if (name == "add"     ) return execute<2>(stdx::get<S<"add"     >>(functions).value, {value1, value2}, this);

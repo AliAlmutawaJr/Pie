@@ -993,7 +993,7 @@ make
 
 
 ## Community
-[Join our  discord server](https://discord.gg/XRpKTptU)
+[Join our  discord server](https://discord.gg/4JQvGaQ3BB)
 
 ## Contributors
 - [ShawSumma](https://github.com/ShawSumma)

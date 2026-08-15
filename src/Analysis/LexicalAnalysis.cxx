@@ -61,6 +61,7 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
         "__builtin_push",
         "__builtin_pop",
         "__builtin_pop_front",
+        "__builtin_remove_at",
         "__builtin_add",
         "__builtin_sub",
         "__builtin_mul",
