@@ -2589,6 +2589,14 @@ There are no mistakes with art.)";
         }
 
 
+        if (func->self) selves.push_back(*func->self);
+        util::Deferred d1{[this, cond = static_cast<bool>(func->self)] { if (cond) selves.pop_back(); }};
+
+        auto old_spaces = std::move(current_space);
+        current_space = std::move(func->spaces);
+        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+
+
         ScopeGuard sg{this, args_env};
 
         value::Value ret;
@@ -2608,6 +2616,7 @@ There are no mistakes with art.)";
         checkReturnType(ret, func->type.ret);
         return {ret, func->type.ret};
     }
+
 
 
     ValueType operator()(const expr::BinOp *bp) {
@@ -2699,6 +2708,14 @@ There are no mistakes with art.)";
         // }
 
 
+        if (func->self) selves.push_back(*func->self);
+        util::Deferred d1{[this, cond = static_cast<bool>(func->self)] { if (cond) selves.pop_back(); }};
+
+        auto old_spaces = std::move(current_space);
+        current_space = std::move(func->spaces);
+        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+
+
         ScopeGuard sg{this, args_env};
 
         value::Value ret;
@@ -2764,6 +2781,15 @@ There are no mistakes with art.)";
             args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]};
         }
 
+
+        if (func->self) selves.push_back(*func->self);
+        util::Deferred d1{[this, cond = static_cast<bool>(func->self)] { if (cond) selves.pop_back(); }};
+
+        auto old_spaces = std::move(current_space);
+        current_space = std::move(func->spaces);
+        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+
+
         ScopeGuard sg{this, args_env};
 
         value::Value ret;
@@ -2810,7 +2836,7 @@ There are no mistakes with art.)";
                 const value::Value arg = std::visit(*this, cp->expr->variant()).value;
 
                 typeCheck(arg, func->type.params[0],
-                    "Type mis-match! Suffix operator '" + cp->op1 + 
+                    "Type mis-match! Exfix operator '" + cp->op1 + 
                     "', parameter '" + func->params[0].name +
                     "' expected: " + func->type.params[0]->text() +
                     ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
@@ -2828,6 +2854,14 @@ There are no mistakes with art.)";
 
             args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]};
         }
+
+
+        if (func->self) selves.push_back(*func->self);
+        util::Deferred d1{[this, cond = static_cast<bool>(func->self)] { if (cond) selves.pop_back(); }};
+
+        auto old_spaces = std::move(current_space);
+        current_space = std::move(func->spaces);
+        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
 
 
         ScopeGuard sg{this, args_env};
@@ -2918,6 +2952,14 @@ There are no mistakes with art.)";
         }
 
 
+        if (func->self) selves.push_back(*func->self);
+        util::Deferred d1{[this, cond = static_cast<bool>(func->self)] { if (cond) selves.pop_back(); }};
+
+        auto old_spaces = std::move(current_space);
+        current_space = std::move(func->spaces);
+        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+
+
         ScopeGuard sg{this, args_env};
 
         value::Value ret;
@@ -2970,6 +3012,10 @@ There are no mistakes with art.)";
         // so now that I added `Syntax` literals..
         // this problem is mostly solved?
         // but I still don't know if I wanna add implicit syntax or not
+        // ===== ^^^ new old ==== vvv new new
+        // I added implicit syntax
+        // not sure how that affects this...:)
+        // I am not schizophrenic
         std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at;
         for (size_t i{}; i < args.size(); ++i) {
             if (const auto expand = dynamic_cast<const expr::Expansion*>(args[i].get())) {
@@ -3965,6 +4011,8 @@ There are no mistakes with art.)";
             util::error("Can only assign operators to closure literals: " + fix->stringify());
 
         auto func = dynamic_cast<expr::Closure*>(fix->funcs[0].get());
+        // this is needed in the case the operator is applied in another namespace (most likely)
+        func->inSpace(current_space);
 
         for (auto& t : func->type.params) t = validateType(std::move(t));
 
@@ -3984,7 +4032,6 @@ There are no mistakes with art.)";
             case EXFIX : {
                 auto exfix = dynamic_cast<const expr::Exfix*>(fix);
                 if (prefixOpsContain(fix->name)) {
-
                     findPrefixOp(exfix->name )->funcs.push_back(fix->funcs[0]);
                     findPrefixOp(exfix->name2)->funcs.push_back(fix->funcs[0]);
                 }
@@ -4059,7 +4106,12 @@ There are no mistakes with art.)";
             "input_str", "input_int",
 
             //* unary
-            "type", "decltype", "len", "reset", "eval","neg", "abs", "not", "to_int", "to_double", "to_string", //"read_file"
+            "type", "decltype",
+            "len", "reverse",
+            "reset", "eval",
+            "neg", "abs",
+            "not",
+            "to_int", "to_double", "to_string",
 
             //* binary
             "get", "push", "pop", "pop_front", "remove_at",
@@ -4263,6 +4315,7 @@ There are no mistakes with art.)";
         const auto unary_funcs = {
             "type"         ,
             "len"          ,
+            "reverse"      ,
             "eval"         ,
             "abs"          ,
             "neg"          ,
@@ -4300,6 +4353,7 @@ There are no mistakes with art.)";
 
         if (name == "type"         ) return execute<1>(stdx::get<S<"type"      >>(functions).value, {value1}, this);
         if (name == "len"          ) return execute<1>(stdx::get<S<"len"       >>(functions).value, {value1}, this);
+        if (name == "reverse"      ) return execute<1>(stdx::get<S<"reverse"   >>(functions).value, {value1}, this);
         if (name == "eval"         ) return execute<1>(stdx::get<S<"eval"      >>(functions).value, {value1}, this);
         if (name == "abs"          ) return execute<1>(stdx::get<S<"abs"       >>(functions).value, {value1}, this);
         if (name == "neg"          ) return execute<1>(stdx::get<S<"neg"       >>(functions).value, {value1}, this);

@@ -26,14 +26,17 @@ space std {
     infix + = (a: String, b: String) => __builtin_concat(a, b);
     infix + = (a, b) => __builtin_add(a, b);
     infix * = (a, b) => __builtin_mul(a, b);
+    infix(* +) ** = (a, b) => __builtin_pow(a, b);
     infix - = (a, b) => __builtin_sub(a, b);
     infix / = (a, b) => __builtin_div(a, b);
     infix % = (a, b) => __builtin_mod(a, b);
 
 
 
+
     prefix(!) -   = (x) => __builtin_neg(x);
     prefix(!) not = (x) => __builtin_not(x);
+    prefix ~ = (s: String) => __builtin_reverse(s);
 
     infix(&&) and = (x, y) => __builtin_and(x, y);
     infix(||) or  = (x, y) => __builtin_or (x, y);
@@ -44,6 +47,7 @@ space std {
     infix <= = (a, b) => __builtin_leq(a, b);
     infix >  = (a, b) => __builtin_gt(a, b);
     infix >= = (a, b) => __builtin_geq(a, b);
+
 
     infix as = (expr, type) => match type {
         = Int    => __builtin_to_int   (expr);
@@ -59,6 +63,7 @@ space std {
                 __builtin_conditional(cond, thn, els)
             );
 
+
     mixfix(LOW +) : ? : else : =
         (cond, `thn`, `els`) =>
             __builtin_eval(
@@ -66,7 +71,6 @@ space std {
             );
 
     mixfix([]) : [ : ] = (cont, at) => __builtin_get(cont, at);
-
 
 
     Enumerate = class {
@@ -80,6 +84,14 @@ space std {
             {ind, __builtin_get(collection, ind)};
         };
     };
+
+
+    prefix(!) 0b = (bits) => {
+        total = 0;
+        loop {i, char} : Enumerate(~ (bits as String))
+            total = total + (char as Int) * 2 ** i;
+    };
+
 
 
     __Iota = class {

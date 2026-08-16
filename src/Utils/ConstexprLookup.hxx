@@ -82,7 +82,7 @@ struct Func {
 
 
 // using Value = std::variant<int, double, bool, std::string, Closure>;
-struct Any {};
+struct Any { };
 
 
 template <size_t SIZE, size_t N = 0, typename... Ts>
@@ -113,7 +113,7 @@ value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, co
         return func.func(v1, that);
     }
 
-    pie::util::error();
+    pie::util::error("Wrong type passed to builtin function!");
 }
 
 template <size_t SIZE, size_t N = 0, typename... Ts>
@@ -153,7 +153,7 @@ value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, co
         //     msg += c;
         // pie::util::error(msg);
 
-        pie::util::error();
+        pie::util::error("Wrong type passed to builtin function!");
     }
 }
 
@@ -200,7 +200,7 @@ value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, co
 
     }
 
-    else pie::util::error("Wrong type passed to function!");
+    else pie::util::error("Wrong type passed to builtin function!");
 }
 
 

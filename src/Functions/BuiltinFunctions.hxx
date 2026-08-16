@@ -454,6 +454,32 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     >{},
 
     MapEntry<
+        S<"reverse">,
+        Func<
+            decltype([](auto& cont, const auto&) -> value::Value {
+                using T = std::remove_cvref_t<decltype(cont)>;
+
+                if constexpr (std::is_same_v<T, value::List>) {
+                    cont.elts->values =
+                        cont.elts->values | std::views::reverse | std::ranges::to<std::vector>();
+                }
+                else if constexpr (std::is_same_v<T, value::Pack>) {
+                    cont->values = cont->values | std::views::reverse | std::ranges::to<std::vector>();
+                }
+                else { // std::string
+                    cont = cont | std::views::reverse | std::ranges::to<std::string>();
+                }
+
+                return cont;
+            }),
+            TypeList<value::List>,
+            TypeList<value::Pack>,
+            TypeList<std::string>
+        >
+    >{},
+
+
+    MapEntry<
         S<"add">,
         Func<
             decltype([](const auto& a, const auto& b, const auto&) { return a + b; }),

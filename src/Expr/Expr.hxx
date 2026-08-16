@@ -1235,7 +1235,7 @@ struct Closure : Expr {
     ExprPtr body;
     type::FuncType type;
 
-    vm::Chunk compiled_body;
+    // vm::Chunk compiled_body;
 
 
     struct CapturedEnvs {

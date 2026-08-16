@@ -3,7 +3,6 @@
 #include "../Lex/Lexer.hxx"
 #include "../Parser/Parser.hxx"
 #include "../Utils/Exceptions.hxx"
-#include <ios>
 #include <optional>
 #include <variant>
 
@@ -57,8 +56,9 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
         "__builtin_to_double",
         "__builtin_to_string",
         "__builtin_get",
+        "__builtin_set",
         "__builtin_push",
-        "__builtin_push",
+        "__builtin_reverse",
         "__builtin_pop",
         "__builtin_pop_front",
         "__builtin_remove_at",
@@ -75,7 +75,6 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
         "__builtin_lt",
         "__builtin_and",
         "__builtin_or",  
-        "__builtin_set",
         "__builtin_conditional",
         "__builtin_str_slice",
         "__builtin_str_split",
