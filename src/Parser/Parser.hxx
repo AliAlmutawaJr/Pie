@@ -2033,7 +2033,7 @@ public:
 
 
 
-    void checkOperatpr(const token::TokenKind kind, const std::string& name, const std::string& high, const std::string& low) {
+    void checkOperator(const token::TokenKind kind, const std::string& name, const std::string& high, const std::string& low) {
         using enum token::TokenKind;
 
         // gotta dry out this part
@@ -2110,45 +2110,66 @@ public:
         if (high == low and (prec::precedenceOf(high, consolidated) == prec::HIGH_VALUE or prec::precedenceOf(low, consolidated) == prec::LOW_VALUE))
             util::error<except::OperatorError>("Can't have set operator precedence to only LOW/HIGH: " + name);
 
-
-        consume(ASSIGN);
-
-        expr::ExprPtr func = parseExpr();
-        expr::Closure *c = dynamic_cast<expr::Closure*>(func.get());
-        if (not c) util::error<except::OperatorError>("[pre/in/suf] fix operator has to be equal to a function!");
-
-
-        checkOperatpr(token.kind, name, high, low);
-
+        checkOperator(token.kind, name, high, low);
 
         std::shared_ptr<expr::Fix> p;
         if (token.kind == PREFIX) {
-            if (c->params.size() != 1) util::error<except::OperatorError>("Prefix operator must be assigned to a unary closure!");
-            p = std::make_shared<expr::Prefix>(name, std::move(high), std::move(low), shift, std::vector<expr::ExprPtr>{/*std::move(func)*/});
+            p = std::make_shared<expr::Prefix>(name, std::move(high), std::move(low), shift);
         }
         else if (token.kind == INFIX) {
-            if (c->params.size() != 2) util::error<except::OperatorError>("Infix operator must be assigned to a binary closure!");
-            p = std::make_shared<expr::Infix> (name, std::move(high), std::move(low), shift, std::vector<expr::ExprPtr>{/*std::move(func)*/});
+            p = std::make_shared<expr::Infix> (name, std::move(high), std::move(low), shift);
         }
         else /* if (token.kind == SUFFIX) */ {
-            if (c->params.size() != 1) util::error<except::OperatorError>("Suffix operator must be assigned to a unary closure!");
-            p = std::make_shared<expr::Suffix>(name, std::move(high), std::move(low), shift, std::vector<expr::ExprPtr>{/*std::move(func)*/});
+            p = std::make_shared<expr::Suffix>(name, std::move(high), std::move(low), shift);
         }
 
-        p->funcs.push_back(func);
-        if (envContains(p->stringify())) return p;
 
 
+        // add it so that it's available in the body of the operator (recursive operators!)
         if (token.kind == PREFIX) {
             if (not prefixOpsContain(name)) {
                 env.back().first.prefix_op_env[name] = p->clone();
-                env.back().first.prefix_op_env[name]->funcs.pop_back(); // probably not needed!
             }
         }
         else if (not opsContain(name)) {
             env.back().first.op_env[name] = p->clone();
-            env.back().first.op_env[name]->funcs.pop_back(); // probably not needed!
         }
+
+
+
+        consume(ASSIGN);
+
+        const expr::ExprPtr func = parseExpr();
+        const expr::Closure *c = dynamic_cast<expr::Closure*>(func.get());
+        if (not c) util::error<except::OperatorError>("[pre/in/suf] fix operator has to be equal to a function!");
+
+
+        // do error checking now
+        if (token.kind == PREFIX) {
+            if (c->params.size() != 1) util::error<except::OperatorError>("Prefix operator must be assigned to a unary closure!");
+        }
+        else if (token.kind == INFIX) {
+            if (c->params.size() != 2) util::error<except::OperatorError>("Infix operator must be assigned to a binary closure!");
+        }
+        else /* if (token.kind == SUFFIX) */ {
+            if (c->params.size() != 1) util::error<except::OperatorError>("Suffix operator must be assigned to a unary closure!");
+        }
+
+
+
+        // in case the operator expression was assigned to
+        // don't add the operator to the env
+        p->funcs.push_back(func);
+        if (envContains(p->stringify())) {
+
+            if (token.kind == PREFIX) {
+                env.back().first.prefix_op_env.erase(name);
+            }
+            else {
+                env.back().first.op_env.erase(name);
+            }
+        }
+
 
 
         return p;
@@ -2162,18 +2183,17 @@ public:
         consume(COLON);
         std::string name2 = consume(NAME).text;
 
-        consume(ASSIGN);
-
-        expr::ExprPtr func = parseExpr();
-        expr::Closure *c = dynamic_cast<expr::Closure*>(func.get());
-        if (not c                ) util::error<except::OperatorError>("Exfix operator has to be equal to a function!");
-        if (c->params.size() != 1) util::error<except::OperatorError>("Exfix operator must be assigned to a unary closure!");
-
 
         std::shared_ptr<expr::Fix> p = std::make_shared<expr::Exfix>(
-            name1, name2, prec::LOW, prec::LOW, 0, std::vector<expr::ExprPtr>{/* std::move(func) */}
+            name1, name2, prec::LOW, prec::LOW, 0
         );
 
+
+
+        if (opsContain(name2)) {
+            std::println(std::cerr, "Overload set for operator '{}:{}' must have the same operator type:", name1, name2);
+            util::expected(findOp(name2)->type(), token::TokenKind::EXFIX);
+        }
 
         if (prefixOpsContain(name1)) {
             const auto& op = findPrefixOp(name1);
@@ -2190,31 +2210,30 @@ public:
                 util::error<except::OperatorError>("Overload set of exfix operator must all have the same operator name `" + ex->name + " : " + ex->name2 + '`');
             }
 
-            p->funcs.push_back(func);
-
-            return p;
-            // return std::make_shared<expr::Exfix>(*ex);
+        }
+        else {
+            // technically, it's already added
+            // interesting idea to push name2 as well
+            env.back().first.prefix_op_env[name1] = p->clone();
+            env.back().first.op_env       [name2] = p->clone();
         }
 
-        if (opsContain(name2)) {
-            std::println(std::cerr, "Overload set for operator '{}:{}' must have the same operator type:", name1, name2);
-            util::expected(findOp(name2)->type(), token::TokenKind::EXFIX);
-        }
+
+
+        consume(ASSIGN);
+
+        expr::ExprPtr func = parseExpr();
+        expr::Closure *c = dynamic_cast<expr::Closure*>(func.get());
+        if (not c                ) util::error<except::OperatorError>("Exfix operator has to be equal to a function!");
+        if (c->params.size() != 1) util::error<except::OperatorError>("Exfix operator must be assigned to a unary closure!");
 
 
         p->funcs.push_back(func);
-        if (envContains(p->stringify())) return p;
+        if (envContains(p->stringify())) {
+            env.back().first.prefix_op_env.erase(name1);
+            env.back().first.op_env.erase(name2);
+        }
 
-
-        env.back().first.prefix_op_env[name1] = p->clone();
-        env.back().first.prefix_op_env[name1]->funcs.pop_back(); // probably not needed!
-
-        // interesting idea
-        env.back().first.op_env[name2] = p->clone(); //* maybe? //* maybe not...? idk
-        env.back().first.op_env[name2]->funcs.pop_back(); // probably not needed!
-
-        // pushing back after cloning so that the op table doesn't contain the closure
-        // p->funcs.push_back(std::move(func));
 
         return p;
     };
@@ -2266,15 +2285,57 @@ public:
             if (op_pos.back()) rest.push_back(consume(NAME).text);
         }
 
+
+        const bool is_prefix = op_pos.front(); 
+        std::shared_ptr<expr::Fix> p =
+            std::make_shared<expr::Operator>(
+                first, rest,
+                op_pos,
+                high, low,
+                shift
+            );
+
+
+
+        if (opsContain(first) or prefixOpsContain(first)) {
+
+            // How THE FUCK did this used not to error??
+            // const auto& op = findOp(first);
+
+            const auto& op = [this, is_prefix, &first] -> auto& {
+                if (is_prefix) return findPrefixOp(first);
+                else return findOp(first);
+            }();
+
+            if (op->type() != MIXFIX) util::error<except::OperatorError>(); // todo: ADD ERR MSG
+
+            auto arb = dynamic_cast<const expr::Operator*>(op.get());
+
+            bool same = first == arb->name;
+            for (auto&& [n1, n2] : std::views::zip(rest, arb->rest))
+                if (n1 != n2) { same = false; break; }
+
+            if (not same) util::error<except::OperatorError>(); // todo: ADD ERR MSG
+        }
+        else {
+            if (is_prefix) env.back().first.prefix_op_env[p->name] = p;
+            else           env.back().first.       op_env[p->name] = p;
+
+            for (const auto& name : rest) env.back().first.op_env[name] = p;
+        }
+
+
         consume(ASSIGN);
+
 
         expr::ExprPtr func = parseExpr();
         expr::Closure *c = dynamic_cast<expr::Closure*>(func.get());
         if (not c) util::error<except::OperatorError>("Operators have to be equal to a function!");
 
 
-                                    // false == expression parameter
-        if (const size_t param_count = std::ranges::count(op_pos, false);
+        if (
+            // `false` indicate expression parameter
+            const size_t param_count = std::ranges::count(op_pos, false);
             param_count != c->params.size()
         )
         {
@@ -2291,62 +2352,18 @@ public:
             util::error<except::OperatorError>("Operator '" + op_name + "' must be assigned to a closure with " + n + " parameters!");
         }
 
-        const bool is_prefix = op_pos.front(); // assigned here bc I move op_pos in the next line
-        std::shared_ptr<expr::Fix> p =
-            std::make_shared<expr::Operator>(
-                std::move(first),
-                rest, // how can I move it?
-                std::move(op_pos),
-                std::move(high), std::move(low),
-                shift,
-                // begins_with_expr, ends_with_expr,
-                std::vector<expr::ExprPtr>{/* std::move(func) */}
-            );
-
-
-
-        if (opsContain(first) or prefixOpsContain(first)) {
-            const auto& op = findOp(first);
-            // op->funcs.push_back(std::move(func));
-
-            if (op->type() != MIXFIX) util::error<except::OperatorError>(); // todo: ADD ERR MSG
-
-            auto arb = dynamic_cast<const expr::Operator*>(op.get());
-
-            bool same = first == arb->name;
-            for (auto&& [n1, n2] : std::views::zip(rest, arb->rest))
-                if (n1 != n2) {
-                    same = false;
-                    break;
-                }
-
-            if (not same) util::error<except::OperatorError>(); // todo: ADD ERR MSG
-
-
-            p->funcs.push_back(std::move(func));
-            return p;
-            // return std::make_shared<expr::Operator>(*arb);
-        }
-
 
         p->funcs.push_back(func);
-        if (envContains(p->stringify())) return p;
-        p->funcs.pop_back();
+        if (envContains(p->stringify())) {
 
+            if (is_prefix) env.back().first.prefix_op_env.erase(p->name);
+            else           env.back().first.       op_env.erase(p->name);
 
-        if (is_prefix) {
-            env.back().first.prefix_op_env[p->name] = p;
-            for (const auto& name : rest) env.back().first.op_env[name] = p;
-        }
-        else {
-            env.back().first.op_env[p->name] = p;
-            for (const auto& name : rest) env.back().first.op_env[name] = p;
+            for (const auto& name : rest)
+                env.back().first.op_env.erase(name);
         }
 
 
-
-        // push_back after clone on purpose.
-        p->funcs.push_back(std::move(func));
         return p;
     }
 

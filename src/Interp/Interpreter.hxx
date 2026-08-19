@@ -1381,17 +1381,27 @@ public:
 
         if (std::holds_alternative<expr::Closure>(value)) {
             auto& closure = get<expr::Closure>(value);
-
-            // value::Environment capture_list;
-            // for (const auto& [name, value] : obj.second->members)
-            //     capture_list[name.stringify()] = {value, typeOf(value)};
-
-            // closure.capture(capture_list);
             closure.captureThis(obj);
-
 
             return {closure, type};
         }
+
+        return {value, type};
+    }
+
+
+    ValueType staticAccess(const type::LiteralType& cls, const std::string& name) {
+
+        const auto& found = std::ranges::find_if(
+            cls.cls->blueprint->fields,
+            [&name] (const auto& member) { return get<0>(member).stringify() == name; }
+        );
+
+        if (found == cls.cls->blueprint->fields.end()) util::error("Name '" + name + "' doesn't exist in class `" + /*acc->var->*/ cls.text() + '`');
+
+        const auto& type = get<type::TypePtr>(*found);
+
+        auto value = typeCheck(std::visit(*this, get<expr::ExprPtr>(*found)->variant()).value, type);
 
         return {value, type};
     }
@@ -1412,6 +1422,14 @@ public:
         }
 
         const value::Value left = std::visit(*this, acc->var->variant()).value;
+
+        if (std::holds_alternative<type::TypePtr>(left)) {
+            auto cls = dynamic_cast<type::LiteralType*>(get<type::TypePtr>(left).get());
+
+            if (not cls) util::error("Cannot access a non-object value: " + acc->stringify());
+
+            return staticAccess(*cls, acc->name);
+        }
 
         if (not std::holds_alternative<value::Object>(left))
             util::error("Can't access a non-class type!");

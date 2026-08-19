@@ -29,11 +29,12 @@ namespace prec {
   inline constexpr auto            SHIFT_VALUE = 2 *        SPACESHIP_VALUE;
   inline constexpr auto              SUM_VALUE = 2 *            SHIFT_VALUE;
   inline constexpr auto             PROD_VALUE = 2 *              SUM_VALUE;
-  inline constexpr auto           PREFIX_VALUE = 2 *             PROD_VALUE;
+  inline constexpr auto               AS_VALUE = 2 *             PROD_VALUE;
+  inline constexpr auto           PREFIX_VALUE = 2 *               AS_VALUE;
   inline constexpr auto           SUFFIX_VALUE = 2 *           PREFIX_VALUE;
   inline constexpr auto             CALL_VALUE = 2 *           SUFFIX_VALUE;
   inline constexpr auto    MEMBER_ACCESS_VALUE =                 CALL_VALUE; // same as a call operator
-  inline constexpr auto SCOPE_RESOLUTION_VALUE = 2 *             CALL_VALUE;
+  inline constexpr auto SCOPE_RESOLUTION_VALUE = 2 *    MEMBER_ACCESS_VALUE;
   inline constexpr auto             HIGH_VALUE = 2 * SCOPE_RESOLUTION_VALUE;
 
 
@@ -50,6 +51,7 @@ namespace prec {
   inline constexpr auto SHIFT              = "<<";
   inline constexpr auto SUM                = "+";
   inline constexpr auto PROD               = "*";
+  inline constexpr auto AS                 = "as";
   inline constexpr auto PREFIX             = "!";
   inline constexpr auto SUFFIX             = "[]";
   inline constexpr auto CALL               = "()";
@@ -84,7 +86,7 @@ namespace prec {
 		if (p == "!=" or p == "==")
 			return EQ_VALUE;
 
-		if (p == ">" or p == ">=" or p == "<" or p == "<=" or p == "is" or p == "as")
+		if (p == ">" or p == ">=" or p == "<" or p == "<=")
 			return CMP_VALUE;
 
 		if (p == "<=>")
@@ -98,6 +100,9 @@ namespace prec {
 
 		if (p == "*" or p == "/" or p == "%")
 			return PROD_VALUE;
+
+		if (p == "as" or p == "is")
+			return AS_VALUE;
 
 		if (p == "!" or p == "~")
 			return PREFIX_VALUE;
@@ -116,7 +121,9 @@ namespace prec {
 
 		if (not ops.contains(p)) pie::util::error('\'' + p + "' does not name any operator name or precedende level!");
 
-		const auto& op = ops.at(p);
+		// const auto& op = ops.at(p);
+		// explicit type to shut up clangd about `#include "Expr.hxx"` not being used directly
+		const std::shared_ptr<expr::Fix>& op = ops.at(p);
 		return std::midpoint(precedenceOf(op->high, ops), precedenceOf(op->low, ops));
   	}
 

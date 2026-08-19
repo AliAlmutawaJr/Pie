@@ -1365,8 +1365,9 @@ struct Fix : Expr {
     // ExprPtr func;
 
 
-    Fix(std::string n, std::string up, std::string down, const int s, std::vector<ExprPtr> cs)
-    : name{std::move(n)}, high{std::move(up)}, low{std::move(down)}, shift{s}, funcs{std::move(cs)} {}
+    Fix(std::string n, std::string up, std::string down, const int s)
+    : name{std::move(n)}, high{std::move(up)}, low{std::move(down)}, shift{s}
+    { }
 
 
     bool involvesName(const std::string_view sv) const override {
@@ -1466,8 +1467,8 @@ struct Suffix : Fix {
 
 struct Exfix : Fix {
     std::string name2;
-    Exfix(std::string n1, std::string n2, std::string up, std::string down, const int s, std::vector<ExprPtr> cs)
-    : Fix{std::move(n1), std::move(up), std::move(down), s, std::move(cs)}, name2{std::move(n2)} {}
+    Exfix(std::string n1, std::string n2, std::string up, std::string down, const int s)
+    : Fix{std::move(n1), std::move(up), std::move(down), s}, name2{std::move(n2)} {}
 
     std::string stringify(const size_t indent = 0) const override {
         const auto [c, token] = [this] -> std::pair<char, std::string> {
@@ -1500,14 +1501,12 @@ struct Operator : Fix {
     Operator(
         std::string first, std::vector<std::string> rst, std::vector<bool> pos,
         std::string up, std::string down,
-        const int s,
-        std::vector<ExprPtr> cs
+        const int s
     )
     : Fix{
         std::move(first),
         std::move(up), std::move(down),
-        s,
-        std::move(cs)
+        s
     },
     rest{std::move(rst)}, op_pos{std::move(pos)}
     // begin_expr{begin}, end_expr{end}

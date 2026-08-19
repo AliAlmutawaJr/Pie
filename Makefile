@@ -62,8 +62,8 @@ endef
 
 $(eval $(call BUILD_CONFIG,release,$(OPT) -DNO_ERR_LOC))
 $(eval $(call BUILD_CONFIG,debug,-O0 $(SAN)))
-$(eval $(call BUILD_CONFIG,test,-O0 $(SAN) -DNO_ERR_LOC))
-$(eval $(call BUILD_CONFIG,gh-actions,-O0 -DNO_ERR_LOC))
+$(eval $(call BUILD_CONFIG,test,-O0 $(SAN)))
+$(eval $(call BUILD_CONFIG,gh-actions,-O0))
 $(eval $(call BUILD_CONFIG,web,$(OPT) -DWEB_PIE))
 
 
@@ -108,7 +108,7 @@ $(test_OBJ_DIR)/catch.o: Tests/catch.cpp
 -include $(test_OBJ_DIR)/Test.d $(test_OBJ_DIR)/catch.d
 
 run_tests: $(test_OBJS) $(test_OBJ_DIR)/Test.o $(test_OBJ_DIR)/catch.o
-	$(CC) $(VER) $(test_OBJS) $(test_OBJ_DIR)/Test.o $(test_OBJ_DIR)/catch.o $(INCLUDE) $(LIBS) -O0 -o run_tests $(SAN) -DNO_ERR_LOC
+	$(CC) $(VER) $(test_OBJS) $(test_OBJ_DIR)/Test.o $(test_OBJ_DIR)/catch.o $(INCLUDE) $(LIBS) -O0 -o run_tests $(SAN)
 
 test: checklibs run_tests
 	./run_tests && rm run_tests
@@ -154,7 +154,7 @@ $(gh-actions_OBJ_DIR)/catch.o: Tests/catch.cpp
 -include $(gh-actions_OBJ_DIR)/Test.d $(gh-actions_OBJ_DIR)/catch.d
 
 run_tests_gh: $(gh-actions_OBJS) $(gh-actions_OBJ_DIR)/Test.o $(gh-actions_OBJ_DIR)/catch.o
-	$(CC) $(VER) $(gh-actions_OBJS) $(gh-actions_OBJ_DIR)/Test.o $(gh-actions_OBJ_DIR)/catch.o $(INCLUDE) $(LIBS) -O0 -o run_tests_gh -DNO_ERR_LOC
+	$(CC) $(VER) $(gh-actions_OBJS) $(gh-actions_OBJ_DIR)/Test.o $(gh-actions_OBJ_DIR)/catch.o $(INCLUDE) $(LIBS) -O0 -o run_tests_gh
 	./run_tests_gh
 
 
@@ -175,7 +175,7 @@ checklibs:
 clean:
 	rm -f $(OUTPUT_NAME) $(DEBUG_OUTPUT_NAME) run_tests run_tests_gh $(WEB_OUTPUT_NAME) Pie.wasm
 	rm -rf build
-	rm -rf remote_includes/*
+# 	rm -rf remote_includes/*
 
 .PHONY: checklibs clean main debug test web gh-actions test_dylib_lnx
 

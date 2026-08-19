@@ -907,26 +907,25 @@ make
 
 
 
-- [ ] Simplify Closure Captures without performance penalty (internal)
+- [ ] Add default values to function parameters
 - [ ] Simplify Pack Expansion (internal)
-- [ ] Fix variadic expansion
+- [ ] Simplify Closure Captures without performance penalty (internal)
 - [ ] f-strings
 - [ ] Breaking Out of Nested Loops
 - [ ] Use Big Int instead of `int64_t`
 - [ ] `Expr::involveName()` seems to be not exhastive, espacially with Closure. Check it.
-- [ ] Add default values to function parameters
+- [ ] World domination
 - [ ] Make `=` and `=>` overloadable
 - [ ] Fix builtin reset (value-reset, reset/name-reset) 
-- [ ] World domination
 - [ ] Move from Make to Bake
 - [ ] Improve error messages (add line and column numbers)
-- [ ] Add recursive operators
 - [ ] Remove dependency on stdx and boost
 - [ ] Add LLVM backend
 
 ---
 
 ### Done
+- [x] Add recursive operators
 - [x] File IO
 - [x] Zen of Pie (with the pie ascii art):
 - [x] Cascade operator `..`

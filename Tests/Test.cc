@@ -20,6 +20,123 @@
 
 
 
+TEST_CASE("Recursive Operators", "[Operator]") {
+
+    {
+    const auto src = R"(
+prefix ! = (x) =>
+    __builtin_conditional(
+        __builtin_gt(x, 0),
+        {
+            __builtin_print(x);
+            ! __builtin_sub(x, 1);
+        },
+        0
+    );
+
+! 5;
+)";
+
+    REQUIRE(pie::test::run(src) == R"(5
+4
+3
+2
+1)");
+}
+
+{
+    const auto src = R"(
+infix + = (x, _) =>
+    __builtin_conditional(
+        __builtin_gt(x, 0),
+        {
+            __builtin_print(x);
+            __builtin_sub(x, 1) + _;
+        },
+        0
+    );
+
+5 + 0;
+)";
+
+    REQUIRE(pie::test::run(src) == R"(5
+4
+3
+2
+1)");
+}
+
+{
+    const auto src = R"(
+suffix ! = (x) =>
+    __builtin_conditional(
+        __builtin_gt(x, 0),
+        {
+            __builtin_print(x);
+            __builtin_sub(x, 1) !;
+        },
+        0
+    );
+
+5 !;
+)";
+
+    REQUIRE(pie::test::run(src) == R"(5
+4
+3
+2
+1)");
+}
+
+{
+    const auto src = R"(
+exfix !:! = (x) =>
+    __builtin_conditional(
+        __builtin_gt(x, 0),
+        {
+            __builtin_print(x);
+            ! __builtin_sub(x, 1) !;
+        },
+        0
+    );
+
+! 5 !;
+)";
+
+    REQUIRE(pie::test::run(src) == R"(5
+4
+3
+2
+1)");
+}
+
+{
+    const auto src = R"(
+mixfix(LOW +) : do : : = (a, b, c) =>
+    __builtin_conditional(
+        __builtin_gt(a, 0),
+        {
+            __builtin_print(a);
+            __builtin_sub(a, 1) do b c;
+        },
+        0
+    );
+
+5 do 0 0;
+)";
+
+    REQUIRE(pie::test::run(src) == R"(5
+4
+3
+2
+1)");
+}
+
+}
+
+
+
+
 TEST_CASE("Division by 0") {
 {
     const auto src = R"(

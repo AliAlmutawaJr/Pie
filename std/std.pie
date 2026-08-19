@@ -36,7 +36,7 @@ space std {
 
     prefix(!) -   = (x) => __builtin_neg(x);
     prefix(!) not = (x) => __builtin_not(x);
-    prefix ~ = (s: String) => __builtin_reverse(s);
+    prefix ~ = (s: String) => (s);
 
     infix(&&) and = (x, y) => __builtin_and(x, y);
     infix(||) or  = (x, y) => __builtin_or (x, y);
@@ -49,11 +49,13 @@ space std {
     infix >= = (a, b) => __builtin_geq(a, b);
 
 
-    infix as = (expr, type) => match type {
+    infix as = (expr, type: Type) => match type {
         = Int    => __builtin_to_int   (expr);
         = Double => __builtin_to_double(expr);
         = String => __builtin_to_string(expr);
-        _ => __builtin_panic("Unknown type in `as` cast:", type);
+        .: _ => expr as type();
+        .: _ => type.from(expr);
+        .: _ => __builtin_panic("Unknown type in `as` cast:", type);
     };
  
 
