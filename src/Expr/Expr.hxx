@@ -75,6 +75,40 @@ struct String : Expr {
 };
 
 
+struct FString : Expr {
+    std::string str;
+    std::vector<std::pair<size_t, ExprPtr>> exprs;
+
+    FString(std::string s, std::vector<std::pair<size_t, ExprPtr>> es) noexcept
+    : str{std::move(s)}, exprs{std::move(es)} {}
+
+    std::string stringify(const size_t indet = 0) const override {
+        std::string s = "\"";
+
+        for (size_t i{}, e{}; i < str.size() or e < exprs.size(); ++i) {
+            for (; e < exprs.size() and exprs[e].first <= i; ++e) {
+                s += '{' + exprs[e].second->stringify(indet + 2) + '}';
+            }
+
+            if (i < str.size()) s.push_back(str[i]);
+        }
+
+        s.push_back('"');
+
+        return s;
+    }
+
+    bool involvesName(const std::string_view sv) const override {
+        for (const auto& expr : exprs)
+            if (expr.second->involvesName(sv)) return true;
+
+        return sv == stringify();
+    }
+
+    Node variant() override { return this; }
+};
+
+
 struct Name : Expr {
     std::string name;
 
@@ -966,13 +1000,13 @@ struct Import : Expr {
     : path{std::move(p)} {}
 
     std::string stringify(const size_t = 0) const override {
-        auto path_str = path.string();
-        std::string s = path_str[0] == '/' ? "" : std::string{path_str[0]};
+        // auto path_str = path.string();
+        // std::string s = path_str[0] == '/' ? "" : std::string{path_str[0]};
 
-        for (const char c : path.string() | std::views::drop(1)) 
-            s.push_back(c == '/' ? '.' : c);
+        // for (const char c : path.string() | std::views::drop(1)) 
+        //     s.push_back(c == '/' ? '.' : c);
 
-        return "import " + s;
+        return "import " + path.string();
     }
 
     bool involvesName(const std::string_view) const override { return false; }

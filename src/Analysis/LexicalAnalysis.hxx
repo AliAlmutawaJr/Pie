@@ -64,6 +64,7 @@ public:
     void operator()(expr::Num*);
     void operator()(expr::Bool*);
     void operator()(expr::String*);
+    void operator()(expr::FString*);
 
     void operator()(expr::Fix*);
 

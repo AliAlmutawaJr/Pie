@@ -71,6 +71,14 @@ bool validNameChar(const char c) noexcept {
     token::TokenLines lines = {{}};
     token::Tokens line;
 
+    const auto emplace = [&lines] (auto&&... args) {
+        return lines.back().emplace_back(std::forward<decltype(args)>(args)...);
+    };
+
+    const auto push = [&lines] (token::Token token) {
+        return lines.back().push_back(std::move(token));
+    };
+
 
     [[maybe_unused]] size_t column_count = 1;
     size_t line_count = 1;
@@ -93,7 +101,7 @@ bool validNameChar(const char c) noexcept {
                 bool is_name = validNameChar(src[index]);
                 if (is_name) {
                     while (validNameChar(src.at(++index)));
-                    lines.back().emplace_back(NAME, src.substr(beginning, index - beginning));
+                    emplace(NAME, src.substr(beginning, index - beginning));
                     --index;
                     break;
                 }
@@ -104,7 +112,7 @@ bool validNameChar(const char c) noexcept {
                     while (isdigit(static_cast<unsigned char>(src.at(++index))));
                 }
 
-                lines.back().emplace_back(is_float ? FLOAT : INT, src.substr(beginning, index - beginning));
+                emplace(is_float ? FLOAT : INT, src.substr(beginning, index - beginning));
                 --index;
             } break;
 
@@ -148,13 +156,13 @@ bool validNameChar(const char c) noexcept {
                     for (size_t ind = line_starting_index; ind < src.size() and src[ind] != '\n'; ++ind)
                         line_text += src[ind];
 
-                    lines.back().push_back({STRING, line_text});
+                    push({STRING, line_text, {}});
                     --index;
                     break;
                 }
 
                 if (word == "__LINE__") [[unlikely]] {
-                    lines.back().push_back({INT, std::to_string(line_count)});
+                    push({INT, std::to_string(line_count), {}});
                     --index;
                     break;
                 }
@@ -162,27 +170,27 @@ bool validNameChar(const char c) noexcept {
 
                 const token::TokenKind token = keyword(word);
 
-                lines.back().emplace_back(token, word);
+                emplace(token, word);
                 --index;
             } break;
 
 
             case '=':
                 if (src.at(index + 1) == '>')
-                    lines.back().push_back({FAT_ARROW, {src[index], src[++index]}});
+                    push({FAT_ARROW, {src[index], src[++index]}, {}});
                 // allows for "==" to be used as a name
                 else if ((src[index + 1] == '=')) {
                     const auto beginning = index++;
                     for (; src.at(index + 1) == '='; ++index);
 
-                    lines.back().push_back({NAME, src.substr(beginning, index - beginning + 1)});
+                    push({NAME, src.substr(beginning, index - beginning + 1), {}});
                 }
                 else
-                    lines.back().push_back({ASSIGN, {src[index]}});
+                    push({ASSIGN, {src[index]}, {}});
 
                 break;
 
-            case ',': lines.back().push_back({COMMA, {src[index]}}); break;
+            case ',': push({COMMA, {src[index]}, {}}); break;
             case '.':
                 if (src.at(index + 1) == ':') {
                     if (src.at(index + 2) == ':') {
@@ -206,26 +214,26 @@ bool validNameChar(const char c) noexcept {
                     }
                 }
                 else if (src[index + 1] == '.' and src.at(index + 2) == '.')
-                    lines.back().push_back({ELLIPSIS, {src[index], src[++index], src[++index]}});
+                    push({ELLIPSIS, {src[index], src[++index], src[++index]}, {}});
                 else if (src[index + 1] == '.')
-                    lines.back().push_back({CASCADE , {src[index], src[++index],             }});
+                    push({CASCADE , {src[index], src[++index], {}}, {}});
                 else
-                    lines.back().push_back({DOT, {src[index]}});
+                    push({DOT, {src[index]}, {}});
 
                 break;
 
             case ':': 
-                if      (src.at(index + 1) == ':') lines.back().push_back({SCOPE_RESOLVE, "::"}), ++index;
-                else if (src      [index + 1] == '=') lines.back().push_back({WALRUS       , ":="}), ++index;
-                else                                  lines.back().push_back({COLON, ":"});
+                if      (src.at(index + 1) == ':') push({SCOPE_RESOLVE, "::", {}}), ++index;
+                else if (src      [index + 1] == '=') push({WALRUS       , ":=", {}}), ++index;
+                else                                  push({COLON, ":", {}});
                 break;
 
             case ';':
-                lines.back().push_back({SEMI, {src[index]}});
+                push({SEMI, ";", {}});
                 lines.push_back({});
                 break;
 
-            case '`': lines.back().push_back({BACKTICK, {src[index]}}); break;
+            case '`': push({BACKTICK, "`", {}}); break;
 
             case '\n':
                 ++line_count;
@@ -233,22 +241,29 @@ bool validNameChar(const char c) noexcept {
                 line_starting_index = index + 1;
                 break;
 
-            case '(': lines.back().push_back({L_PAREN, {src[index]}}); break;
-            case ')': lines.back().push_back({R_PAREN, {src[index]}}); break;
+            case '(': push({L_PAREN, {src[index]}, {}}); break;
+            case ')': push({R_PAREN, {src[index]}, {}}); break;
 
             case '{':
-                lines.back().push_back({L_BRACE, {src[index]}});
+                push({L_BRACE, {src[index]}, {}});
                 break;
 
-            case '}': lines.back().push_back({R_BRACE, {src[index]}}); break;
+            case '}': push({R_BRACE, {src[index]}, {}}); break;
 
-            case '"':{
+            case '"': {
+                size_t str_len{};
                 std::string str;
+                std::vector<std::pair<size_t, token::Tokens>> fstring_tokens;
+
                 while(src.at(++index) != '"') {
                     const char c = src[index];
 
                     if (c == '\\') {
                         switch (src[++index]) {
+                            // f-strings
+                            case '{': str.push_back('{'); break;
+                            case '}': str.push_back('}'); break;
+
                             case '\\': str.push_back('\\'); break;
                             case '"' : str.push_back('"' ); break;
                             case 'n' : 
@@ -268,15 +283,55 @@ bool validNameChar(const char c) noexcept {
                             // case '\0': str.push_back('\0');
                         }
                     }
+                    else if (c == '{') { // this is an fstring
+                        // find the closing `}`
+                        size_t closing_brace = index;
+                        for (size_t i{index + 1}, balance{}; i < src.size(); ++i) {
+                            if (src[i] == '{') {
+                                ++balance;
+                                continue;
+                            }
+
+                            if (src[i] == '}') {
+                                if (balance == 0) {
+                                    closing_brace = i;
+                                    break;
+                                }
+                                --balance;
+                            }
+                        }
+
+                        // if closing brace == index or index + 1
+                        if (closing_brace <= index + 1) util::error<except::LexerError>("Invalid fstring!");
+
+                        auto substr = src.substr(index + 1, closing_brace - index);
+
+                        for (size_t i{}; i < substr.size(); ++i) {
+                            if (substr[i] == ';') util::error<except::LexerError>("Invalid Expression Inside f-string!");
+
+                            if (substr[i] == '{') while (++i < substr.size() and substr[i] != '}');
+                            if (i >= substr.size()) break;
+                            if (substr[i] == '(') while (++i < substr.size() and substr[i] != ')');
+                        }
+
+                        fstring_tokens.push_back({str_len, lex(std::move(substr))});
+                        index = closing_brace;
+                    }
                     else {
+
                         line_count += (c == '\n');
                         column_count = 1;
 
                         str.push_back(c);
                     }
+
+                    ++str_len;
                 }
 
-                lines.back().push_back({STRING, str});
+                if (fstring_tokens.empty())
+                    push({STRING, str, {}});
+                else
+                    push({FSTRING, str, fstring_tokens});
             } break;
 
 
@@ -286,19 +341,21 @@ bool validNameChar(const char c) noexcept {
         catch(const except::LexerError& e) {
             throw;
         }
-        catch(const std::exception& err) {
-            util::error();
-        }
+        // catch(const std::exception& err) {
+        //     util::error();
+        //     // util::error(err.what());
+        // }
     }
 
 
-    if (not lines.empty() and not lines.back().empty() and lines.back().back().kind != token::TokenKind::SEMI)
-        util::error("Last line doesn't end with a ';'!");
+    // caught by parser
+    // if (not lines.empty() and not lines.back().empty() and lines.back().back().kind != token::TokenKind::SEMI)
+    //     util::error("Last line doesn't end with a ';'!");
 
 
     if (lines.size() > 1) {
         lines.pop_back();
-        lines.back().emplace_back(token::TokenKind::END, "EOF");
+        emplace(token::TokenKind::END, "EOF");
     }
 
 

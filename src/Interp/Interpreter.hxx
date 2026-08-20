@@ -196,6 +196,23 @@ public:
     }
 
 
+    ValueType operator()(const expr::FString *fs) {
+        if (const auto& var = getVar(fs->var_ID); var) return *var;
+
+        std::string s;
+
+        for (size_t i{}, e{}; i < fs->str.size() or e < fs->exprs.size(); ++i) {
+            for (; e < fs->exprs.size() and fs->exprs[e].first == i; ++e) {
+                s += value::stringify(std::visit(*this, fs->exprs[e].second->variant()).value, 2);
+            }
+
+            if (i < fs->str.size()) s.push_back(fs->str[i]);
+        }
+
+        return {s, type::builtins::String()};
+    }
+
+
     std::optional<ValueType> checkMemberInThisObject(const std::string& name) const {
         if (selves.empty()) return {};
 

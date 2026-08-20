@@ -179,10 +179,11 @@ public:
         switch (token.kind) {
             using enum token::TokenKind;
 
-            case FLOAT :
-            case INT   : return std::make_shared<expr::Num   >(std::move(token).text);
-            case BOOL  : return std::make_shared<expr::Bool  >(token.text == "true" ? true : false);
-            case STRING: return std::make_shared<expr::String>(std::move(token).text);
+            case FLOAT  :
+            case INT    : return std::make_shared<expr::Num   >(std::move(token).text);
+            case BOOL   : return std::make_shared<expr::Bool  >(token.text == "true" ? true : false);
+            case STRING : return std::make_shared<expr::String>(std::move(token).text);
+            case FSTRING: return fstring(std::move(token));
 
             case NAME:
                 if (prefixOpsContain(token.text)) return parsePrefixOperator(std::move(token));
@@ -341,44 +342,6 @@ public:
     }
 
 
-    void unAddOp(const expr::Fix* fix) {
-        switch (fix->type()) {
-            using enum token::TokenKind;
-
-            case PREFIX:
-                env.back().first.prefix_op_env.erase(fix->name);
-                return;
-
-            case INFIX :
-            case SUFFIX:
-                env.back().first.op_env.erase(fix->name);
-                return;
-
-
-            case EXFIX: { // name1 x name2
-                auto exfix = dynamic_cast<const expr::Exfix*>(fix);
-                if (not exfix) util::error();
-
-                env.back().first.op_env.erase(exfix->name);
-                env.back().first.op_env.erase(exfix->name2);
-                return;
-            }
-
-            case MIXFIX: {
-                auto op = dynamic_cast<const expr::Operator*>(fix);
-                if (not op) util::error();
-
-                env.back().first.op_env.erase(op->name);
-                for (const auto& name : op->rest)
-                    env.back().first.op_env.erase(name);
-                return;
-            }
-
-            default: util::error();
-        }
-    }
-
-
     template <bool ALLOW_VARIADIC = true>
     type::TypePtr parseType() {
         using enum token::TokenKind;
@@ -470,6 +433,62 @@ public:
 
         // or an expression
         return std::make_shared<type::ExprType>(parseExpr<false>(prec::ASSIGNMENT_VALUE));
+    }
+
+
+    expr::ExprPtr fstring(token::Token token) {
+        std::vector<std::pair<size_t, expr::ExprPtr>> inners;
+
+        auto snapshot = checkpoint();
+
+        for (auto& tokens : token.fstring_tokens) {
+            tokens.second.push_back({token::TokenKind::SEMI, ";", {}});
+            tokens.second.push_back({token::TokenKind::END, "EOF", {}});
+            resetTokens(std::move(tokens).second);
+            inners.emplace_back(tokens.first, parseExpr());
+        }
+
+        restore(std::move(snapshot));
+
+        return std::make_shared<expr::FString>(token.text, std::move(inners));
+    }
+
+
+    void unAddOp(const expr::Fix* fix) {
+        switch (fix->type()) {
+            using enum token::TokenKind;
+
+            case PREFIX:
+                env.back().first.prefix_op_env.erase(fix->name);
+                return;
+
+            case INFIX :
+            case SUFFIX:
+                env.back().first.op_env.erase(fix->name);
+                return;
+
+
+            case EXFIX: { // name1 x name2
+                auto exfix = dynamic_cast<const expr::Exfix*>(fix);
+                if (not exfix) util::error();
+
+                env.back().first.op_env.erase(exfix->name);
+                env.back().first.op_env.erase(exfix->name2);
+                return;
+            }
+
+            case MIXFIX: {
+                auto op = dynamic_cast<const expr::Operator*>(fix);
+                if (not op) util::error();
+
+                env.back().first.op_env.erase(op->name);
+                for (const auto& name : op->rest)
+                    env.back().first.op_env.erase(name);
+                return;
+            }
+
+            default: util::error();
+        }
     }
 
 
@@ -2683,9 +2702,9 @@ public:
     struct Snapshot {
         token::Tokens tokens;
         typename std::iterator_traits<token::Tokens::iterator>::difference_type token_index;
+        size_t size;
+
         std::deque<token::Token> red;
-
-
 
         std::vector<std::pair<Env, EnvTag>> env;
 
@@ -2695,25 +2714,28 @@ public:
 
         Snapshot(
             token::Tokens ts,
-            typename std::iterator_traits<token::Tokens::iterator>::difference_type i,
+            const typename std::iterator_traits<token::Tokens::iterator>::difference_type i,
+            const size_t s,
             std::deque<token::Token> read,
             std::vector<std::pair<Env, EnvTag>> env
         ) :
         tokens{std::move(ts)}             ,
         token_index{i},
+        size{s},
         red{std::move(read)},
         env{std::move(env)}
         { }
     };
 
     [[nodiscard]] Snapshot checkpoint() {
-        return {tokens, std::distance(iterator_beginning, token_iterator), red, env};
+        return {tokens, std::distance(iterator_beginning, token_iterator), tokens_size, red, env};
     }
 
     void restore(Snapshot&& snapshot) {
         tokens             = std::move(snapshot).tokens;
         iterator_beginning = tokens.begin();
-        token_iterator     = std::next(iterator_beginning, std::move(snapshot).token_index);
+        token_iterator     = std::next(iterator_beginning, snapshot.token_index);
+        tokens_size        = snapshot.size;
         red                = std::move(snapshot).red;
         env                = std::move(snapshot).env;
     }

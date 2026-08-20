@@ -194,6 +194,32 @@ void LexicalAnalysis::operator()(expr::String *s) {
 
 
 
+void LexicalAnalysis::operator()(expr::FString *s) {
+    auto str = s->stringify();
+
+    if (auto id = findVariable(str)) {
+        s->var_ID = *id;
+        return;
+    }
+
+    for (const auto& inner : s->exprs) {
+        std::visit(*this, inner.second->variant());
+    }
+
+    // // has it been used before? (avoid loading it twice)
+    // if (auto id = findConstant(str)) {
+    //     s->constant_ID = *id;
+    //     return;
+    // }
+
+
+    // // load it into memory
+    // s->constant_ID = constant_index++;
+    // constants.insert({str, {s->constant_ID, s->str}});
+}
+
+
+
 void LexicalAnalysis::operator()(expr::Fix *f) {
     if (auto id = findVariable(f->stringify())) {
         f->var_ID = *id;
@@ -412,7 +438,7 @@ void LexicalAnalysis::operator()(expr::Name *name) {
         return;
     }
 
-    util::error<except::NameLookup>("Name `" + name->name + " with ID [" + std::to_string(name->var_ID) + "] not found!");
+    util::error<except::NameLookup>("Name `" + name->name + "` with ID [" + std::to_string(name->var_ID) + "] not found!");
 }
 
 

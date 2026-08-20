@@ -1,9 +1,13 @@
 #pragma once
 
+#include <format>
 #include <iostream>
 #include <ostream>
+#include <sstream>
+#include <utility>
 #include <vector>
 #include <string>
+#include <ranges>
 
 inline namespace pie {
 namespace token {
@@ -32,6 +36,7 @@ enum class TokenKind {
     FLOAT,
     BOOL,
     STRING,
+    FSTRING,
 
     L_BRACE,
     R_BRACE,
@@ -64,52 +69,53 @@ enum class TokenKind {
 constexpr const char* stringify(const TokenKind token) noexcept {
     switch (token) {
         using enum TokenKind;
-        case NAME:          return "NAME";
-        case INT:           return "INT";
-        case FLOAT:         return "FLOAT";
-        case BOOL:          return "BOOL";
-        case STRING:        return "STRING";
-        case END:           return "END";
+        case NAME:          return "NAME"   ;
+        case INT:           return "INT"    ;
+        case FLOAT:         return "FLOAT"  ;
+        case BOOL:          return "BOOL"   ;
+        case STRING :       return "STRING" ;
+        case FSTRING:       return "FSTRING";
+        case END:           return "END"    ;
 
         // punctuation
-        case L_BRACE :      return "L_BRACE";
-        case R_BRACE :      return "R_BRACE";
-        case L_PAREN :      return "L_PAREN";
-        case R_PAREN :      return "R_PAREN";
-        case COMMA   :      return "COMMA";
-        case BACKTICK:      return "BACKTICK";
-        case CASCADE :      return "CASCADE";
-        case ELLIPSIS:      return "ELLIPSIS";
-        case DOT     :      return "DOT";
-        case SEMI    :      return "SEMI";
-        case COLON   :      return "COLON";
-        case WALRUS  :      return "WALRUS";
+        case L_BRACE :      return "L_BRACE"      ;
+        case R_BRACE :      return "R_BRACE"      ;
+        case L_PAREN :      return "L_PAREN"      ;
+        case R_PAREN :      return "R_PAREN"      ;
+        case COMMA   :      return "COMMA"        ;
+        case BACKTICK:      return "BACKTICK"     ;
+        case CASCADE :      return "CASCADE"      ;
+        case ELLIPSIS:      return "ELLIPSIS"     ;
+        case DOT     :      return "DOT"          ;
+        case SEMI    :      return "SEMI"         ;
+        case COLON   :      return "COLON"        ;
+        case WALRUS  :      return "WALRUS"       ;
         case SCOPE_RESOLVE: return "SCOPE_RESOLVE";
 
         // should make them weak keywords
-        case ASSIGN:        return "ASSIGN";
+        case ASSIGN:        return "ASSIGN"   ;
         case FAT_ARROW:     return "FAT_ARROW";
 
         // keywords
         case MIXFIX:        return "MIXFIX";
         case PREFIX:        return "PREFIX";
-        case INFIX:         return "INFIX";
+        case INFIX:         return "INFIX" ;
         case SUFFIX:        return "SUFFIX";
-        case EXFIX:         return "EXFIX";
-        case CLASS:         return "CLASS";
-        case UNION:         return "UNION";
-        case MATCH:         return "MATCH";
+        case EXFIX:         return "EXFIX" ;
+        case CLASS:         return "CLASS" ;
+        case UNION:         return "UNION" ;
+        case MATCH:         return "MATCH" ;
 
-        case LOOP    :      return "LOOP";
-        case BREAK   :      return "BREAK";
+        case LOOP    :      return "LOOP"    ;
+        case BREAK   :      return "BREAK"   ;
         case CONTINUE:      return "CONTINUE";
 
-        case IMPORT:        return "IMPORT";
+        case IMPORT:        return "IMPORT"   ;
         case NAMESPACE:     return "NAMESPACE";
-        case USE:           return "USE";
+        case USE:           return "USE"      ;
 
         case NONE:
-            std::println(std::cerr, "Internal Error!");
+            std::println(std::cerr, "Couldn't stringify token: {}", std::to_underlying(token));
             exit(1);
     }
 
@@ -123,6 +129,8 @@ struct Token {
     TokenKind kind;
     std::string text;
 
+
+    std::vector<std::pair<size_t, std::vector<Token>>> fstring_tokens;
     // SourceSpan span;
 
     bool operator==(const Token& that) const { return kind == that.kind and text == that.text; }
@@ -134,7 +142,22 @@ using TokenLines = std::vector<Tokens>;
 
 
 inline std::ostream& operator<<(std::ostream& os, const Token& token) {
-    return os << "Token{" << stringify(token.kind) << ", '" << token.text << "'}";
+    os << "Token{" << stringify(token.kind) << ", '" << token.text << '\'';
+
+    if (token.kind == TokenKind::FSTRING) {
+        os << ", [";
+        for (const auto& [_, tokens] : token.fstring_tokens) {
+            // guaranteed by the lexer to have at least one element
+            os << tokens.front();
+            for (const auto& token : tokens | std::views::drop(1)) {
+                os << ", " << token;
+            }
+
+            os << ']';
+        }
+    }
+
+    return os << '}';
 }
 
 
@@ -145,7 +168,14 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
 template <>
 struct std::formatter<token::Token> : std::formatter<std::string> {
     auto format(const token::Token& token, auto& ctx) const {
-        return std::format_to(ctx.out(), "Token{{{}, '{}'}}", stringify(token.kind), token.text);
+        if (token.kind == token::TokenKind::FSTRING) {
+            std::stringstream ss;
+            ss << token;
+            return std::format_to(ctx.out(), "{}", ss.str());
+        }
+        else {
+            return std::format_to(ctx.out(), "Token{{{}, '{}'}}", stringify(token.kind), token.text);
+        }
     }
 };
 

@@ -76,6 +76,7 @@ using Node = std::variant<
     struct Num               *,
     struct Bool              *,
     struct String            *,
+    struct FString           *,
     struct Name              *,
  // struct Pack              *,
     struct List              *,

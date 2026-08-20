@@ -664,7 +664,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 auto handle = reinterpret_cast<void*>(dll);
 
                 auto sym = dlsym(handle, func_name.data());
-                if (not sym) util::error<except::SymbolLookupInDyLib>(dlerror());
+                if (not sym) util::error<except::DyLibSymbolLookup>(dlerror());
 
                 return reinterpret_cast<BigInt>(sym);
             }),

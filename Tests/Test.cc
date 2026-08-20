@@ -18,6 +18,33 @@
 
 
 
+TEST_CASE("F Strings", "[fstring]") {
+
+{
+    const auto src = R"(
+
+name = "Pie";
+__builtin_print("Hello, {name}!");
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(Hello, Pie!)");
+}
+
+{
+    const auto src = R"(
+
+infix + = (s1, s2) => __builtin_concat(s1, s2);
+str = "!{"yes" + "no"}..";
+__builtin_print("{str}");
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(!yesno..)");
+}
+
+}
+
 
 
 TEST_CASE("Recursive Operators", "[Operator]") {

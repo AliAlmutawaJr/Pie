@@ -89,6 +89,7 @@ static int pieMain(int argc, char *argv[]) {
 
 
 int main(int argc, char *argv[]) {
+    // web pie manually hooks onto pieMain above ^
     #if not WEB_PIE
         return pieMain(argc, argv);
     #endif

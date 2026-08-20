@@ -24,7 +24,7 @@ namespace except {
     DefineError(NameLookup         );
     DefineError(InvalidArgument    );
     DefineError(OpeningDyLib       );
-    DefineError(SymbolLookupInDyLib);
+    DefineError(DyLibSymbolLookup);
 }
 
 
