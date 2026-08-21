@@ -67,7 +67,7 @@ bool validNameChar(const char c) noexcept {
     return isalnum(c);
 }
 
-[[nodiscard]] token::Tokens lex(const std::string& src) {
+[[nodiscard]] token::Tokens lex(const std::string& src, const bool check_for_semis) {
     token::TokenLines lines = {{}};
     token::Tokens line;
 
@@ -314,7 +314,7 @@ bool validNameChar(const char c) noexcept {
                             if (substr[i] == '(') while (++i < substr.size() and substr[i] != ')');
                         }
 
-                        fstring_tokens.push_back({str_len, lex(std::move(substr))});
+                        fstring_tokens.push_back({str_len, lex(std::move(substr), false)});
                         index = closing_brace;
                     }
                     else {
@@ -348,9 +348,8 @@ bool validNameChar(const char c) noexcept {
     }
 
 
-    // caught by parser
-    // if (not lines.empty() and not lines.back().empty() and lines.back().back().kind != token::TokenKind::SEMI)
-    //     util::error("Last line doesn't end with a ';'!");
+    if (check_for_semis and not lines.empty() and not lines.back().empty() and lines.back().back().kind != token::TokenKind::SEMI)
+        util::error("Last line doesn't end with a ';'!");
 
 
     if (lines.size() > 1) {

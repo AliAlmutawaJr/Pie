@@ -34,6 +34,13 @@ struct Env {
 
 
 class LexicalAnalysis {
+public:
+    // this is an arbitrary number. Coulda been anything
+    inline constexpr size_t static UNNAMED_ID = 110110110;
+
+
+private:
+
     enum class EnvTag {
         SCOPE,
         SPACE,
@@ -53,6 +60,8 @@ class LexicalAnalysis {
     bool in_loop = false;
 
 public:
+
+    size_t next() noexcept;
 
     std::vector<size_t> indeces;
 

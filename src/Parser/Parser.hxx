@@ -432,7 +432,7 @@ public:
         }
 
         // or an expression
-        return std::make_shared<type::ExprType>(parseExpr<false>(prec::ASSIGNMENT_VALUE));
+        return std::make_shared<type::ExprType>(parseExpr<false>(prec::ASSIGNMENT_VALUE)); // stop at the assignment
     }
 
 
@@ -1133,7 +1133,6 @@ public:
     expr::ExprPtr loop() {
         using enum token::TokenKind;
 
-
         expr::Unpackment::PatternPtr loop_var;
 
         const bool has_var = [this] {
@@ -1177,7 +1176,6 @@ public:
                 match(FAT_ARROW) ? parseExpr() : nullptr
             );
         }
-
 
 
         auto kind_or_body = parseExpr();
@@ -1955,12 +1953,15 @@ public:
                 case MIXFIX: {
                     const auto& op = dynamic_cast<const expr::Operator*>(findOp(token.text).get());
 
-                    // error("Beginning operator '" + token.text  + "' found where it shouldn't be!");
-                    // in the middle of parsing a OpCall. Do nothing.
-                    if (token.text != op->name)  return left;
+                    // // in the middle of parsing a OpCall. Do nothing.
+                    // if (token.text != op->name)  return left;
+
+                    if (token.text != op->name) util::error<except::OperatorError>("Must start operator with `" + op->name + "` instead of `" + token.text + '`');
                     if (op->op_pos[0]) util::error<except::OperatorError>("Operator '" + op->name + "' has to come before an expression!");
+                    // if (op->op_pos[0]) util::error<except::OperatorError>("Operator '" + token.text + "' has to come before an expression!");
 
 
+                    // if (op->isPrefix()) util::error<except::OperatorError>("Operator '" + op->name + " ...' has to come after a name!");
                     // if (op->begin_expr) error("Operator '" + op->name + " ...' has to come after a name!");
 
 
@@ -2528,7 +2529,7 @@ public:
                 const auto& op = findOp(token.text);
                 const int prec = prec::calculate(op->high, op->low, consolidateOps());
 
-                //todo: prefix sould also be right to left
+                //todo: prefix sould also be right to left (update: should it??)
                 // mix fix operators should be parsed right to left.......I think ;-;
                 if (token.text == op->name and op->type() == MIXFIX)
                     return prec + 1;

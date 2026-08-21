@@ -20,6 +20,16 @@ std::string stringify(const std::vector<std::string>& spaces) {
     return s;
 }
 
+size_t LexicalAnalysis::next() noexcept {
+    auto index = variable_index++;
+
+    // skip unnamed ID
+    if (index == UNNAMED_ID) {
+        index = variable_index++;
+    }
+
+    return index;
+}
 
 LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
     variable_index{v_index}, constant_index{c_index}
@@ -112,7 +122,7 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
 
 
     for (const auto builtin : builtins)
-        env[0].first.vars[builtin] = variable_index++;
+        env[0].first.vars[builtin] = next();
 }
 
 
@@ -283,14 +293,14 @@ void LexicalAnalysis::operator()(expr::Assignment *ass) {
     if (is_closure or is_class or is_union) {
         // if there is a type explicitly stated, then a new variable should be create no matter what
         if (not type::shouldReassign(ass->type)) {
-            ass->lhs->var_ID = variable_index++;
+            ass->lhs->var_ID = next();
             addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
         else if (const auto id = findVariable(ass->lhs->stringify()); id) {
             ass->lhs->var_ID = *id;
         }
         else {
-            ass->lhs->var_ID = variable_index++;
+            ass->lhs->var_ID = next();
             addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
     }
@@ -305,14 +315,14 @@ void LexicalAnalysis::operator()(expr::Assignment *ass) {
     if (not is_closure and not is_class and not is_union) {
         // if there is a type explicitly stated, then a new variable should be create no matter what
         if (not type::shouldReassign(ass->type)) {
-            ass->lhs->var_ID = variable_index++;
+            ass->lhs->var_ID = next();
             addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
         else if (const auto id = findVariable(ass->lhs->stringify()); id) {
             ass->lhs->var_ID = *id;
         }
         else { // I could probably shorten this to only use an "if-else" and not "if-elif-else"
-            ass->lhs->var_ID = variable_index++;
+            ass->lhs->var_ID = next();
             addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
     }
@@ -327,14 +337,14 @@ void LexicalAnalysis::operator()(expr::InferredAssignment *inf) {
     const bool is_closure = dynamic_cast<expr::Closure*>(inf->rhs.get());
     const bool is_class   = dynamic_cast<expr::Class  *>(inf->rhs.get());
     if (is_closure or is_class) {
-        inf->name.ID = variable_index++;
+        inf->name.ID = next();
         addVar(inf->name.name, inf->name.ID);
     }
 
     std::visit(*this, inf->rhs->variant());
 
     if (not is_closure and not is_class) {
-        inf->name.ID = variable_index++;
+        inf->name.ID = next();
         addVar(inf->name.name, inf->name.ID);
     }
 }
@@ -358,7 +368,7 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern) {
             return;
         }
 
-        expr->expr->var_ID = variable_index++;
+        expr->expr->var_ID = next();
         addVar(expr->expr->stringify(), expr->expr->var_ID);
     }
     else if (auto list = dynamic_cast<expr::Unpackment::List*>(pattern)) {
@@ -377,7 +387,7 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern) {
             return;
         }
 
-        pack->expr->var_ID = variable_index++;
+        pack->expr->var_ID = next();
         addVar(pack->expr->stringify(), pack->expr->var_ID);
     }
     else util::error();
@@ -392,7 +402,7 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern, [[maybe_u
         if (not dynamic_cast<expr::Name*>(expr->expr.get()))
             util::error("Only proper names may appear on the LHS of the walrus operator `:=`");
 
-        expr->expr->var_ID = variable_index++;
+        expr->expr->var_ID = next();
         addVar(expr->expr->stringify(), expr->expr->var_ID);
     }
     else if (auto list = dynamic_cast<expr::Unpackment::List*>(pattern)) {
@@ -411,7 +421,7 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern, [[maybe_u
             return;
         }
 
-        pack->expr->var_ID = variable_index++;
+        pack->expr->var_ID = next();
         addVar(pack->expr->stringify(), pack->expr->var_ID);
     }
     else util::error();
@@ -473,7 +483,7 @@ void LexicalAnalysis::operator()(expr::Closure *c) {
                 expr_type->t->var_ID = *id;
         }
 
-        name.ID = variable_index++;
+        name.ID = next();
         addVar(name.name, name.ID);
     }
 
@@ -641,11 +651,11 @@ void LexicalAnalysis::operator()(expr::Class *cls) {
     }
 
     ScopeGuard sg{this};
-    addVar("self", variable_index++);
+    addVar("self", next());
 
      // needed for methods to access member variables
     for (auto& [name, _, __] : cls->fields) {
-        name.var_ID = variable_index++;
+        name.var_ID = next();
         addVar(name.name, name.var_ID);
     }
 
@@ -680,7 +690,7 @@ void LexicalAnalysis::checkPattern(expr::Match::Case::Pattern& pat) {
         auto& pattern = get<expr::Match::Case::Pattern::Single>(pat.pattern);
 
         if (not pattern.name.name.empty()) {
-            pattern.name.ID = variable_index++;
+            pattern.name.ID = next();
             addVar(pattern.name.name, pattern.name.ID);
         }
 
@@ -744,6 +754,7 @@ void LexicalAnalysis::operator()(expr::Loop *loop) {
     // the extra argument `{}` acts as a tag for static dispatch
     // is means "introduce new names instead of acting as assignment"
     if (loop->var) checkPattern(loop->var.get(), {});
+    else addVar("_", UNNAMED_ID); // implicit loop var
 
 
     const auto was_in_loop = in_loop;

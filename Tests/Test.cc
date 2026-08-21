@@ -18,6 +18,36 @@
 
 
 
+TEST_CASE("Invalid Mixfix Operator", "[Operator]") {
+
+{
+    const auto src = R"(
+
+mixfix(LOW +) : five six seven = (_) => "WHAT!";
+ten six six seven;
+
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+
+}
+
+TEST_CASE("Nested F Strings", "[fstring]") {
+
+{
+    const auto src = R"(
+
+__builtin_print("Hello, { "this is a nested fstring { "look! {"nested"}" }" }!");
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(Hello, this is a nested fstring look! nested!)");
+}
+
+}
+
+
 TEST_CASE("F Strings", "[fstring]") {
 
 {

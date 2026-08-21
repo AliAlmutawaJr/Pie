@@ -80,6 +80,7 @@ space std {
         index = 0;
 
         hasNext = () => __builtin_lt(index, __builtin_len(collection));
+
         next = () => {
             ind = index;
             index = __builtin_add(index, 1);

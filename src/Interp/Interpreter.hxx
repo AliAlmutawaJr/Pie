@@ -2068,7 +2068,7 @@ There are no mistakes with art.)";
             if (std::holds_alternative<  std::string   >(v)) return Type::STR   ;
             if (std::holds_alternative<value::List     >(v)) return Type::LIST  ;
             if (std::holds_alternative<value::Pack     >(v)) return Type::PACK  ;
-            if (std::holds_alternative<value::Object   >(v)) return Type::OBJECT;
+            if (std::holds_alternative<value::Object   >(v)) return Type::OBJECT; // iterators
 
             return Type::NONE;
         };
@@ -2108,6 +2108,12 @@ There are no mistakes with art.)";
                     else for (loop_counter = 0; loop_counter < limit; ++loop_counter) {
                         continued = false;
 
+                        addVar(
+                            "_",
+                            analysis::LexicalAnalysis::UNNAMED_ID,
+                            std::make_shared<value::Value>(loop_counter),
+                            type::builtins::Int()
+                        );
                         handle(body->variant());
 
                         if (broken) break;
@@ -2143,6 +2149,12 @@ There are no mistakes with art.)";
                     else for (loop_counter = 0; get<bool>(cond); ++loop_counter) {
                         continued = false;
 
+                        addVar(
+                            "_",
+                            analysis::LexicalAnalysis::UNNAMED_ID,
+                            std::make_shared<value::Value>(loop_counter),
+                            type::builtins::Int()
+                        );
                         handle(body->variant());
 
                         if (broken) break;
@@ -2160,15 +2172,15 @@ There are no mistakes with art.)";
                     }
 
 
-                    if (var) {
-                        auto list_type = type::isList(kind_type); // this is effectively a cast
-                        // a place for the type to live in so that it doesn't "die" before `list_type`
-                        type::TypePtr memory;
-                        if (not list_type) {
-                            memory = typeOf(kind_value);
-                            list_type = type::isList(memory);
-                        }
+                    auto list_type = type::isList(kind_type); // this is effectively a cast
+                    // a place for the type to live in so that it doesn't "die" before `list_type`
+                    type::TypePtr memory;
+                    if (not list_type) {
+                        memory = typeOf(kind_value);
+                        list_type = type::isList(memory);
+                    }
 
+                    if (var) {
                         for (const auto& elt : list.elts->values) {
                             continued = false;
 
@@ -2180,9 +2192,15 @@ There are no mistakes with art.)";
                         }
 
                     }
-                    else for ([[maybe_unused]] const auto& _ : list.elts->values) {
+                    else for ([[maybe_unused]] const auto& elt : list.elts->values) {
                         continued = false;
 
+                        addVar(
+                            "_",
+                            analysis::LexicalAnalysis::UNNAMED_ID,
+                            std::make_shared<value::Value>(elt),
+                            list_type->type
+                        );
                         handle(body->variant());
 
                         if (broken) break;
@@ -2210,9 +2228,15 @@ There are no mistakes with art.)";
                         }
 
                     }
-                    else for ([[maybe_unused]] const auto& _ : str) {
+                    else for ([[maybe_unused]] const auto& elt : str) {
                         continued = false;
 
+                        addVar(
+                            "_",
+                            analysis::LexicalAnalysis::UNNAMED_ID,
+                            std::make_shared<value::Value>(elt),
+                            type::builtins::String()
+                        );
                         handle(body->variant());
 
                         if (broken) break;
@@ -2228,14 +2252,15 @@ There are no mistakes with art.)";
                     }
 
 
+                    auto pack_type = type::isVariadic(kind_type);
+                    // a place for the type to live in so that it doesn't "die" before `list_type`
+                    type::TypePtr memory;
+                    if (not pack_type) {
+                        memory = typeOf(kind_value);
+                        pack_type = type::isVariadic(memory);
+                    }
+
                     if (var) {
-                        auto pack_type = type::isVariadic(kind_type);
-                        // a place for the type to live in so that it doesn't "die" before `list_type`
-                        type::TypePtr memory;
-                        if (not pack_type) {
-                            memory = typeOf(kind_value);
-                            pack_type = type::isVariadic(memory);
-                        }
 
                         for (const auto& elt : pack->values) {
                             continued = false;
@@ -2248,9 +2273,15 @@ There are no mistakes with art.)";
                         }
 
                     }
-                    else for ([[maybe_unused]] const auto& _ : pack->values) {
+                    else for ([[maybe_unused]] const auto& elt : pack->values) {
                         continued = false;
 
+                        addVar(
+                            "_",
+                            analysis::LexicalAnalysis::UNNAMED_ID,
+                            std::make_shared<value::Value>(elt),
+                            pack_type->type
+                        );
                         handle(body->variant());
 
                         if (broken) break;
@@ -2289,12 +2320,6 @@ There are no mistakes with art.)";
                         while(get<bool>(cond)) {
                             continued = false;
 
-                            // addVar(
-                            //     var_name,
-                            //     id,
-                            //     std::make_shared<value::Value>(std::visit(*this, next_call.variant()).value)
-                            // );
-
                             bindPattern<CREATE_NEW_VAR>(expr_str, var, std::visit(*this, next_call.variant()));
 
                             handle(body->variant());
@@ -2314,7 +2339,14 @@ There are no mistakes with art.)";
                         while(get<bool>(cond)) {
                             continued = false;
 
-                            std::visit(*this, next_call.variant());
+                            auto [elt, type] = std::visit(*this, next_call.variant());
+
+                            addVar(
+                                "_",
+                                analysis::LexicalAnalysis::UNNAMED_ID,
+                                std::make_shared<value::Value>(std::move(elt)),
+                                std::move(type)
+                            );
 
                             handle(body->variant());
 
@@ -4616,13 +4648,28 @@ There are no mistakes with art.)";
     value::Value builtinConcat(std::vector<expr::ExprPtr> args) {
         if (args.size() < 2) util::error("'concat' requires at least 2 argument passed!");
 
-        std::string s;
+        // we try to avoid repetitive appends
+        // so we reserve the space beforehand
+
+        size_t size{};
+        std::vector<std::string> strings(args.size());
+
         for(const auto& arg : args) {
             const value::Value& v = std::visit(*this, arg->variant()).value;
+
+            // in the future, make this accept lists, (packs?), and maps
             if (not std::holds_alternative<std::string>(v)) util::error("'concat' only accepts strings as arguments: " + stringify(v));
 
-            s += get<std::string>(v);
+            auto& string = std::move(get<std::string>(v));
+            size += string.size();
+            strings.push_back(std::move(string));
         }
+
+        std::string s;
+        s.reserve(size);
+
+        for (auto& string : strings)
+            s.append(std::move(string));
 
         return s;
     }
