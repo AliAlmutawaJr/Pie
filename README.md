@@ -691,6 +691,7 @@ Pie reserves the names starting with `__builtin_`.
 - `__builtin_to_string`
 
 #### Macros
+- `__builtin_defer`
 - `__builtin_eval`
 - `__builtin_reset`
 
@@ -839,7 +840,6 @@ this isn't
 - `import`
 - `space`
 - `use`
-<!-- - `space` -->
 
 ##### Operators
 - `prefix`
@@ -905,12 +905,10 @@ make
 
 #### in order of priority
 
-
-
 - [ ] Add default values to function parameters
 - [ ] Simplify Pack Expansion (internal)
 - [ ] Simplify Closure Captures without performance penalty (internal)
-- [ ] f-strings
+- [ ] Clean up builtin functions code (internal)
 - [ ] Breaking Out of Nested Loops
 - [ ] Use Big Int instead of `int64_t`
 - [ ] `Expr::involveName()` seems to be not exhastive, espacially with Closure. Check it.
@@ -925,6 +923,8 @@ make
 ---
 
 ### Done
+- [x] defer!!!
+- [x] f-strings
 - [x] Add recursive operators
 - [x] File IO
 - [x] Zen of Pie (with the pie ascii art):
@@ -983,6 +983,7 @@ make
 
 ### Discarded
 
+- ~~Defer Expr~~
 - ~~Capture Environment on Closure Creation~~
 - ~~Allow variadics of Syntax type~~
 - ~~Add collections~~

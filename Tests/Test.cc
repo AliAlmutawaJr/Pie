@@ -18,6 +18,165 @@
 
 
 
+TEST_CASE("Dynamic Lookup in Syntax Expressions", "[Syntax]") {
+
+{
+    const auto src = R"(
+infix + = (a, b) => __builtin_add(a, b);
+
+x: Syntax = `1 + a`;
+
+a = 5;
+__builtin_print(__builtin_eval(x));
+)";
+
+    REQUIRE(pie::test::run(src) == R"(6)");
+}
+
+{
+    const auto src = R"(
+infix + = (a, b) => __builtin_add(a, b);
+
+x: Syntax = `1 + a`;
+
+a = 5;
+1 = 10;
+__builtin_print(__builtin_eval(x));
+)";
+
+    REQUIRE(pie::test::run(src) == R"(15)");
+}
+
+{
+    const auto src = R"(
+infix + = (a, b) => __builtin_add(a, b);
+
+x: Syntax = `1 + a`;
+
+a = 5;
+1 + a = 22;
+1 = 10;
+__builtin_print(__builtin_eval(x));
+)";
+
+    REQUIRE(pie::test::run(src) == R"(22)");
+}
+
+{
+    const auto src = R"(
+infix + = (a, b) => __builtin_add(a, b);
+
+x: Syntax = `1 + a`;
+
+__builtin_print(__builtin_eval(x));
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+
+}
+
+
+
+TEST_CASE("Operator Defer (Defer with Depth)", "[Defer]") {
+
+{
+    const auto src = R"(
+
+
+prefix(!) defer = (`expr`) => __builtin_defer(__builtin_eval(expr), 1);
+
+func = () => {
+    defer __builtin_print("first");
+    defer {
+        __builtin_print("second");
+        __builtin_print("third");
+    };
+};
+
+func();
+
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(second
+third
+first)");
+}
+
+}
+
+
+
+TEST_CASE("Loop Defer", "[Defer]") {
+
+{
+    const auto src = R"(
+
+    loop 3 {
+        __builtin_defer(__builtin_print("first"));
+        __builtin_print("zero");
+        break "";
+        __builtin_defer(__builtin_print("third"));
+    };
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(zero
+first)");
+}
+
+}
+
+
+TEST_CASE("Global Defer", "[Defer]") {
+
+{
+    const auto src = R"(
+
+    __builtin_defer(__builtin_print("first"));
+    __builtin_defer({
+        __builtin_print("second");
+        __builtin_print("third");
+    });
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(second
+third
+first)");
+}
+
+}
+
+
+TEST_CASE("Defer", "[Defer]") {
+
+{
+    const auto src = R"(
+
+    func = () => {
+        __builtin_defer(__builtin_print("first"));
+        __builtin_defer({
+            __builtin_print("second");
+            __builtin_print("third");
+        });
+    };
+
+    func();
+
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(second
+third
+first)");
+}
+
+}
+
+
+
 TEST_CASE("Invalid Mixfix Operator", "[Operator]") {
 
 {
@@ -32,6 +191,8 @@ ten six six seven;
 }
 
 }
+
+
 
 TEST_CASE("Nested F Strings", "[fstring]") {
 

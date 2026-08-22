@@ -72,6 +72,11 @@ space std {
                 __builtin_conditional(cond, thn, els)
             );
 
+    .: mixfix(LOW +) either : : = (`this`, `that`) =>
+    .:     __builtin_conditional(
+            
+    .:     );
+
     mixfix([]) : [ : ] = (cont, at) => __builtin_get(cont, at);
 
 

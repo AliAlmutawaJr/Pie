@@ -91,9 +91,13 @@ struct Capture {
 
     Capture c{};
 
-    interp::Visitor visitor{std::move(anal).indeces};
-    for (const auto& expr : exprs)
-        std::visit(visitor, expr->variant());
+    {
+        // forces visitor destructor to run
+        // which intern forces the global defers
+        interp::Visitor visitor{std::move(anal).indeces};
+        for (const auto& expr : exprs)
+            std::visit(visitor, expr->variant());
+    }
 
     return c.stop();
 }

@@ -82,12 +82,12 @@ struct FString : Expr {
     FString(std::string s, std::vector<std::pair<size_t, ExprPtr>> es) noexcept
     : str{std::move(s)}, exprs{std::move(es)} {}
 
-    std::string stringify(const size_t indet = 0) const override {
+    std::string stringify(const size_t indent = 0) const override {
         std::string s = "\"";
 
         for (size_t i{}, e{}; i < str.size() or e < exprs.size(); ++i) {
             for (; e < exprs.size() and exprs[e].first <= i; ++e) {
-                s += '{' + exprs[e].second->stringify(indet + 2) + '}';
+                s += '{' + exprs[e].second->stringify(indent + 2) + '}';
             }
 
             if (i < str.size()) s.push_back(str[i]);

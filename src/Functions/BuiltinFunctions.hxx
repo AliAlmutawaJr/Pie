@@ -195,11 +195,24 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     std::ios::in | std::ios::out
                 };
 
-                if (not file->is_open()) util::error("Couldn't open file: " + fname);
+                // if (not file->is_open()) util::error("Couldn't open file: " + fname);
 
                 return reinterpret_cast<BigInt>(file);
             }),
             TypeList<std::string, std::string>
+        >
+    >{},
+
+
+    MapEntry<
+        S<"is_file_open">,
+        Func<
+            decltype([](const auto& stream, const auto&) {
+                auto file = reinterpret_cast<std::fstream*>(stream);
+
+                return file->is_open();
+            }),
+            TypeList<BigInt>
         >
     >{},
 

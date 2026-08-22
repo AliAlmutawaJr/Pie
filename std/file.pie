@@ -1,0 +1,16 @@
+
+File = class {
+    path = "";
+    descriptor = 0;
+
+    open = () => {
+        descriptor = __builtin_open_file(path);
+        __builtin_is_file_open(descriptor);
+    };
+
+    close = () => {
+        __builtin_close_file(descriptor);
+    };
+};
+
+File("ieufi");

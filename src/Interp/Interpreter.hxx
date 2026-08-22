@@ -26,8 +26,8 @@
 #include "FFI.hxx"
 #endif
 
-#include "../Functions/BuiltinFunctions.hxx"
 
+#include "../Functions/BuiltinFunctions.hxx"
 #include "../Utils/utils.hxx"
 #include "../Utils/Exceptions.hxx"
 #include "../Utils/ConstexprLookup.hxx"
@@ -66,7 +66,11 @@ class Visitor {
 
     const std::filesystem::path root;
 
-    std::vector<value::Env> env;
+
+    // maintain invariant: these two vectors MUST be the same size!
+    std::vector<std::shared_ptr<value::Env>> env;
+    std::vector<std::vector<std::pair<expr::ExprPtr, std::shared_ptr<value::Env>>>> deferred;
+
     std::unordered_map<std::string, std::shared_ptr<NameSpace>> global_spaces;
     std::vector<NameSpace*> current_space;
 
@@ -88,8 +92,19 @@ public:
 
 
     Visitor(std::vector<size_t> indices, std::filesystem::path r = ".") noexcept
-    : root{r.parent_path()}, env(1), import_indices{std::move(indices)}
+    : root{r.parent_path()}, env{{std::make_shared<value::Env>()}}, deferred{{}}, import_indices{std::move(indices)}
     { }
+
+
+    ~Visitor() {
+        // no need to mess with captured envs since this is global scope
+        for (const auto& [expr, env] : deferred[0] | std::views::reverse) {
+            ScopeGuard sg{this, env->env};
+            sg.addPrefixOps(env->prefix_op_env);
+            sg.addOps(env->op_env);
+            std::visit(*this, expr->variant());
+        }
+    }
 
     // void addOperators(Operators os) {
     //     // ops.insert(os.begin(), os.end());
@@ -109,8 +124,8 @@ private:
 
     bool prefixOpsContain(const std::string& op) const {
         // no need to reverse in this case
-        for (const auto& [_, ops, __, ___] : env) {
-            if (ops.contains(op)) return true;
+        for (const auto& e : env) {
+            if (e->prefix_op_env.contains(op)) return true;
         }
 
         return false;
@@ -120,8 +135,8 @@ private:
 
     bool opsContain(const std::string& op) const {
         // no need to reverse in this case
-        for (const auto& [_, __, ops, ___] : env) {
-            if (ops.contains(op)) return true;
+        for (const auto& e : env) {
+            if (e->op_env.contains(op)) return true;
         }
 
         return false;
@@ -129,8 +144,8 @@ private:
 
 
     const std::shared_ptr<expr::Fix>& findPrefixOp(const std::string& op, const std::source_location& loc = std::source_location::current()) const {
-        for (const auto& [_, ops, __, ___] : std::views::reverse(env)) {
-            if (ops.contains(op)) return ops.at(op);
+        for (const auto& e : std::views::reverse(env)) {
+            if (e->prefix_op_env.contains(op)) return e->prefix_op_env.at(op);
         }
 
         // util::error("Operator `" + op + "` not found!");
@@ -139,8 +154,8 @@ private:
 
 
     const std::shared_ptr<expr::Fix>& findOp(const std::string& op, const std::source_location& loc = std::source_location::current()) const {
-        for (const auto& [_, __, ops, ___] : std::views::reverse(env)) {
-            if (ops.contains(op)) return ops.at(op);
+        for (const auto& e : std::views::reverse(env)) {
+            if (e->op_env.contains(op)) return e->op_env.at(op);
         }
 
         // util::error("Operator `" + op + "` not found!");
@@ -172,8 +187,13 @@ public:
 
 
 
+    // to delay stringifying until needed.
+    // avoid slow recursive virtual calls and string allocations
+    static auto liftName(const expr::Expr* expr) { return [expr] { return expr->stringify(); }; }
+
+
     ValueType operator()(const expr::Num *n) {
-        if (const auto& var = getVar(n->var_ID); var) return *var;
+        if (const auto& var = getVar(n->var_ID, liftName(n)); var) return *var;
 
 
         // have to do an if rather than ternary so the return value isn't always coerced into doubles
@@ -183,21 +203,21 @@ public:
 
 
     ValueType operator()(const expr::Bool *b) {
-        if (const auto& var = getVar(b->var_ID); var) return *var;
+        if (const auto& var = getVar(b->var_ID, liftName(b)); var) return *var;
 
         return {b->boolean, type::builtins::Bool()};
     }
 
 
     ValueType operator()(const expr::String *s) {
-        if (const auto& var = getVar(s->var_ID); var) return *var;
+        if (const auto& var = getVar(s->var_ID, liftName(s)); var) return *var;
 
         return {s->str, type::builtins::String()};
     }
 
 
     ValueType operator()(const expr::FString *fs) {
-        if (const auto& var = getVar(fs->var_ID); var) return *var;
+        if (const auto& var = getVar(fs->var_ID, liftName(fs)); var) return *var;
 
         std::string s;
 
@@ -254,9 +274,9 @@ public:
     }
 
     ValueType fetchRef(const expr::Name *n) {
-        for (const auto& [e, _, __, ___] : std::views::reverse(env)) {
-            if (e.contains(n->var_ID)) {
-                const auto& [named_ref, value_ptr, type_ptr] = e.at(n->var_ID);
+        for (const auto& e : std::views::reverse(env)) {
+            if (e->env.contains(n->var_ID)) {
+                const auto& [named_ref, value_ptr, type_ptr] = e->env.at(n->var_ID);
                 const auto& [_, space] = named_ref;
 
                 if (not space or not space->members.contains(n->var_ID)) 
@@ -278,7 +298,7 @@ public:
         // interesting!
         // how about a special value?
 
-        if (const auto& var = getVar(n->var_ID); var) {
+        if (const auto& var = getVar(n->var_ID, liftName(n)); var) {
             if (isRef(n->var_ID)) return fetchRef(n);
 
             return *var;
@@ -312,7 +332,7 @@ public:
 
 
     ValueType operator()(const expr::List *list) {
-        if (const auto& var = getVar(list->var_ID); var) return *var;
+        if (const auto& var = getVar(list->var_ID, liftName(list)); var) return *var;
 
         std::vector<value::Value> values;
         std::transform(
@@ -377,7 +397,7 @@ public:
 
 
     ValueType operator()(const expr::UnaryFold *fold) {
-        if (const auto& var = getVar(fold->var_ID); var) return *var;
+        if (const auto& var = getVar(fold->var_ID, liftName(fold)); var) return *var;
 
         value::Value pack = std::visit(*this, fold->pack->variant()).value;
 
@@ -477,7 +497,7 @@ public:
 
 
     ValueType operator()(const expr::SeparatedUnaryFold *fold) {
-        if (const auto& var = getVar(fold->var_ID); var) return *var;
+        if (const auto& var = getVar(fold->var_ID, liftName(fold)); var) return *var;
 
 
         value::Value lhs = std::visit(*this, fold->lhs->variant()).value;
@@ -609,7 +629,7 @@ public:
 
 
     ValueType operator()(const expr::BinaryFold *fold) {
-        if (const auto& var = getVar(fold->var_ID); var) return *var;
+        if (const auto& var = getVar(fold->var_ID, liftName(fold)); var) return *var;
 
 
         value::Value pack = std::visit(*this, fold->pack->variant()).value;
@@ -784,9 +804,9 @@ public:
 
     ValueType refAssign(const expr::Assignment *ass, const expr::Name* name) {
 
-        for (const auto& [e, _, __, ___] : std::views::reverse(env)) {
-            if (e.contains(name->var_ID)) {
-                const auto& [named_ref, value_ptr, type_ptr] = e.at(name->var_ID);
+        for (const auto& e : std::views::reverse(env)) {
+            if (e->env.contains(name->var_ID)) {
+                const auto& [named_ref, value_ptr, type_ptr] = e->env.at(name->var_ID);
                 const auto& [_, space] = named_ref;
 
                 if (not space or not space->members.contains(name->var_ID)) 
@@ -824,7 +844,7 @@ public:
         bool change{};
 
         // variable already exists. Check that type matches the rhs type
-        if (const auto& var = getVar(name->var_ID); var) {
+        if (const auto& var = getVar(name->var_ID, liftName(name)); var) {
             if (isRef(name->var_ID)) return refAssign(ass, name);
 
             if (type::shouldReassign(type)) {
@@ -937,10 +957,6 @@ public:
     }
 
 
-    // to delay stringifying until an error is throw.
-    // avoid slow recursive virtual calls and string allocations
-    static auto wrapStringify(const expr::Expr* expr) { return [expr] { return expr->stringify(); }; }
-
 
     ValueType accessUnpackment(const auto& expr_str, expr::Access *acc, value::Value value) {
 
@@ -999,9 +1015,9 @@ public:
 
 
     ValueType refUnpackment(auto expr_str, const expr::Name* name, const value::Value& value) {
-        for (const auto& [e, _, __, ___] : std::views::reverse(env)) {
-            if (e.contains(name->var_ID)) {
-                const auto& [named_ref, value_ptr, type_ptr] = e.at(name->var_ID);
+        for (const auto& e : std::views::reverse(env)) {
+            if (e->env.contains(name->var_ID)) {
+                const auto& [named_ref, value_ptr, type_ptr] = e->env.at(name->var_ID);
                 const auto& [_, space] = named_ref;
 
                 if (not space or not space->members.contains(name->var_ID)) 
@@ -1037,7 +1053,7 @@ public:
         bool change{};
 
         // variable already exists. Check that type matches the rhs type
-        if (const auto& var = getVar(name->var_ID); var) {
+        if (const auto& var = getVar(name->var_ID, liftName(name)); var) {
             if (isRef(name->var_ID)) return refUnpackment(expr_str, name, std::move(value));
 
             type = var->type;
@@ -1297,10 +1313,10 @@ public:
         constexpr auto INFERRED = true;
 
         if (unpack->inferred) {
-            bindPattern<    INFERRED>(wrapStringify(unpack), unpack->pattern.get(), rhs);
+            bindPattern<    INFERRED>(liftName(unpack), unpack->pattern.get(), rhs);
         }
         else {
-            bindPattern<not INFERRED>(wrapStringify(unpack), unpack->pattern.get(), rhs);
+            bindPattern<not INFERRED>(liftName(unpack), unpack->pattern.get(), rhs);
         }
 
 
@@ -1309,14 +1325,14 @@ public:
 
 
     ValueType operator()(const expr::Class *cls) {
-        if (const auto& var = getVar(cls->var_ID); var) return *var;
+        if (const auto& var = getVar(cls->var_ID, liftName(cls)); var) return *var;
 
 
         value::Env captured;
         for (const auto& e : env) {
-            for (const auto& [key, value] : e.env) captured.env[key] = value;
-            for (const auto& [key, value] : e.op_env) captured.op_env[key] = value;
-            for (const auto& [key, value] : e.prefix_op_env) captured.prefix_op_env[key] = value;
+            for (const auto& [key, value] : e->env) captured.env[key] = value;
+            for (const auto& [key, value] : e->op_env) captured.op_env[key] = value;
+            for (const auto& [key, value] : e->prefix_op_env) captured.prefix_op_env[key] = value;
         }
 
         return // getting lispy :sob: fuck this memory ass shit
@@ -1376,7 +1392,7 @@ public:
 
 
     ValueType operator()(const expr::Union *onion) {
-        if (const auto& var = getVar(onion->var_ID); var) return *var;
+        if (const auto& var = getVar(onion->var_ID, liftName(onion)); var) return *var;
 
 
         std::vector<type::TypePtr> types;
@@ -1570,7 +1586,7 @@ public:
 
 
     ValueType operator()(const expr::Namespace *ns) {
-        if (const auto& var = getVar(ns->var_ID); var) return *var;
+        if (const auto& var = getVar(ns->var_ID, liftName(ns)); var) return *var;
 
 
         ScopeGuard sg{this};
@@ -1602,9 +1618,9 @@ public:
             // }
 
         // then add the variables that resulted from that execution
-        current_space.back()->members = std::move(env).back().env;
-        current_space.back()->prefix_op_env = std::move(env).back().prefix_op_env;
-        current_space.back()->op_env = std::move(env).back().op_env;
+        current_space.back()->members = std::move(env).back()->env;
+        current_space.back()->prefix_op_env = std::move(env).back()->prefix_op_env;
+        current_space.back()->op_env = std::move(env).back()->op_env;
 
 
         return {std::move(value), std::move(type)};
@@ -1612,7 +1628,7 @@ public:
 
 
     ValueType operator()(const expr::Use *use) {
-        if (const auto& var = getVar(use->var_ID); var) return *var;
+        if (const auto& var = getVar(use->var_ID, liftName(use)); var) return *var;
 
 
         const auto space = findNS(use->spaces, use->global);
@@ -1631,7 +1647,7 @@ public:
     }
 
     ValueType operator()(const expr::UseSpace *use) {
-        if (const auto& var = getVar(use->var_ID); var) return *var;
+        if (const auto& var = getVar(use->var_ID, liftName(use)); var) return *var;
 
         const auto ns = findNS(use->spaces, use->global);
 
@@ -1665,10 +1681,10 @@ public:
         // `use space ns::;` always wil pull ALL OPS
         if (use->pull_ops) {
             for (const auto& [name, prefix_op] : ns->prefix_op_env) {
-                env.back().prefix_op_env[name] = prefix_op;
+                env.back()->prefix_op_env[name] = prefix_op;
             }
             for (const auto& [name, op] : ns->op_env) {
-                env.back().op_env[name] = op;
+                env.back()->op_env[name] = op;
             }
         }
 
@@ -1693,7 +1709,7 @@ public:
                         prefix_op->type() == PREFIX and
                         (use->op_name.empty() or name == use->op_name)
                     ) {
-                        env.back().prefix_op_env[name] = prefix_op;
+                        env.back()->prefix_op_env[name] = prefix_op;
                         const auto *func = dynamic_cast<expr::Closure*>(prefix_op->funcs[0].get());
 
                         value = *func;
@@ -1707,7 +1723,7 @@ public:
                         op->type() == INFIX and
                         (use->op_name.empty() or name == use->op_name)
                     ) {
-                        env.back().op_env[name] = op;
+                        env.back()->op_env[name] = op;
 
                         const auto *func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
                         value = *func;
@@ -1721,7 +1737,7 @@ public:
                         op->type() == SUFFIX and
                         (use->op_name.empty() or name == use->op_name)
                     ) {
-                        env.back().op_env[name] = op;
+                        env.back()->op_env[name] = op;
 
                         const auto *func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
                         value = *func;
@@ -1737,8 +1753,8 @@ public:
                     ) {
                         const auto exfix = dynamic_cast<const expr::Exfix*>(prefix_op.get());
 
-                        env.back().prefix_op_env[exfix->name ] = prefix_op;
-                        env.back().op_env       [exfix->name2] = prefix_op;
+                        env.back()->prefix_op_env[exfix->name ] = prefix_op;
+                        env.back()->op_env       [exfix->name2] = prefix_op;
 
 
                         const auto *func = dynamic_cast<expr::Closure*>(prefix_op->funcs[0].get());
@@ -1755,9 +1771,9 @@ public:
                     ) {
                         const auto mixfix = dynamic_cast<const expr::Operator*>(prefix_op.get());
 
-                        env.back().prefix_op_env[mixfix->name] = prefix_op;
+                        env.back()->prefix_op_env[mixfix->name] = prefix_op;
                         for (const auto& sub_name : mixfix->rest) {
-                            env.back().op_env[sub_name] = prefix_op;
+                            env.back()->op_env[sub_name] = prefix_op;
                         }
 
 
@@ -1774,9 +1790,9 @@ public:
                     ) {
                         const auto mixfix = dynamic_cast<const expr::Operator*>(op.get());
 
-                        env.back().prefix_op_env[mixfix->name] = op;
+                        env.back()->prefix_op_env[mixfix->name] = op;
                         for (const auto& sub_name : mixfix->rest) {
-                            env.back().op_env[sub_name] = op;
+                            env.back()->op_env[sub_name] = op;
                         }
 
 
@@ -1790,7 +1806,7 @@ public:
             case NONE:
                 for (const auto& [name, prefix_op] : ns->prefix_op_env) {
                     if (use->op_name.empty() or name == use->op_name) {
-                        env.back().prefix_op_env[name] = prefix_op;
+                        env.back()->prefix_op_env[name] = prefix_op;
 
                         const auto *func = dynamic_cast<expr::Closure*>(prefix_op->funcs[0].get());
                         value = *func;
@@ -1800,7 +1816,7 @@ public:
 
                 for (const auto& [name, op] : ns->op_env) {
                     if (use->op_name.empty() or name == use->op_name) {
-                        env.back().op_env[name] = op;
+                        env.back()->op_env[name] = op;
 
                         const auto *func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
                         value = *func;
@@ -1893,7 +1909,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::Import *import) {
-        if (const auto& var = getVar(import->var_ID); var) return *var;
+        if (const auto& var = getVar(import->var_ID, liftName(import)); var) return *var;
 
         if (import->path == "self") return zenOfPie();
 
@@ -1968,7 +1984,7 @@ There are no mistakes with art.)";
 
         std::optional<ValueType> var;
         if (dynamic_cast<expr::Name*>(type_name.get())) {
-            var = getVar(type_name->var_ID);
+            var = getVar(type_name->var_ID, liftName(type_name.get()));
         }
         else {
             auto sa = dynamic_cast<expr::SpaceAccess*>(type_name.get());
@@ -2009,7 +2025,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::Match *m) {
-        if (const auto& var = getVar(m->var_ID); var) return *var;
+        if (const auto& var = getVar(m->var_ID, liftName(m)); var) return *var;
 
         const value::Value& value = std::visit(*this, m->expr->variant()).value;
 
@@ -2038,7 +2054,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::Syntax *syn) {
-        if (const auto& var = getVar(syn->var_ID); var) return *var;
+        if (const auto& var = getVar(syn->var_ID, liftName(syn)); var) return *var;
 
         // return std::visit(*this, syn->expr->variant());
         return {syn->expr->variant(), type::builtins::Syntax()};
@@ -2046,7 +2062,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::Type* type) {
-        if (const auto& var = getVar(type->var_ID); var) return *var;
+        if (const auto& var = getVar(type->var_ID, liftName(type)); var) return *var;
 
         return {validateType(type->type), type::builtins::Type()};
     };
@@ -2110,7 +2126,7 @@ There are no mistakes with art.)";
 
                         addVar(
                             "_",
-                            analysis::LexicalAnalysis::UNNAMED_ID,
+                            std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::UNNAMED),
                             std::make_shared<value::Value>(loop_counter),
                             type::builtins::Int()
                         );
@@ -2151,7 +2167,7 @@ There are no mistakes with art.)";
 
                         addVar(
                             "_",
-                            analysis::LexicalAnalysis::UNNAMED_ID,
+                            std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::UNNAMED),
                             std::make_shared<value::Value>(loop_counter),
                             type::builtins::Int()
                         );
@@ -2197,7 +2213,7 @@ There are no mistakes with art.)";
 
                         addVar(
                             "_",
-                            analysis::LexicalAnalysis::UNNAMED_ID,
+                            std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::UNNAMED),
                             std::make_shared<value::Value>(elt),
                             list_type->type
                         );
@@ -2233,7 +2249,7 @@ There are no mistakes with art.)";
 
                         addVar(
                             "_",
-                            analysis::LexicalAnalysis::UNNAMED_ID,
+                            std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::UNNAMED),
                             std::make_shared<value::Value>(elt),
                             type::builtins::String()
                         );
@@ -2278,7 +2294,7 @@ There are no mistakes with art.)";
 
                         addVar(
                             "_",
-                            analysis::LexicalAnalysis::UNNAMED_ID,
+                            std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::UNNAMED),
                             std::make_shared<value::Value>(elt),
                             pack_type->type
                         );
@@ -2343,7 +2359,7 @@ There are no mistakes with art.)";
 
                             addVar(
                                 "_",
-                                analysis::LexicalAnalysis::UNNAMED_ID,
+                                std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::UNNAMED),
                                 std::make_shared<value::Value>(std::move(elt)),
                                 std::move(type)
                             );
@@ -2395,7 +2411,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::Loop *loop) {
-        if (const auto& var = getVar(loop->var_ID); var) return *var;
+        if (const auto& var = getVar(loop->var_ID, liftName(loop)); var) return *var;
 
         value::Value value;
         type::TypePtr type;
@@ -2410,7 +2426,7 @@ There are no mistakes with art.)";
                 value = std::move(valuetype).value;
                 type  = std::move(valuetype).type ;
             },
-            wrapStringify(loop)
+            liftName(loop)
         );
 
         return {std::move(value), std::move(type)};
@@ -2418,7 +2434,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::ListComp *comp) {
-        if (const auto& var = getVar(comp->var_ID); var) return *var;
+        if (const auto& var = getVar(comp->var_ID, liftName(comp)); var) return *var;
 
 
         auto list = value::makeList();
@@ -2438,7 +2454,7 @@ There are no mistakes with art.)";
                     if (get<bool>(g.value))
                         list.elts->values.push_back(std::visit(*this, std::move(node)).value);
                 },
-                wrapStringify(comp)
+                liftName(comp)
             );
         else
             handleLoop(
@@ -2449,7 +2465,7 @@ There are no mistakes with art.)";
                 [this, &list] (expr::Node node) {
                     list.elts->values.push_back(std::visit(*this, std::move(node)).value);
                 },
-                wrapStringify(comp)
+                liftName(comp)
             );
 
 
@@ -2459,7 +2475,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::MapComp *comp) {
-        if (const auto& var = getVar(comp->var_ID); var) return *var;
+        if (const auto& var = getVar(comp->var_ID, liftName(comp)); var) return *var;
 
 
         auto map = value::makeMap();
@@ -2488,7 +2504,7 @@ There are no mistakes with art.)";
                         map.items->map.insert_or_assign(std::move(list.elts->values[0]), std::move(list.elts->values[1]));
                     }
                 },
-                wrapStringify(comp)
+                liftName(comp)
             );
         else
             handleLoop(
@@ -2502,7 +2518,7 @@ There are no mistakes with art.)";
                     auto& list = get<value::List>(valuetype.value);
                     map.items->map.insert_or_assign(std::move(list.elts->values[0]), std::move(list.elts->values[1]));
                 },
-                wrapStringify(comp)
+                liftName(comp)
             );
 
 
@@ -2531,7 +2547,7 @@ There are no mistakes with art.)";
 
     //* only added to differentiate between expressions such as: 1 + 2 and (1 + 2)
     ValueType operator()(const expr::Grouping *g) {
-        if (const auto& var = getVar(g->var_ID); var) return *var;
+        if (const auto& var = getVar(g->var_ID, liftName(g)); var) return *var;
 
         return std::visit(*this, g->expr->variant());
     }
@@ -2613,7 +2629,7 @@ There are no mistakes with art.)";
     }
 
     ValueType operator()(const expr::UnaryOp *up) {
-        if (const auto& var = getVar(up->var_ID); var) return *var;
+        if (const auto& var = getVar(up->var_ID, liftName(up)); var) return *var;
 
 
         const auto& op = findPrefixOp(up->op);
@@ -2687,7 +2703,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::BinOp *bp) {
-        if (const auto& var = getVar(bp->var_ID); var) return *var;
+        if (const auto& var = getVar(bp->var_ID, liftName(bp)); var) return *var;
 
 
         const auto& op = findOp(bp->op);
@@ -2806,7 +2822,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::PostOp *pp) {
-        if (const auto& var = getVar(pp->var_ID); var) return *var;
+        if (const auto& var = getVar(pp->var_ID, liftName(pp)); var) return *var;
 
 
         const auto& op = findOp(pp->op);
@@ -2881,7 +2897,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::CircumOp *cp) {
-        if (const auto& var = getVar(cp->var_ID); var) return *var;
+        if (const auto& var = getVar(cp->var_ID, liftName(cp)); var) return *var;
 
         const auto& op = findPrefixOp(cp->op1);
         expr::Closure* func;
@@ -2953,7 +2969,7 @@ There are no mistakes with art.)";
     };
 
     ValueType operator()(const expr::OpCall *oc) {
-        if (const auto& var = getVar(oc->var_ID); var) return *var;
+        if (const auto& var = getVar(oc->var_ID, liftName(oc)); var) return *var;
 
 
 
@@ -3060,7 +3076,7 @@ There are no mistakes with art.)";
     };
 
     ValueType operator()(const expr::Call *call) {
-        if (const auto& var = getVar(call->var_ID); var) return *var;
+        if (const auto& var = getVar(call->var_ID, liftName(call)); var) return *var;
 
         // const auto args = std::move(call)->args;
         const auto args = call->args;
@@ -3585,10 +3601,10 @@ There are no mistakes with art.)";
         size_t found{};
 
         for (size_t i{}; i < env.size(); ++i)
-            if (env[i].tag == value::EnvTag::FUNC) found = i;
+            if (env[i]->tag == value::EnvTag::FUNC) found = i;
 
         for (; found < env.size(); ++found) {
-            c.returnCapture(env[found].env);
+            c.returnCapture(env[found]->env);
         }
     }
 
@@ -3601,14 +3617,14 @@ There are no mistakes with art.)";
         size_t found2 = 1;
 
         for (size_t i = 1; i < env.size(); ++i)
-            if (env[i].tag == value::EnvTag::FUNC) {
+            if (env[i]->tag == value::EnvTag::FUNC) {
                 found1 = found2;
                 found2 = i;
             }
 
 
         for (; found1 < found2; ++found1) {
-            c.passedCapture(env[found1].env);
+            c.passedCapture(env[found1]->env);
         }
     }
 
@@ -3985,7 +4001,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::Closure *c) {
-        if (const auto& var = getVar(c->var_ID); var) return *var;
+        if (const auto& var = getVar(c->var_ID, liftName(c)); var) return *var;
 
         expr::Closure closure = *c; // copy to use for fix the types
 
@@ -4023,11 +4039,11 @@ There are no mistakes with art.)";
         closure.inSpace(current_space);
 
         // capture all the operators now:
-        for (const auto& [_, __, ops, ___] : env)
-            closure.captureOps(ops);
+        for (const auto& e : env)
+            closure.captureOps(e->op_env);
 
-        for (const auto& [_, ops, __, ___] : env)
-            closure.capturePrefixOps(ops);
+        for (const auto& e : env)
+            closure.capturePrefixOps(e->prefix_op_env);
 
 
         // THIS LINE HERE causes FPS to drop from around 4K to 250..
@@ -4040,7 +4056,7 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::Block *block) {
-        if (const auto& var = getVar(block->var_ID); var) return *var;
+        if (const auto& var = getVar(block->var_ID, liftName(block)); var) return *var;
 
 
         ScopeGuard sg{this};
@@ -4071,10 +4087,10 @@ There are no mistakes with art.)";
 
 
     ValueType operator()(const expr::Fix *fix) {
-        if (const auto& var = getVar(fix->var_ID); var) return *var;
+        if (const auto& var = getVar(fix->var_ID, liftName(fix)); var) return *var;
         // return std::visit(*this, fix->func->variant());
 
-        if (const auto& var = getVar(fix->funcs[0]->var_ID); var)
+        if (const auto& var = getVar(fix->funcs[0]->var_ID, liftName(fix->funcs[0].get())); var)
             util::error("Can only assign operators to closure literals: " + fix->stringify());
 
         auto func = dynamic_cast<expr::Closure*>(fix->funcs[0].get());
@@ -4093,7 +4109,7 @@ There are no mistakes with art.)";
                 if (prefixOpsContain(fix->name))
                     findPrefixOp(fix->name)->funcs.push_back(fix->funcs[0]); // assuming each fix expression has a single func in it
                 else
-                    env.back().prefix_op_env[fix->name] = fix->clone();
+                    env.back()->prefix_op_env[fix->name] = fix->clone();
                 break;
 
             case EXFIX : {
@@ -4103,8 +4119,8 @@ There are no mistakes with art.)";
                     findPrefixOp(exfix->name2)->funcs.push_back(fix->funcs[0]);
                 }
                 else {
-                    env.back().prefix_op_env[exfix->name ] = fix->clone();
-                    env.back().prefix_op_env[exfix->name2] = fix->clone();
+                    env.back()->prefix_op_env[exfix->name ] = fix->clone();
+                    env.back()->prefix_op_env[exfix->name2] = fix->clone();
                 }
 
             }
@@ -4114,7 +4130,7 @@ There are no mistakes with art.)";
             case SUFFIX:
                 if (opsContain(fix->name))
                     findOp(fix->name)->funcs.push_back(fix->funcs[0]);
-                else env.back().op_env[fix->name] = fix->clone();
+                else env.back()->op_env[fix->name] = fix->clone();
                 break;
 
             case MIXFIX: {
@@ -4127,10 +4143,10 @@ There are no mistakes with art.)";
                         }
                     }
                     else {
-                        env.back().prefix_op_env[mixfix->name] = mixfix->clone();
+                        env.back()->prefix_op_env[mixfix->name] = mixfix->clone();
 
                         for (const auto& sub_name : mixfix->rest)
-                            env.back().op_env[sub_name] = mixfix->clone();
+                            env.back()->op_env[sub_name] = mixfix->clone();
                     }
                 }
                 else {
@@ -4141,10 +4157,10 @@ There are no mistakes with art.)";
                         }
                     }
                     else {
-                        env.back().op_env[mixfix->name] = mixfix->clone();
+                        env.back()->op_env[mixfix->name] = mixfix->clone();
 
                         for (const auto& sub_name : mixfix->rest)
-                            env.back().op_env[sub_name] = mixfix->clone();
+                            env.back()->op_env[sub_name] = mixfix->clone();
                     }
                 }
             }
@@ -4162,7 +4178,7 @@ There are no mistakes with art.)";
 
         for(const auto& builtin : {
             //* variadic
-            "print", "concat", 
+            "print", "concat", "defer",
 
             // debugging
             "print_env",
@@ -4202,6 +4218,7 @@ There are no mistakes with art.)";
             //* File IO
             "open_file",
             "close_file",
+            "is_file_open",
             "read_file",
             "read_line",
             "read_word",
@@ -4335,6 +4352,41 @@ There are no mistakes with art.)";
 
 
 
+        if (name == "defer") {
+            if (args.empty()   ) util::error("`__builtin_defer` requires at least 1 argument: " + call->stringify());
+            if (args.size() > 2) util::error("`__builtin_defer` accepts at most 2 argument: " + call->stringify());
+
+            // 
+            BigInt depth{};
+
+            if (args.size() == 2) {
+                auto depth_value = std::visit(*this, args[1]->variant()).value;
+                if (not std::holds_alternative<BigInt>(depth_value))
+                    util::error(
+                        "At call: " + call->stringify() + 
+                        ", `__builtin_defer` expected an integer for optional argument `depth`. "
+                        "Got: " + value::stringify(depth_value) +
+                        "\nwhich is: " + typeOf(depth_value)->text()
+                    );
+
+                depth = get<BigInt>(depth_value);
+
+                if (depth < 0)
+                    util::error("`__builtin_defer` called with a negative depth level: " + call->stringify());
+
+                // depth won't underflow since it's guarunteed not to be negative (checked above)
+                if (size_t(depth) >= deferred.size())
+                    util::error("`__builtin_defer` called with a depth greater than the current depth: " + call->stringify());
+            }
+
+
+
+            deferred[deferred.size() - 1 - depth].emplace_back(args[0], env.back());
+
+            return args.front()->variant();
+        }
+
+
 
         // for now, can only implement variadic functions inlined in this function
         // seems like functions with default named parameters can only be implmented this way for now
@@ -4396,6 +4448,7 @@ There are no mistakes with art.)";
             "ptr_to_string",
             "open_file"    ,
             "close_file"   ,
+            "is_file_open",
             "read_file"    ,
             "read_line"    ,
             "read_word"    ,
@@ -4411,7 +4464,7 @@ There are no mistakes with art.)";
         // Since this is a meta function that operates on AST nodes rather than values
         // it gets its special treatment here..
         if (name == "reset") {
-            if (const auto& v = getVar(args[0]->var_ID); not v) util::error("Reseting an unset value: " + args[0]->stringify());
+            if (const auto& v = getVar(args[0]->var_ID, liftName(args[0].get())); not v) util::error("Reseting an unset value: " + args[0]->stringify());
             else removeVar(args[0]->var_ID);
 
             return value1;
@@ -4446,10 +4499,11 @@ There are no mistakes with art.)";
 
             return execute<1>(stdx::get<S<"open_file" >>(functions).value, {value::Value(path.string())}, this);
         }
-        if (name == "close_file") return execute<1>(stdx::get<S<"close_file">>(functions).value, {value1}, this);
-        if (name == "read_file" ) return execute<1>(stdx::get<S<"read_file" >>(functions).value, {value1}, this);
-        if (name == "read_line" ) return execute<1>(stdx::get<S<"read_line" >>(functions).value, {value1}, this);
-        if (name == "read_word" ) return execute<1>(stdx::get<S<"read_word" >>(functions).value, {value1}, this);
+        if (name == "close_file"  ) return execute<1>(stdx::get<S<"close_file"  >>(functions).value, {value1}, this);
+        if (name == "is_file_open") return execute<1>(stdx::get<S<"is_file_open">>(functions).value, {value1}, this);
+        if (name == "read_file"   ) return execute<1>(stdx::get<S<"read_file"   >>(functions).value, {value1}, this);
+        if (name == "read_line"   ) return execute<1>(stdx::get<S<"read_line"   >>(functions).value, {value1}, this);
+        if (name == "read_word"   ) return execute<1>(stdx::get<S<"read_word"   >>(functions).value, {value1}, this);
 
 
         #if not WEB_PIE
@@ -4952,8 +5006,7 @@ There are no mistakes with art.)";
         // //* comment this if statement if you want builtin types to remain unchanged even when they're assigned to
 
 
-
-        if (auto var = getVar(type->ID); var) {
+        if (auto var = getVar(type->ID, [&type] { return type->text(); }); var) {
             if (auto t = typeOf(var->value); not type::isType(t)) {
                 if (type::isFunction(t))
                     return std::make_shared<type::ConceptType>(std::make_shared<value::Value>(std::move(var)->value));
@@ -5184,7 +5237,7 @@ There are no mistakes with art.)";
 
 
     type::TypePtr declType(const expr::StringID& name) const {
-        if (const auto var = getVar(name.ID); var) {
+        if (const auto var = getVar(name.ID, [&name = name.name] { return name; }); var) {
             return var->type;
         }
 
@@ -5222,12 +5275,12 @@ There are no mistakes with art.)";
 
         void addOps(const Operators& ops) {
             for (const auto& [name, op] : ops)
-                v->env.back().op_env[name] = op->clone();
+                v->env.back()->op_env[name] = op->clone();
         }
 
         void addPrefixOps(const Operators& ops) {
             for (const auto& [name, op] : ops)
-                v->env.back().prefix_op_env[name] = op->clone();
+                v->env.back()->prefix_op_env[name] = op->clone();
         }
 
 
@@ -5250,10 +5303,24 @@ There are no mistakes with art.)";
 
 
     void scope(const value::EnvTag tag = value::EnvTag::NONE) {
-        env.push_back({{}, {}, {}, tag});
+        env.push_back(std::make_shared<value::Env>(value::Env{{}, {}, {}, tag}));
+        deferred.emplace_back();
     }
 
-    void unscope() { env.pop_back(); }
+
+    void unscope() {
+
+        for (auto& [expr, env] : deferred.back() | std::views::reverse) {
+            ScopeGuard sg{this, env->env};
+            sg.addPrefixOps(env->prefix_op_env);
+            sg.addOps(env->op_env);
+
+            std::visit(*this, expr->variant());
+        }
+
+        deferred.pop_back();
+        env.pop_back();
+    }
 
 
     value::Value addVar(
@@ -5263,31 +5330,7 @@ There are no mistakes with art.)";
         const type::TypePtr& t = type::builtins::Any(),
         NameSpace* space = nullptr
     ) {
-        // if (const auto cls = type::isClass(t)) {
-        //     auto obj = get<value::Object>(v);
-        //     obj.second = std::make_shared<value::Members>(obj.second->members);
-
-        //     std::erase_if(
-        //         obj.second->members,
-        //         [cls] (const auto& member) {
-        //             const auto& [name, _, __] = member;
-
-        //             return std::ranges::find_if(cls->cls->blueprint->members, [&name](const auto& field) {
-        //                 return get<expr::Name>(field).name == name.name;
-        //             }) == cls->cls->blueprint->members.cend();
-        //         }
-        //     );
-
-        //     env.back().first[name] = {std::make_shared<value::Value>(obj), t};
-        //     return obj;
-        // }
-        // else {
-        // }
-        // env.back().first[name] = {std::make_shared<value::Value>(v), t};
-
-        env.back().env[ID] = {{name, space}, v, t};
-        // env[ID] = {name, std::make_shared<value::Value>(v), t};
-
+        env.back()->env[ID] = {{name, space}, v, t};
         return *v;
     }
 
@@ -5301,9 +5344,9 @@ There are no mistakes with art.)";
 
 
     bool isRef(const size_t ID) const {
-        for (const auto& [e, _, __, ___] : std::views::reverse(env)) {
-            if (e.contains(ID)) {
-                const auto& [named_ref, _, __] = e.at(ID);
+        for (const auto& e : std::views::reverse(env)) {
+            if (e->env.contains(ID)) {
+                const auto& [named_ref, _, __] = e->env.at(ID);
                 return named_ref.isRef();
             }
         }
@@ -5312,12 +5355,40 @@ There are no mistakes with art.)";
         return false;
     }
 
-    std::optional<ValueType> getVar(const ssize_t id) const {
+
+    std::optional<ValueType> dynamicLookup(const std::string& name) const {
+        for (const auto& e : std::views::reverse(env)) {
+            for (const auto& [_, val] : e->env)
+            if (get<value::SpaceRef>(val).name == name) {
+                const auto& [_, value_ptr, type_ptr] = val;
+                return {{*value_ptr, type_ptr}};
+            }
+        }
+
+        if (const auto var = checkMemberInThisObject(name); var) return *var;
+
+
+        for (const auto& ns : std::views::reverse(current_space)) {
+            for (const auto& [_, val] : ns->members)
+            if (get<value::SpaceRef>(val).name == name) {
+                const auto& [_, value_ptr, type_ptr] = val;
+                return {{*value_ptr, type_ptr}};
+            }
+        }
+
+
+        return {};
+    }
+
+    std::optional<ValueType> getVar(const ssize_t id, auto name) const {
         if (id == -1) return {};
 
-        for (const auto& [e, _, __, ___] : std::views::reverse(env)) {
-            if (e.contains(id)) {
-                const auto& [named_ref, value_ptr, type_ptr] = e.at(id);
+        if (id == std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::DYNAMIC))
+            return dynamicLookup(name());
+
+        for (const auto& e : std::views::reverse(env)) {
+            if (e->env.contains(id)) {
+                const auto& [_, value_ptr, type_ptr] = e->env.at(id);
                 return {{*value_ptr, type_ptr}};
             }
         }
@@ -5328,7 +5399,7 @@ There are no mistakes with art.)";
 
         for (const auto& ns : std::views::reverse(current_space)) {
             if (ns->members.contains(id)) {
-                const auto& [named_ref, value_ptr, type_ptr] = ns->members.at(id);
+                const auto& [_, value_ptr, type_ptr] = ns->members.at(id);
                 return {{*value_ptr, type_ptr}};
             }
         }
@@ -5343,11 +5414,11 @@ There are no mistakes with art.)";
 
     bool changeVar(const size_t ID, const value::Value& v) {
         for (auto rev_it = env.rbegin(); rev_it != env.rend(); ++rev_it)
-            if (rev_it->env.contains(ID)) {
+            if ((*rev_it)->env.contains(ID)) {
                 // const auto& t = rev_it->first.at(ID);
                 // (*rev_it).first[name] = {std::make_shared<value::Value>(v), t};
                 // get<1>(rev_it->first.at(ID)) = std::make_shared<value::Value>(v);
-                *get<1>(rev_it->env.at(ID)) = v;
+                *get<1>((*rev_it)->env.at(ID)) = v;
 
                 return true;
             }
@@ -5372,9 +5443,9 @@ There are no mistakes with art.)";
 
 
     void removeVar(const size_t ID) {
-        for(auto& [curr_env, _, __, ___] : std::views::reverse(env)) {
-            if (curr_env.contains(ID)) {
-                curr_env.erase(ID);
+        for(auto& e : std::views::reverse(env)) {
+            if (e->env.contains(ID)) {
+                e->env.erase(ID);
                 return;
             }
         }

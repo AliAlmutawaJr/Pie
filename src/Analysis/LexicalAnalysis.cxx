@@ -1,10 +1,18 @@
 #include "LexicalAnalysis.hxx"
 
+#include <optional>
+#include <utility>
+#include <variant>
+
 #include "../Lex/Lexer.hxx"
 #include "../Parser/Parser.hxx"
 #include "../Utils/Exceptions.hxx"
-#include <optional>
-#include <variant>
+
+
+// potential macro
+#if false
+#define PIE_FIND_VAR_OR_RET(name)
+#endif
 
 
 inline namespace pie {
@@ -23,9 +31,10 @@ std::string stringify(const std::vector<std::string>& spaces) {
 size_t LexicalAnalysis::next() noexcept {
     auto index = variable_index++;
 
-    // skip unnamed ID
-    if (index == UNNAMED_ID) {
-        index = variable_index++;
+    // skip reserved IDs
+    if (index == std::to_underlying(ReservedIDs::UNNAMED)) {
+        index += RESERVED_IDS_SIZE;
+        variable_index = index + 1;
     }
 
     return index;
@@ -49,6 +58,7 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
 
         "__builtin_print",
         "__builtin_concat", 
+        "__builtin_defer", 
         "__builtin_print_env",
         "__builtin_panic",
         "__builtin_id",
@@ -91,6 +101,7 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
 
         // //* File IO
         "__builtin_open_file",
+        "__builtin_is_file_open",
         "__builtin_close_file",
         "__builtin_read_file",
         "__builtin_read_line",
@@ -133,7 +144,7 @@ void LexicalAnalysis::operator()(expr::Num *n) {
     // has it been re-assigned?
     if (auto id = findVariable(str)) {
         n->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
 
@@ -163,7 +174,7 @@ void LexicalAnalysis::operator()(expr::Bool *b) {
 
     if (auto id = findVariable(str)) {
         b->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
 
@@ -186,7 +197,7 @@ void LexicalAnalysis::operator()(expr::String *s) {
 
     if (auto id = findVariable(str)) {
         s->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
 
@@ -209,7 +220,7 @@ void LexicalAnalysis::operator()(expr::FString *s) {
 
     if (auto id = findVariable(str)) {
         s->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     for (const auto& inner : s->exprs) {
@@ -233,7 +244,7 @@ void LexicalAnalysis::operator()(expr::FString *s) {
 void LexicalAnalysis::operator()(expr::Fix *f) {
     if (auto id = findVariable(f->stringify())) {
         f->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     // std::visit(*this, f->funcs[0]->variant());
@@ -365,7 +376,7 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern) {
 
         if (const auto id = findVariable(expr->expr->stringify()); id) {
             expr->expr->var_ID = *id;
-            return;
+            if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
         }
 
         expr->expr->var_ID = next();
@@ -384,7 +395,7 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern) {
     else if (auto pack = dynamic_cast<expr::Unpackment::Pack*>(pattern)) {
         if (const auto id = findVariable(pack->expr->stringify()); id) {
             pack->expr->var_ID = *id;
-            return;
+            if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
         }
 
         pack->expr->var_ID = next();
@@ -418,7 +429,7 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern, [[maybe_u
     else if (auto pack = dynamic_cast<expr::Unpackment::Pack*>(pattern)) {
         if (const auto id = findVariable(pack->expr->stringify()); id) {
             pack->expr->var_ID = *id;
-            return;
+            if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
         }
 
         pack->expr->var_ID = next();
@@ -456,7 +467,7 @@ void LexicalAnalysis::operator()(expr::Name *name) {
 void LexicalAnalysis::operator()(expr::Block *b) {
     if (auto id = findVariable(b->stringify())) {
         b->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     ScopeGuard sg{this};
@@ -470,7 +481,7 @@ void LexicalAnalysis::operator()(expr::Block *b) {
 void LexicalAnalysis::operator()(expr::Closure *c) {
     if (auto id = findVariable(c->stringify())) {
         c->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     ScopeGuard sg{this};
@@ -496,7 +507,7 @@ void LexicalAnalysis::operator()(expr::Closure *c) {
 void LexicalAnalysis::operator()(expr::Call *call) {
     if (auto id = findVariable(call->stringify())) {
         call->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     std::visit(*this, call->func->variant());
@@ -514,7 +525,7 @@ void LexicalAnalysis::operator()(expr::Call *call) {
 void LexicalAnalysis::operator()(expr::List *list) {
     if (auto id = findVariable(list->stringify())) {
         list->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     for (const auto& e : list->elements)
@@ -526,7 +537,7 @@ void LexicalAnalysis::operator()(expr::List *list) {
 void LexicalAnalysis::operator()(expr::Map *map) {
     if (auto id = findVariable(map->stringify())) {
         map->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     for (const auto& [key, value] : map->items)
@@ -538,7 +549,7 @@ void LexicalAnalysis::operator()(expr::Map *map) {
 void LexicalAnalysis::operator()(expr::ListComp *comp) {
     if (auto id = findVariable(comp->stringify())) {
         comp->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     ScopeGuard sg{this};
@@ -563,7 +574,7 @@ void LexicalAnalysis::operator()(expr::ListComp *comp) {
 void LexicalAnalysis::operator()(expr::MapComp *comp) {
     if (auto id = findVariable(comp->stringify())) {
         comp->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
 
@@ -599,7 +610,7 @@ void LexicalAnalysis::operator()(expr::MapComp *comp) {
 void LexicalAnalysis::operator()(expr::Expansion *e) {
     if (auto id = findVariable(e->stringify())) {
         e->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     std::visit(*this, e->pack->variant());
@@ -610,7 +621,7 @@ void LexicalAnalysis::operator()(expr::Expansion *e) {
 void LexicalAnalysis::operator()(expr::UnaryFold *fold) {
     if (auto id = findVariable(fold->stringify())) {
         fold->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     std::visit(*this, fold->pack->variant());
@@ -621,7 +632,7 @@ void LexicalAnalysis::operator()(expr::UnaryFold *fold) {
 void LexicalAnalysis::operator()(expr::SeparatedUnaryFold *fold) {
     if (auto id = findVariable(fold->stringify())) {
         fold->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     std::visit(*this, fold->lhs->variant());
@@ -633,7 +644,7 @@ void LexicalAnalysis::operator()(expr::SeparatedUnaryFold *fold) {
 void LexicalAnalysis::operator()(expr::BinaryFold *fold) {
     if (auto id = findVariable(fold->stringify())) {
         fold->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     std::visit(*this, fold->pack->variant());
@@ -647,7 +658,7 @@ void LexicalAnalysis::operator()(expr::BinaryFold *fold) {
 void LexicalAnalysis::operator()(expr::Class *cls) {
     if (auto id = findVariable(cls->stringify())) {
         cls->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     ScopeGuard sg{this};
@@ -670,7 +681,7 @@ void LexicalAnalysis::operator()(expr::Class *cls) {
 void LexicalAnalysis::operator()(expr::Union *onion) {
     if (auto id = findVariable(onion->stringify())) {
         onion->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     ScopeGuard sg{this};
@@ -720,7 +731,7 @@ void LexicalAnalysis::checkPattern(expr::Match::Case::Pattern& pat) {
 void LexicalAnalysis::operator()(expr::Match *match) {
     if (auto id = findVariable(match->stringify())) {
         match->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     ScopeGuard sg{this};
@@ -744,7 +755,7 @@ void LexicalAnalysis::operator()(expr::Match *match) {
 void LexicalAnalysis::operator()(expr::Loop *loop) {
     if (auto id = findVariable(loop->stringify())) {
         loop->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     ScopeGuard sg{this};
@@ -754,7 +765,7 @@ void LexicalAnalysis::operator()(expr::Loop *loop) {
     // the extra argument `{}` acts as a tag for static dispatch
     // is means "introduce new names instead of acting as assignment"
     if (loop->var) checkPattern(loop->var.get(), {});
-    else addVar("_", UNNAMED_ID); // implicit loop var
+    else addVar("_", std::to_underlying(ReservedIDs::UNNAMED)); // implicit loop var
 
 
     const auto was_in_loop = in_loop;
@@ -770,7 +781,7 @@ void LexicalAnalysis::operator()(expr::Loop *loop) {
 void LexicalAnalysis::operator()(expr::Break *br) {
     if (auto id = findVariable(br->stringify())) {
         br->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     if (not in_loop) util::error("Can't use `break` outside a loop: " + br->stringify());
@@ -783,7 +794,7 @@ void LexicalAnalysis::operator()(expr::Break *br) {
 void LexicalAnalysis::operator()(expr::Continue *cont) {
     if (auto id = findVariable(cont->stringify())) {
         cont->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     if (not in_loop) util::error("Can't use `continue` outside a loop: " + cont->stringify());
@@ -810,7 +821,7 @@ void LexicalAnalysis::operator()(const expr::Access *acc) {
 void LexicalAnalysis::operator()(expr::Import *import) {
     if (auto id = findVariable(import->stringify())) {
         import->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     // Zen of Pie
@@ -852,7 +863,7 @@ void LexicalAnalysis::operator()(expr::Import *import) {
 void LexicalAnalysis::operator()(expr::Namespace *n) {
     if (auto id = findVariable(n->stringify())) {
         n->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     // ScopeGuard sg{this};
@@ -877,7 +888,7 @@ void LexicalAnalysis::operator()(expr::Namespace *n) {
 void LexicalAnalysis::operator()(expr::UseFix *use) {
     if (auto id = findVariable(use->stringify())) {
         use->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     // util::error();
@@ -888,7 +899,7 @@ void LexicalAnalysis::operator()(expr::UseFix *use) {
 void LexicalAnalysis::operator()(expr::UseSpace *use) {
     if (auto id = findVariable(use->stringify())) {
         use->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
 
@@ -931,7 +942,7 @@ void LexicalAnalysis::operator()(expr::UseSpace *use) {
 void LexicalAnalysis::operator()(expr::Use *use) {
     if (auto id = findVariable(use->stringify())) {
         use->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
 
@@ -973,7 +984,7 @@ void LexicalAnalysis::operator()(expr::SpaceAccess *acc) {
 void LexicalAnalysis::operator()(expr::Grouping *group) {
     if (auto id = findVariable(group->stringify())) {
         group->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     std::visit(*this, group->expr->variant());
@@ -984,7 +995,7 @@ void LexicalAnalysis::operator()(expr::Grouping *group) {
 void LexicalAnalysis::operator()(expr::UnaryOp *up) {
     if (auto id = findVariable(up->stringify())) {
         up->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     std::visit(*this, up->expr->variant());
@@ -995,7 +1006,8 @@ void LexicalAnalysis::operator()(expr::UnaryOp *up) {
 void LexicalAnalysis::operator()(expr::BinOp *bp) {
     if (auto id = findVariable(bp->stringify())) {
         bp->var_ID = *id;
-        return;
+
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     std::visit(*this, bp->lhs->variant());
@@ -1007,7 +1019,7 @@ void LexicalAnalysis::operator()(expr::BinOp *bp) {
 void LexicalAnalysis::operator()(expr::PostOp   *pp) {
     if (auto id = findVariable(pp->stringify())) {
         pp->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     std::visit(*this, pp->expr->variant());
@@ -1018,7 +1030,7 @@ void LexicalAnalysis::operator()(expr::PostOp   *pp) {
 void LexicalAnalysis::operator()(expr::CircumOp *cp) {
     if (auto id = findVariable(cp->stringify())) {
         cp->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     std::visit(*this, cp->expr->variant());
@@ -1029,7 +1041,7 @@ void LexicalAnalysis::operator()(expr::CircumOp *cp) {
 void LexicalAnalysis::operator()(expr::OpCall *oc) {
     if (auto id = findVariable(oc->stringify())) {
         oc->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     for (const auto& expr : oc->exprs)
@@ -1080,10 +1092,12 @@ void LexicalAnalysis::visitType(const type::TypePtr& type) {
 void LexicalAnalysis::operator()(expr::Syntax *syn) {
     if (auto id = findVariable(syn->stringify())) {
         syn->var_ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
+    inside_syntax = true;
     std::visit(*this, syn->expr->variant());
+    inside_syntax = false;
 }
 
 
@@ -1092,7 +1106,7 @@ void LexicalAnalysis::operator()(expr::Type *type) {
     if (auto id = findVariable(type->stringify())) {
         type->var_ID = *id;
         type->type->ID = *id;
-        return;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
     visitType(type->type);
@@ -1254,6 +1268,8 @@ void LexicalAnalysis::addNamespaces(
 
 
 [[nodiscard]] std::optional<size_t> LexicalAnalysis::findVariable(const std::string& name) const {
+    if (inside_syntax) return std::to_underlying(ReservedIDs::DYNAMIC);
+
     if (name.empty()) return {}; // no reason to search
 
     if (not current_space.empty()) {

@@ -35,8 +35,14 @@ struct Env {
 
 class LexicalAnalysis {
 public:
+
     // this is an arbitrary number. Coulda been anything
-    inline constexpr size_t static UNNAMED_ID = 110110110;
+    enum class ReservedIDs {
+        UNNAMED = 110110110,
+        DYNAMIC,
+    };
+    // may have to manually maintin this for now..oopsie :))
+    inline static constexpr auto RESERVED_IDS_SIZE = 2;
 
 
 private:
@@ -49,6 +55,7 @@ private:
     size_t variable_index;
     size_t constant_index;
 
+    bool inside_syntax{};
 
     // scopes
     std::vector<std::pair<Env, EnvTag>> env;
