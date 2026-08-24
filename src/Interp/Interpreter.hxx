@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <variant>
 #include <vector>
 #include <unordered_map>
@@ -549,82 +550,106 @@ public:
 
 
 
-        const auto& op = findOp(fold->op);
 
         // // can't have any syntax type since the pack consists of values, not expressions..
         // // unless...!
         // // TODO: allow for folding over syntax...maybe
+
         // checkNoSyntaxType(op->funcs);
 
-        expr::Closure* func;
-
+        type::TypePtr ret_type;
         const size_t  first_idx = 1 - l2r;
         const size_t second_idx =     l2r;
 
-        // no overload resolution required
-        if (op->funcs.size() == 1) {
-            func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
-            func->type.ret                = validateType(std::move(func)->type.ret               );
+        const auto& op1 = findOp(fold->op1);
+        const auto& op2 = findOp(fold->op2);
+        for (size_t i{}; const auto& value : values) {
+            expr::Closure *func = 
+                (i++) % 2 == 1 ? // start with the second operator
+                    resolveOverloadSet(op1->OpName(), op1->funcs, {ret, value}) :
+                    resolveOverloadSet(op2->OpName(), op2->funcs, {ret, value}) ;
+
+            // I think these lines are needed. Have to check 
+            func->type.ret                = validateType(std::move(func)->type.ret             );
             func->type.params[ first_idx] = validateType(std::move(func)->type.params[ first_idx]);
             func->type.params[second_idx] = validateType(std::move(func)->type.params[second_idx]);
 
+            // this will pick the the last func called's type
+            ret_type = func->type.ret;
+
+            value::Environment args_env;
+            args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
+            args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
 
 
-            for (const auto& value : values) {
+            ScopeGuard sg{this, args_env};
 
-                typeCheck(ret, func->type.params[first_idx],
-                    "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
-                    "', parameter '" + func->params[0].name +
-                    "' expected: " + func->type.params[0]->text() +
-                    ", got: " + stringify(ret) + " which is " + typeOf(ret)->text()
-                );
-
-                typeCheck(ret, func->type.params[second_idx],
-                    "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
-                    "', parameter '" + func->params[1].name +
-                    "' expected: " + func->type.params[1]->text() +
-                    ", got: " + stringify(ret) + " which is " + typeOf(ret)->text()
-                );
-
-
-                value::Environment args_env;
-                args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
-                args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
-
-
-                ScopeGuard sg{this, args_env};
-
-                ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
-            }
+            ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
         }
-        else { // fuck me
-            // checkNoSyntaxType(op->funcs);
 
-            for (const auto& value : values) {
-
-                // auto type1 = validateType(typeOf(ret  ));
-                // auto type2 = validateType(typeOf(value));
-
-                func = resolveOverloadSet(op->OpName(), op->funcs, {ret, value});
-                // I think these lines are needed. Have to check 
-                func->type.ret                = validateType(std::move(func)->type.ret             );
-                func->type.params[ first_idx] = validateType(std::move(func)->type.params[ first_idx]);
-                func->type.params[second_idx] = validateType(std::move(func)->type.params[second_idx]);
+        // // no overload resolution required
+        // if (op->funcs.size() == 1) {
+        //     func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
+        //     func->type.ret                = validateType(std::move(func)->type.ret               );
+        //     func->type.params[ first_idx] = validateType(std::move(func)->type.params[ first_idx]);
+        //     func->type.params[second_idx] = validateType(std::move(func)->type.params[second_idx]);
 
 
-                value::Environment args_env;
-                args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
-                args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
+
+        //     for (const auto& value : values) {
+
+        //         typeCheck(ret, func->type.params[first_idx],
+        //             "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
+        //             "', parameter '" + func->params[0].name +
+        //             "' expected: " + func->type.params[0]->text() +
+        //             ", got: " + stringify(ret) + " which is " + typeOf(ret)->text()
+        //         );
+
+        //         typeCheck(ret, func->type.params[second_idx],
+        //             "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
+        //             "', parameter '" + func->params[1].name +
+        //             "' expected: " + func->type.params[1]->text() +
+        //             ", got: " + stringify(ret) + " which is " + typeOf(ret)->text()
+        //         );
 
 
-                ScopeGuard sg{this, args_env};
+        //         value::Environment args_env;
+        //         args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
+        //         args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
 
-                ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
-            }
-        }
+
+        //         ScopeGuard sg{this, args_env};
+
+        //         ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
+        //     }
+        // }
+        // else { // fuck me
+        //     // checkNoSyntaxType(op->funcs);
+
+        //     for (const auto& value : values) {
+
+        //         func = resolveOverloadSet(op->OpName(), op->funcs, {ret, value});
+        //         // I think these lines are needed. Have to check 
+        //         func->type.ret                = validateType(std::move(func)->type.ret             );
+        //         func->type.params[ first_idx] = validateType(std::move(func)->type.params[ first_idx]);
+        //         func->type.params[second_idx] = validateType(std::move(func)->type.params[second_idx]);
+
+
+        //         value::Environment args_env;
+        //         args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
+        //         args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
+
+
+        //         ScopeGuard sg{this, args_env};
+
+        //         ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
+        //     }
+        // }
 
         // return {ret, typeOf(ret)};
-        return {ret, func->type.ret};
+        // return {ret, func->type.ret};
+
+        return {ret, ret_type};
     }
 
 
@@ -1324,9 +1349,10 @@ public:
     }
 
 
-    ValueType operator()(const expr::Class *cls) {
-        if (const auto& var = getVar(cls->var_ID, liftName(cls)); var) return *var;
-
+    ValueType createClass(
+        std::vector<std::tuple<expr::Name, type::TypePtr, expr::ExprPtr>> fields,
+        value::Env names = {}
+    ) {
 
         value::Env captured;
         for (const auto& e : env) {
@@ -1335,12 +1361,17 @@ public:
             for (const auto& [key, value] : e->prefix_op_env) captured.prefix_op_env[key] = value;
         }
 
-        return // getting lispy :sob: fuck this memory ass shit
-            {
+
+        for (auto& [key, value] : names.env) captured.env[std::move(key)] = std::move(value);
+        for (auto& [key, value] : names.op_env) captured.op_env[std::move(key)] = std::move(value);
+        for (auto& [key, value] : names.prefix_op_env) captured.prefix_op_env[std::move(key)] = std::move(value);
+
+        return {
+                // getting lispy :sob: fuck this memory ass shit
                 std::make_shared<type::LiteralType>(
                     std::make_shared<value::ClassValue>(
                         std::make_shared<value::Fields>(
-                            cls->fields
+                            std::move(fields)
                         ),
                         std::move(captured),
                         current_space
@@ -1348,6 +1379,12 @@ public:
                 ),
                 type::builtins::Type()
             };
+    }
+
+    ValueType operator()(expr::Class *cls) {
+        if (const auto& var = getVar(cls->var_ID, liftName(cls)); var) return *var;
+
+        return createClass(std::move(cls)->fields);
 
 
         // std::vector<std::tuple<expr::Name, type::TypePtr, value::ValuePtr>> members;
@@ -1415,8 +1452,6 @@ public:
         if (std::holds_alternative<expr::Closure>(value)) {
             auto& closure = get<expr::Closure>(value);
             closure.captureThis(obj);
-
-            return {closure, type};
         }
 
         return {value, type};
@@ -1434,7 +1469,16 @@ public:
 
         const auto& type = get<type::TypePtr>(*found);
 
+        ScopeGuard sg{this, cls.cls->env.env};
+        sg.addPrefixOps(cls.cls->env.prefix_op_env);
+        sg.addOps(cls.cls->env.op_env);
         auto value = typeCheck(std::visit(*this, get<expr::ExprPtr>(*found)->variant()).value, type);
+
+
+        if (std::holds_alternative<expr::Closure>(value)) {
+            auto& closure = get<expr::Closure>(value);
+            closure.capture(cls.cls->env.env);
+        }
 
         return {value, type};
     }
@@ -2571,6 +2615,9 @@ There are no mistakes with art.)";
         // const std::vector< type::TypePtr >& types,
         const std::vector<value::Value>& values
     ) {
+
+        if (funcs.size() == 1) return dynamic_cast<expr::Closure*>(funcs[0].get());
+
         std::vector<expr::Closure*> set;
 
         std::vector<type::TypePtr> types;
@@ -3955,6 +4002,9 @@ There are no mistakes with art.)";
         // I woulda used a range for-loop but I need `arg` to be a reference and `value` cannot be a regular ref
         // const auto& [arg, value] : std::views::zip(call->args, obj->members)
         ScopeGuard sg{this, cls->env.env};
+        sg.addOps(cls->env.op_env);
+        sg.addPrefixOps(cls->env.prefix_op_env);
+
         size_t field_idx{};
         for (const auto& arg : call->args) {
 
@@ -4179,6 +4229,7 @@ There are no mistakes with art.)";
         for(const auto& builtin : {
             //* variadic
             "print", "concat", "defer",
+            "create_class",
 
             // debugging
             "print_env",
@@ -4254,6 +4305,29 @@ There are no mistakes with art.)";
     }
 
 
+
+    std::vector<value::Value> expandArgs(
+        std::vector<expr::ExprPtr> args,
+        std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at
+    ) {
+        std::vector<value::Value> values;
+
+        for(size_t i{}, curr{}; auto& arg : args) {
+            if (curr < expand_at.size() and i++ == expand_at[curr].first) {
+                for (auto& v : expand_at[curr++].second) {
+                    values.push_back(std::move(v));
+                }
+            }
+            else
+                values.push_back(std::visit(*this, arg->variant()).value);
+        }
+
+        return values;
+    }
+
+
+
+
     // the gate into the META operators!
     value::Value evaluateBuiltin(
         const expr::Call *call,
@@ -4262,14 +4336,149 @@ There are no mistakes with art.)";
         std::unordered_map<std::string, expr::ExprPtr> named_args,
         value::BuiltinFunction func
     ) {
-        auto name = std::move(func).func_name.substr(10); // cutout the "__builtin_"
+        using std::operator""sv;
 
+
+        auto name = std::move(func).func_name.substr(10); // cutout the "__builtin_"
         const auto arity_check = [&name, &args] (const size_t arity) {
             if (args.size() != arity) util::error("Wrong arity with call to \"__builtin_" + name + "\"");
         };
 
 
-        using std::operator""sv;
+
+        if (name == "panic") {
+            // for (const auto& arg : args) {
+            //     std::print(std::cerr, "{} ", stringify(std::visit(*this, arg->variant()).value));
+            // }
+            std::println(
+                std::cerr,
+                "{}",
+                std::accumulate(
+                    args.cbegin(),
+                    args.cend(),
+                    std::string{},
+                    [this] (const auto& acc, const auto& elt) {
+                        return acc + " " + value::stringify(std::visit(*this, elt->variant()).value);
+                    }
+                )
+            );
+            util::error<std::runtime_error, false>("");
+        }
+
+        if (name == "id") {
+            arity_check(1);
+            return args[0]->var_ID;
+        }
+
+        if (name == "print_env") {
+            for (const auto& e : env)
+                printEnv(e->env);
+            return 0;
+        }
+
+
+        if (name == "defer") {
+            return defer(call, std::move(args));
+        }
+
+
+        if (name == "create_class") {
+            auto arguments = expandArgs(std::move(args), std::move(expand_at));
+
+            std::vector<std::tuple<expr::Name, type::TypePtr, expr::ExprPtr>> fields;
+            value::Env vars;
+
+            for (ssize_t i{-10}; auto& arg : arguments) {
+                if (not std::holds_alternative<value::List>(arg))
+                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its arguments as lists. Got: " + value::stringify(arg));
+
+                auto& list = get<value::List>(arg);
+                if (list.elts->values.size() > 3)
+                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its list to have at most size 3: " + value::stringify(arg));
+
+                if (list.elts->values.size() < 2)
+                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its list to have at least 2 elements {name, value}: " + value::stringify(arg));
+
+                value::Value name = list.elts->values.front();
+                type::TypePtr type;
+                if (list.elts->values.size() == 3) {
+                    if (not std::holds_alternative<type::TypePtr>(list.elts->values[1]))
+                        util::error<except::InvalidArgument>(
+                            "Second member `__builtin_create_class` list argument must be a type. Got: "
+                            + value::stringify(list.elts->values[1])
+                            + " which is: " + typeOf(list.elts->values[1])->text()
+                        );
+
+                    type = get<type::TypePtr>(list.elts->values[1]);
+                }
+                else type = type::builtins::Any();
+
+                value::Value value = list.elts->values.back();
+
+                if (not std::holds_alternative<std::string>(name))
+                    util::error<except::InvalidArgument>(
+                        "First member `__builtin_create_class` list argument must be a string. Got: "
+                        + value::stringify(name)
+                        + " which is: " + typeOf(name)->text()
+                    );
+
+                std::string mangled_name = "__" + get<std::string>(name) + "__";
+                vars.env.insert({
+                    --i,
+                    {
+                        value::SpaceRef{mangled_name},
+                        std::make_shared<value::Value>(value),
+                        type
+                    }}
+                );
+
+
+                auto expr = std::make_shared<expr::Name>(std::move(mangled_name));
+                expr->var_ID = std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::DYNAMIC);
+                fields.emplace_back(
+                    expr::Name{get<std::string>(std::move(name))},
+                    std::move(type),
+                    std::move(expr)
+                );
+            }
+
+
+            return createClass(std::move(fields), std::move(vars)).value;
+        }
+
+
+
+        // for now, can only implement variadic functions inlined in this function
+        // seems like functions with default named parameters can only be implmented this way for now
+        // need a way to sepcify:
+        /* // TODO
+            {
+                name: "print",
+                arg_count: VARIADIC,
+                code: [] () {},
+                default named: {
+                    {"end", "\n"},
+                    {"sep", " "},
+                }
+            }
+        */
+        // would be nice if the system above could be done for member functions on premitive types (Int, Double, String, etc...)
+        if (name == "print") {
+            return builtinPrint(std::move(args), std::move(expand_at), std::move(named_args));
+        }
+
+        if (name == "concat") {
+            return builtinConcat(std::move(args));
+        }
+
+        #if not WEB_PIE
+        if (name == "ffi_call") {
+            return ffiCall(call, std::move(args), std::move(expand_at));
+        }
+        #endif
+
+
+
 
         const auto nullary_funcs = {
             "input_str"sv       ,
@@ -4318,105 +4527,6 @@ There are no mistakes with art.)";
             if (name == "ffi_type_complex"    ) return execute<0>(stdx::get<S<"ffi_type_complex">>(functions).value, {}, this);
             #endif
         }
-
-        if (name == "panic") {
-            for (const auto& arg : args) {
-                std::print(std::cerr, "{} ", stringify(std::visit(*this, arg->variant()).value));
-            }
-            // std::println(
-            //     std::cerr,
-            //     "{}",
-            //     std::accumulate(
-            //         args.cbegin(),
-            //         args.cend(),
-            //         std::string{},
-            //         [this] (const auto& acc, const auto& elt) {
-            //             return acc + " " + value::stringify(std::visit(*this, elt->variant()));
-            //         }
-            //     )
-            // );
-
-            util::error<std::runtime_error, false>("", {});
-        }
-
-        if (name == "id") {
-            arity_check(1);
-            return args[0]->var_ID;
-        }
-
-        if (name == "print_env") {
-            // printEnv(env);
-            util::error();
-            return 0;
-        }
-
-
-
-        if (name == "defer") {
-            if (args.empty()   ) util::error("`__builtin_defer` requires at least 1 argument: " + call->stringify());
-            if (args.size() > 2) util::error("`__builtin_defer` accepts at most 2 argument: " + call->stringify());
-
-            // 
-            BigInt depth{};
-
-            if (args.size() == 2) {
-                auto depth_value = std::visit(*this, args[1]->variant()).value;
-                if (not std::holds_alternative<BigInt>(depth_value))
-                    util::error(
-                        "At call: " + call->stringify() + 
-                        ", `__builtin_defer` expected an integer for optional argument `depth`. "
-                        "Got: " + value::stringify(depth_value) +
-                        "\nwhich is: " + typeOf(depth_value)->text()
-                    );
-
-                depth = get<BigInt>(depth_value);
-
-                if (depth < 0)
-                    util::error("`__builtin_defer` called with a negative depth level: " + call->stringify());
-
-                // depth won't underflow since it's guarunteed not to be negative (checked above)
-                if (size_t(depth) >= deferred.size())
-                    util::error("`__builtin_defer` called with a depth greater than the current depth: " + call->stringify());
-            }
-
-
-
-            deferred[deferred.size() - 1 - depth].emplace_back(args[0], env.back());
-
-            return args.front()->variant();
-        }
-
-
-
-        // for now, can only implement variadic functions inlined in this function
-        // seems like functions with default named parameters can only be implmented this way for now
-        // need a way to sepcify:
-        /* // TODO
-            {
-                name: "print",
-                arg_count: VARIADIC,
-                code: [] () {},
-                default named: {
-                    {"end", "\n"},
-                    {"sep", " "},
-                }
-            }
-        */
-        // would be nice if the system above could be done for member functions on premitive types (Int, Double, String, etc...)
-        if (name == "print") {
-            return builtinPrint(std::move(args), std::move(expand_at), std::move(named_args));
-        }
-
-        if (name == "concat") {
-            return builtinConcat(std::move(args));
-        }
-
-        #if not WEB_PIE
-        if (name == "ffi_call") {
-            return ffiCall(call, std::move(args), std::move(expand_at));
-        }
-        #endif
-
 
 
         if (name == "decltype") {
@@ -4727,6 +4837,42 @@ There are no mistakes with art.)";
 
         return s;
     }
+
+
+    value::Value defer(const expr::Call *call, std::vector<expr::ExprPtr> args) {
+        if (args.empty()   ) util::error("`__builtin_defer` requires at least 1 argument: " + call->stringify());
+        if (args.size() > 2) util::error("`__builtin_defer` accepts at most 2 argument: " + call->stringify());
+
+        // 
+        BigInt depth{};
+
+        if (args.size() == 2) {
+            auto depth_value = std::visit(*this, args[1]->variant()).value;
+            if (not std::holds_alternative<BigInt>(depth_value))
+                util::error(
+                    "At call: " + call->stringify() + 
+                    ", `__builtin_defer` expected an integer for optional argument `depth`. "
+                    "Got: " + value::stringify(depth_value) +
+                    "\nwhich is: " + typeOf(depth_value)->text()
+                );
+
+            depth = get<BigInt>(depth_value);
+
+            if (depth < 0)
+                util::error("`__builtin_defer` called with a negative depth level: " + call->stringify());
+
+            // depth won't underflow since it's guarunteed not to be negative (checked above)
+            if (size_t(depth) >= deferred.size())
+                util::error("`__builtin_defer` called with a depth greater than the current depth: " + call->stringify());
+        }
+
+
+
+        deferred[deferred.size() - 1 - depth].emplace_back(args[0], env.back());
+
+        return args.front()->variant();
+    }
+
 
 
     #if not WEB_PIE

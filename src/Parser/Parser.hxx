@@ -1067,12 +1067,14 @@ public:
             // left unary fold (unseparated) | case 3
             if (match(R_PAREN))  return std::make_shared<expr::UnaryFold>(std::move(pack), std::move(op), l2r);
 
-            consume(op);
+
+            std::string op2 = consume(NAME).text;
 
             auto rhs = parseExpr(prec::HIGH_VALUE);
 
             // separated unary  | cases 4 and 5
-            if (match(R_PAREN)) return std::make_shared<expr::SeparatedUnaryFold>(std::move(pack), std::move(rhs), std::move(op));
+            if (match(R_PAREN))
+                return std::make_shared<expr::SeparatedUnaryFold>(std::move(pack), std::move(rhs), std::move(op), std::move(op2));
 
             consume(op);
 

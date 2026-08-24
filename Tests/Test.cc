@@ -18,6 +18,28 @@
 
 
 
+
+
+TEST_CASE("Dual Seperated Fold Expressions", "[Fold]") {
+
+{
+    const auto src = R"(
+
+infix + = (a, b) => __builtin_add(a, b);
+infix - = (a, b) => __builtin_sub(a, b);
+
+func = (args: ...) => (args + ... - 1);
+__builtin_print(func(1, 2, 3, 4));
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(7)");
+}
+
+}
+
+
+
 TEST_CASE("Dynamic Lookup in Syntax Expressions", "[Syntax]") {
 
 {

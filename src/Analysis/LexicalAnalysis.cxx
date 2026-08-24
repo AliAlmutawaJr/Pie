@@ -58,7 +58,10 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
 
         "__builtin_print",
         "__builtin_concat", 
+        "__builtin_create_class", 
+
         "__builtin_defer", 
+
         "__builtin_print_env",
         "__builtin_panic",
         "__builtin_id",

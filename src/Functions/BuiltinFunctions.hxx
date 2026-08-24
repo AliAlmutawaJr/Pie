@@ -398,6 +398,16 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
                     return a.items->map.at(ind);
                 }
+                else if constexpr (std::is_same_v<T, value::Object>) {
+                    auto iter = std::ranges::find_if(
+                        a.second->members,
+                        [&ind] (const auto& member) { return get<expr::Name>(member).name == ind; }
+                    );
+                    if (iter == a.second->members.cend())
+                        util::error("Accessing Object `" + stringify(a) + "` with member name `" + ind + "` which doesn't exist!");
+
+                    return *get<value::ValuePtr>(*iter);
+                }
                 else if constexpr (std::is_same_v<T, value::Pack>) {
                     if (ind < 0 or size_t(ind) >= a->values.size())
                         util::error("Accessing list '" + stringify(a) + "' at index '" + std::to_string(ind) + "' which is out of bounds!");
@@ -412,6 +422,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             }),
             TypeList<value::List, BigInt>,
             TypeList<value::Map, Any>,
+            TypeList<value::Object, std::string>,
             TypeList<value::Pack, BigInt>,
             TypeList<std::string, BigInt>
         >
@@ -432,7 +443,6 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
                     return cont.elts->values[at] = that->typeCheck(elt, list_type.type);
                 }
-
                 else if constexpr (std::is_same_v<T, value::Map>) {
                     const auto type = that->typeOf(cont);
                     const auto& map_type = dynamic_cast<const type::MapType&>(*type);
@@ -440,9 +450,21 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     auto key = that->typeCheck(at, map_type.key_type);
                     return cont.items->map[key] = that->typeCheck(elt, map_type.val_type);
                 }
+                else if constexpr (std::is_same_v<T, value::Object>) {
+                    auto iter = std::ranges::find_if(
+                        cont.second->members,
+                        [&at] (const auto& member) { return get<expr::Name>(member).name == at; }
+                    );
+                    if (iter == cont.second->members.cend())
+                        util::error("Accessing Object `" + stringify(cont) + "` with member name `" + at + "` which doesn't exist!");
+
+
+                    return *get<value::ValuePtr>(*iter) = that->typeCheck(elt, get<type::TypePtr>(*iter));
+                }
             }),
             TypeList<value::List, BigInt, Any>,
-            TypeList<value::Map, Any, Any>
+            TypeList<value::Map, Any, Any>,
+            TypeList<value::Object, std::string, Any>
             // TypeList<std::string, BigInt>
         >
     >{},

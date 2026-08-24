@@ -78,7 +78,7 @@ struct std::hash<value::Value> { size_t operator()(const value::Value& value) co
 inline namespace pie {
 namespace value {
 
-struct Fields   { std::vector<std::tuple<expr::Name, type::TypePtr, expr::ExprPtr  >> fields;  };
+struct Fields   { std::vector<std::tuple<expr::Name, type::TypePtr, expr::ExprPtr>> fields;  };
 struct Members  { std::vector<std::tuple<expr::Name, type::TypePtr, ValuePtr>> members; };
 struct Elements { std::vector<Value> values;                                                   };
 struct Items    { std::unordered_map<Value, Value> map;                                        };

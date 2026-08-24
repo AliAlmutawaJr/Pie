@@ -94,6 +94,7 @@ space std {
     };
 
 
+
     prefix(!) 0b = (bits) => {
         total = 0;
         loop {i, char} : Enumerate(~ (bits as String))

@@ -1,6 +1,6 @@
 # Welcome to Pie Lang!
 
-![Pie Lang Logo](assets/images/PieLang_Big_Transparent.png)
+![Pie Lang Logo](assets/images/PieLang_Big_Transparent.png){width=500px}
 
 [![C++ CI](https://github.com/AliAlmutawaJr/Pie/actions/workflows/cpp.yml/badge.svg)](https://github.com/AliAlmutawaJr/Pie/actions/workflows/cpp.yml)
 
@@ -698,6 +698,8 @@ Pie reserves the names starting with `__builtin_`.
 #### Control Flow
 - `__builtin_conditional(cond, then, else)`
 
+#### Meta Programming (experimental):
+- `__builtin_create_class({name1, type1?, value1})`
 
 ## Types
 
@@ -905,11 +907,11 @@ make
 
 #### in order of priority
 
+- [ ] Breaking Out of Nested Loops
 - [ ] Add default values to function parameters
 - [ ] Simplify Pack Expansion (internal)
 - [ ] Simplify Closure Captures without performance penalty (internal)
 - [ ] Clean up builtin functions code (internal)
-- [ ] Breaking Out of Nested Loops
 - [ ] Use Big Int instead of `int64_t`
 - [ ] `Expr::involveName()` seems to be not exhastive, espacially with Closure. Check it.
 - [ ] World domination
@@ -917,8 +919,8 @@ make
 - [ ] Fix builtin reset (value-reset, reset/name-reset) 
 - [ ] Move from Make to Bake
 - [ ] Improve error messages (add line and column numbers)
-- [ ] Remove dependency on stdx and boost
 - [ ] Add LLVM backend
+
 
 ---
 
@@ -983,6 +985,7 @@ make
 
 ### Discarded
 
+- ~~Remove dependency on stdx and boost~~
 - ~~Defer Expr~~
 - ~~Capture Environment on Closure Creation~~
 - ~~Allow variadics of Syntax type~~
@@ -1008,10 +1011,11 @@ make
 ## Quotes About Pie Lang:
 - "The whole language is a bug"
 - "can't have your ~~cake~~ Pie and eat it too!"
-- "the syntax is similar to Rust"
 - "is this like forth?"
 - "kinda like smalltalk"
 - "Elixer does this better"
+- "Lisp can do this better"
+- "is this C++?"
+- "the syntax is similar to Rust"
 - "ugly js"
 - "better js"
-- "is this C++"

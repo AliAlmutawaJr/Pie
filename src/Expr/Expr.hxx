@@ -250,14 +250,15 @@ struct UnaryFold : Expr {
 struct SeparatedUnaryFold : Expr {
     ExprPtr lhs;
     ExprPtr rhs;
-    std::string op;
+    std::string op1;
+    std::string op2;
 
-    SeparatedUnaryFold(ExprPtr l, ExprPtr r, std::string o) noexcept
-    : lhs{std::move(l)}, rhs{std::move(r)}, op{std::move(o)}
+    SeparatedUnaryFold(ExprPtr l, ExprPtr r, std::string o1, std::string o2) noexcept
+    : lhs{std::move(l)}, rhs{std::move(r)}, op1{std::move(o1)}, op2{std::move(o2)}
     {}
 
     std::string stringify(const size_t indent = 0) const override {
-        return '(' + lhs->stringify(indent) + ' ' + op + " ... " + op + ' ' + rhs->stringify(indent) + ')';
+        return '(' + lhs->stringify(indent) + ' ' + op1 + " ... " + op2 + ' ' + rhs->stringify(indent) + ')';
     }
 
     bool involvesName(const std::string_view sv) const override {
