@@ -33,7 +33,7 @@ namespace prec {
   inline constexpr auto               AS_VALUE =             PROD_VALUE << 1;
   inline constexpr auto           PREFIX_VALUE =               AS_VALUE << 1;
   inline constexpr auto           SUFFIX_VALUE =           PREFIX_VALUE << 1;
-  inline constexpr auto             CALL_VALUE =           SUFFIX_VALUE << 1;
+  inline constexpr auto             CALL_VALUE =           SUFFIX_VALUE	   ; // same as a suffix operator
   inline constexpr auto    MEMBER_ACCESS_VALUE =             CALL_VALUE     ; // same as a call operator
   inline constexpr auto SCOPE_RESOLUTION_VALUE =    MEMBER_ACCESS_VALUE << 1;
   inline constexpr auto             HIGH_VALUE = SCOPE_RESOLUTION_VALUE << 1;
@@ -57,6 +57,7 @@ namespace prec {
   inline constexpr auto PREFIX             = "!"      ;
   inline constexpr auto SUFFIX             = "[]"     ;
   inline constexpr auto CALL               = "()"     ;
+  inline constexpr auto MEMBER_ACCESS      = "."     ;
   inline constexpr auto SCOPE_RESOLUTION   = "::"     ;
   inline constexpr auto HIGH               = "HIGH"   ;
 
@@ -117,6 +118,9 @@ namespace prec {
 
 		if (p == "()")
 			return CALL_VALUE;
+
+        if (p == ".")
+            return MEMBER_ACCESS_VALUE;
 
 		if (p == "::")
 			return SCOPE_RESOLUTION_VALUE;

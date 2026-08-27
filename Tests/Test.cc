@@ -20,6 +20,70 @@
 
 
 
+TEST_CASE("Subtyping through Union", "[Type][Union]") {
+
+{
+    const auto src = R"(
+
+Human = class {
+    name = "";
+    age  =  0;
+};
+
+Named = class { name = ""; };
+
+U = union { Named; Int; };
+
+h = Human("meow");
+
+x: U = h;
+__builtin_print(x);
+
+x.name = "catsu";
+
+__builtin_print(h.name);
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(Object {
+    name = "meow";
+}
+catsu)");
+}
+
+// nested union case
+{
+    const auto src = R"(
+
+Human = class {
+    name = "";
+    age  =  0;
+};
+
+Named = class { name = ""; };
+
+U = union { Int; union { Named; }; };
+
+h = Human("meow");
+
+x: U = h;
+__builtin_print(x);
+
+x.name = "catsu";
+
+__builtin_print(h.name);
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(Object {
+    name = "meow";
+}
+catsu)");
+}
+
+}
+
+
 TEST_CASE("Dual Seperated Fold Expressions", "[Fold]") {
 
 {

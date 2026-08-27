@@ -409,7 +409,6 @@ public:
         if (match(L_BRACE)) { // list or map type
             constexpr auto NO_VARIADICS = false;
 
-
             auto type1 = parseType<NO_VARIADICS>();
             if (match(R_BRACE)) return std::make_shared<type::ListType>(std::move(type1));
 
@@ -709,14 +708,19 @@ public:
 
         std::vector<type::TypePtr> types;
 
-        // empty union
-        if (match(R_BRACE)) [[unlikely]] return std::make_shared<expr::Union>(std::move(types));
-
-        types.push_back(parseType());
-        consume(SEMI);
-
         while (not match(R_BRACE)) {
             types.push_back(parseType());
+
+            if (match(ELLIPSIS)) {
+                types.back() = std::make_shared<type::ExprType>(
+                    std::make_shared<expr::Expansion>(
+                        std::make_shared<expr::Type>(
+                            std::move(types.back())
+                        )
+                    )
+                );
+            }
+
             consume(SEMI);
         }
 
@@ -1332,8 +1336,10 @@ public:
                 else if (match(ELLIPSIS)) {
                     arg = std::make_shared<expr::Expansion>(std::move(arg));
 
-                    while(match(ELLIPSIS)) // allows back to back expansions (args... ...);
-                        arg = std::make_shared<expr::Expansion>(std::move(arg));
+                    if (match(ELLIPSIS))
+                        util::error<except::SyntaxError>("Cannot expand arguments more than once..for now :)");
+                    // while(match(ELLIPSIS)) // allows back to back expansions (args... ...);
+                    //     arg = std::make_shared<expr::Expansion>(std::move(arg));
 
 
                     args.emplace_back(std::move(arg));

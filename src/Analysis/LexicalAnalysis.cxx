@@ -307,14 +307,15 @@ void LexicalAnalysis::operator()(expr::Assignment *ass) {
     if (is_closure or is_class or is_union) {
         // if there is a type explicitly stated, then a new variable should be create no matter what
         if (not type::shouldReassign(ass->type)) {
-            ass->lhs->var_ID = next();
+            ass->lhs->var_ID = inside_syntax ? std::to_underlying(ReservedIDs::DYNAMIC) : next();
             addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
         else if (const auto id = findVariable(ass->lhs->stringify()); id) {
             ass->lhs->var_ID = *id;
         }
         else {
-            ass->lhs->var_ID = next();
+            // ass->lhs->var_ID = next();
+            ass->lhs->var_ID = inside_syntax ? std::to_underlying(ReservedIDs::DYNAMIC) : next();
             addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
     }
@@ -329,13 +330,19 @@ void LexicalAnalysis::operator()(expr::Assignment *ass) {
     if (not is_closure and not is_class and not is_union) {
         // if there is a type explicitly stated, then a new variable should be create no matter what
         if (not type::shouldReassign(ass->type)) {
+            // ass->lhs->var_ID = inside_syntax ? std::to_underlying(ReservedIDs::DYNAMIC) : next();
             ass->lhs->var_ID = next();
             addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
         else if (const auto id = findVariable(ass->lhs->stringify()); id) {
-            ass->lhs->var_ID = *id;
+            if (inside_syntax) {
+                ass->lhs->var_ID = *id;
+                addVar(ass->lhs->stringify(), *id);
+            }
+            else ass->lhs->var_ID = *id;
         }
         else { // I could probably shorten this to only use an "if-else" and not "if-elif-else"
+            // ass->lhs->var_ID = inside_syntax ? std::to_underlying(ReservedIDs::DYNAMIC) : next();
             ass->lhs->var_ID = next();
             addVar(ass->lhs->stringify(), ass->lhs->var_ID);
         }
@@ -1068,6 +1075,7 @@ void LexicalAnalysis::visitType(const type::TypePtr& type) {
             for (auto& type : unio->types) {
                 if (const auto id = findVariable(type->text()); id) type->ID = *id;
                 else visitType(type);
+                // else std::visit(*this, type->variant());
             }
         }
 
@@ -1098,6 +1106,7 @@ void LexicalAnalysis::operator()(expr::Syntax *syn) {
         if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
+    ScopeGuard sg{this};
     inside_syntax = true;
     std::visit(*this, syn->expr->variant());
     inside_syntax = false;
@@ -1207,6 +1216,7 @@ NameSpace* LexicalAnalysis::findSpace(const std::vector<std::string>& names, con
 
 void LexicalAnalysis::addVar(std::string name, const size_t index) {
     env.back().first.vars[std::move(name)] = index;
+
     // if (space_dir.empty()) 
     // else {
     //     const auto space = getNamespaceAt(space_dir, global_spaces);

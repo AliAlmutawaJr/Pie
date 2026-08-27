@@ -156,6 +156,15 @@ namespace type {
 
         explicit UnionType(std::vector<TypePtr> ts) noexcept : types{std::move(ts)} {}
 
+
+        std::optional<TypePtr> whichType(interp::Visitor *v, const value::Value& value, const TypePtr& type) const {
+            for (const auto& t : types) {
+                if (t->typeCheck(v, value, type)) return t;
+            }
+
+            return {};
+        }
+
         std::string text(const size_t indent = 0) const override;
         bool involvesT(const Type& T) const override;
         bool typeCheck(interp::Visitor*, const value::Value&, const TypePtr&) const override;

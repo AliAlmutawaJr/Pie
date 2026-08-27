@@ -8,6 +8,7 @@ space std {
 
     eval  = __builtin_eval ;
     reset = __builtin_reset;
+    defer = __builtin_defer;
 
     type     = __builtin_type    ;
     decltype = __builtin_decltype;
