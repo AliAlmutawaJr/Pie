@@ -393,6 +393,13 @@ public:
             return obj;
         }
 
+        if (const auto uni = type::isUnion(type)) {
+            if (auto nested_type = uni->whichType(this, value, value_type)) {
+                // recursivly find the deepest type in the union
+                return typeCheck(value, *nested_type);
+            }
+        }
+
         return value;
     }
 
@@ -1428,14 +1435,75 @@ public:
     }
 
 
+    // ValueType operator()(const expr::Union *onion) {
+    //     if (const auto& var = getVar(onion->var_ID, liftName(onion)); var) return *var;
+
+
+    //     std::vector<type::TypePtr> types;
+    //     for (auto& type_expr : onion->types) {
+    //         if (auto exp = dynamic_cast<expr::Expansion*>(type_expr.get())) {
+    //             auto pack = std::visit(*this, exp->pack->variant()).value;
+
+    //             if (not std::holds_alternative<value::Pack>(pack))
+    //                 util::error(
+    //                     "Expansion applied on a non-pack: " + exp->stringify() +
+    //                     "The supposed pack evaluated to: " + stringify(pack)
+    //                 );
+
+
+    //             for (auto& value : get<value::Pack>(pack)->values) {
+    //                 if (not std::holds_alternative<type::TypePtr>(value))
+    //                     util::error(
+    //                         "Union: " + onion->stringify() +
+    //                         "\ncontains an expansion: " + exp->stringify() +
+    //                         "\nwhich has a non-type: " + stringify(value)
+    //                     );
+
+    //                 types.push_back(std::move(get<type::TypePtr>(value)));
+    //             }
+    //         }
+    //         else {
+    //             auto type_value = std::visit(*this, type_expr->variant()).value;
+    //             if (not std::holds_alternative<type::TypePtr>(type_value))
+    //                 util::error(
+    //                     "Union: " + onion->stringify() +
+    //                     "\ncontains a non-type value: " + type_expr->stringify() +
+    //                     "\nwhich evaluated to: " + stringify(type_value)
+    //                 );
+
+    //             types.push_back(get<type::TypePtr>(type_value));
+    //         }
+
+    //         validateType(nullptr);
+    //     }
+
+    //     return {std::make_shared<type::UnionType>(std::move(types)), type::builtins::Type()};
+    // }
+
+
     ValueType operator()(const expr::Union *onion) {
         if (const auto& var = getVar(onion->var_ID, liftName(onion)); var) return *var;
 
 
         std::vector<type::TypePtr> types;
         for (auto& type : onion->types) {
-            types.push_back(validateType(std::move(type)));
+            if (auto expr_type = type::isExpr(type)) {
+                if (auto expansion = expr::is<expr::Expansion>(expr_type->t.get())) {
+                    auto pack = std::visit(*this, expansion->pack->variant()).value;
+                    if (not std::holds_alternative<value::Pack>(pack))
+                        util::error(
+                            "Expansion applied on a non-pack variable `" + expansion->pack->stringify() +
+                            "\nWhich evaluated to: " + stringify(pack)
+                        );
+
+                    for (auto& elt : get<value::Pack>(pack)->values) {
+                        types.push_back(validateValueType(elt));
+                    }
+                }
+            }
+            else types.push_back(validateType(std::move(type)));
         }
+
 
         return {std::make_shared<type::UnionType>(std::move(types)), type::builtins::Type()};
     }
@@ -2620,17 +2688,17 @@ There are no mistakes with art.)";
 
         std::vector<expr::Closure*> set;
 
-        std::vector<type::TypePtr> types;
-        types.reserve(values.size());
-        for (const auto& v : values) types.push_back(validateType(typeOf(v)));
+        // std::vector<type::TypePtr> types;
+        // types.reserve(values.size());
+        // for (const auto& v : values) types.push_back(validateType(typeOf(v)));
 
 
         for (const auto& func : funcs) {
             auto closure = dynamic_cast<expr::Closure*>(func.get());
 
             bool found = true;
-            for (const auto& [arg_value, arg_type, param_type] : std::views::zip(values, types, closure->type.params)) {
-                if (not param_type->typeCheck(this, arg_value, arg_type)) {
+            for (const auto& [arg_value, param_type] : std::views::zip(values, closure->type.params)) {
+                if (not param_type->typeCheck(this, arg_value, validateType(typeOf(arg_value)))) {
                     found = false;
                     break;
                 }
@@ -5240,6 +5308,25 @@ There are no mistakes with art.)";
 
         util::error("'" + type->text() + "' does not name a type!");
     }
+
+
+    type::TypePtr validateValueType(const value::Value& value) {
+        // do I wanna call validate here??
+        if (std::holds_alternative<type::TypePtr>(value)) return get<type::TypePtr>(value);
+        // if (std::holds_alternative<type::TypePtr>(value)) return validateType(get<type::TypePtr>(value));
+
+
+        if (auto t = typeOf(value); not type::isType(t)) {
+            if (type::isFunction(t))
+                return std::make_shared<type::ConceptType>(std::make_shared<value::Value>(value));
+
+            return std::make_shared<type::ValueType>(std::make_shared<value::Value>(value));
+        }
+
+
+        return std::make_shared<type::ValueType>(std::make_shared<value::Value>(std::move(value)));
+    }
+
 
 
     type::TypePtr typeOf(const value::Value& value) const {
