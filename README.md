@@ -907,12 +907,12 @@ make
 
 #### in order of priority
 
-- [ ] Breaking Out of Nested Loops
 - [ ] Add default values to function parameters
+- [ ] Breaking Out of Nested Loops
+- [ ] Use Big Int instead of `int64_t`
 - [ ] Simplify Pack Expansion (internal)
 - [ ] Simplify Closure Captures without performance penalty (internal)
 - [ ] Clean up builtin functions code (internal)
-- [ ] Use Big Int instead of `int64_t`
 - [ ] `Expr::involveName()` seems to be not exhastive, espacially with Closure. Check it.
 - [ ] World domination
 - [ ] Make `=` and `=>` overloadable
