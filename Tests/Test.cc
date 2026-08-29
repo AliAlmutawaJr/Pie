@@ -20,6 +20,61 @@
 
 
 
+TEST_CASE("Invalid Unpackment", "[Unpack]") {
+
+{
+    const auto src = R"({i, e} =  true;)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+
+}
+
+
+
+TEST_CASE("Expansion In Union", "[Variadic][Union][Type]") {
+
+{
+    const auto src = R"(
+
+makeUnion = (types: ...) => union { types...; };
+
+Int = 1;
+U = makeUnion(Int, String, Bool, class { name = ""; });
+__builtin_print(U);
+
+x: U = 1;
+x: U = "hey";
+x: U = true;
+x: U = class { name = ".."; }("Yo");
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(union { 1; String; Bool; class {
+        name: Any = "";
+    }; })");
+}
+
+// nested union case
+{
+    const auto src = R"(
+
+makeUnion = (types: ...) => union { types...; };
+
+Int = 1;
+U = makeUnion(Int, String, Bool, class { name = ""; });
+
+x: U = 2;
+
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+
+}
+
+
+
 TEST_CASE("Subtyping through Union", "[Type][Union]") {
 
 {

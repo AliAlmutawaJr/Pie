@@ -407,16 +407,27 @@ public:
         }
 
         if (match(L_BRACE)) { // list or map type
-            constexpr auto NO_VARIADICS = false;
+            auto snapshot = checkpoint();
 
-            auto type1 = parseType<NO_VARIADICS>();
-            if (match(R_BRACE)) return std::make_shared<type::ListType>(std::move(type1));
+            try {
+                constexpr auto NO_VARIADICS = false;
 
-            consume(COLON);
-            auto type2 = parseType<NO_VARIADICS>();
-            consume(R_BRACE);
+                auto type1 = parseType<NO_VARIADICS>();
+                if (match(R_BRACE)) return std::make_shared<type::ListType>(std::move(type1));
 
-            return std::make_shared<type::MapType>(std::move(type1), std::move(type2));
+                consume(COLON);
+                auto type2 = parseType<NO_VARIADICS>();
+                consume(R_BRACE);
+
+                return std::make_shared<type::MapType>(std::move(type1), std::move(type2));
+            }
+            catch (...) {
+                // just a normal list/map expression
+                restore(std::move(snapshot));
+
+                constexpr auto DONT_PARSE_UNPACKMENT = false;
+                return std::make_shared<type::ExprType>(LBrace<DONT_PARSE_UNPACKMENT>());
+            }
         }
 
 
@@ -1662,14 +1673,10 @@ public:
         else if (match(ELLIPSIS)) { // pack
             if constexpr (CTX == Context::MAP) util::error<except::SyntaxError>("Cannot have pack patterns inside map unpackments!");
 
-            return std::make_unique<Pack>(
-                parseExpr()
-            );
+            return std::make_unique<Pack>(parseExpr());
         }
         else { // name pattern
-            return std::make_unique<Expr>(
-                parseExpr<false, CTX>()
-            );
+            return std::make_unique<Expr>(parseExpr<false, CTX>());
         }
     }
 
@@ -1799,6 +1806,9 @@ public:
 
 
 
+    // pre: consume(L_BRACE);
+
+    template <bool PARSE_UNPACKMENT = true>
     expr::ExprPtr LBrace() {
         using enum token::TokenKind;
 
@@ -1813,7 +1823,8 @@ public:
         if (isScope()     ) return handleScope();
 
 
-        if (isUnpackment()) return  unpackment();
+        if constexpr (PARSE_UNPACKMENT)
+            if (isUnpackment()) return unpackment();
 
 
         const auto funcs = {
