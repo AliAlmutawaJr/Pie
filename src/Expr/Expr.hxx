@@ -409,19 +409,9 @@ struct Unpackment : Expr {
 
 
     std::string stringify(const size_t indent = 0) const override {
-        std::string s = "{";
-
-        s += stringifyPattern(pattern.get(), indent + 4) + ", ";
-
-        // removing the trailing comma
-        s.pop_back();
-        s.pop_back();
-
-        s += '}';
-
-        s += inferred ? " := " : " = ";
-
-        return s + rhs->stringify(indent + 4);
+        return stringifyPattern(pattern.get(), indent + 4)
+            + (inferred ? " := " : " = ")
+            + rhs->stringify(indent + 4);
     }
 
     bool involvesName(const std::string_view sv) const override {

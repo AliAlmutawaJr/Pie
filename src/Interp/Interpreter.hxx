@@ -1172,6 +1172,7 @@ public:
                 valuetypes.emplace_back(value, typeOf(value));
             }
         }
+        else util::error("Cannot unpack value: " + stringify(value));
     }
 
 
@@ -1499,9 +1500,12 @@ public:
                     for (auto& elt : get<value::Pack>(pack)->values) {
                         types.push_back(validateValueType(elt));
                     }
+
+                    continue;
                 }
             }
-            else types.push_back(validateType(std::move(type)));
+
+            types.push_back(validateType(std::move(type)));
         }
 
 
@@ -1992,13 +1996,14 @@ R"(
 
 The Zen of Pie, by Ali Almutawa Jr.
 
-Be unique, not unfamiliar.
 Express yourself.
-You decide what operates.
+Be unique, but still familiar.
+Having the option is better than not.
 More control to you.
+You decide what operates.
 null is void.
-Be whimzy, be quirky.
 Break the rules.
+Be whimzy, be quirky.
 Code is art.
 You're an artist..
 not a good one,
