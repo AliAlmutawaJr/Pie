@@ -378,7 +378,6 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         >
     >{},
 
-
     //* BINARY FUNCTIONS
     MapEntry<
         S<"get">,
@@ -513,6 +512,15 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         >
     >{},
 
+    MapEntry<
+        S<"into_pack">,
+        Func<
+            decltype([](const auto& cont, const auto&) -> value::Value {
+                return value::makePack(cont.elts->values);
+            }),
+            TypeList<value::List>
+        >
+    >{},
 
     MapEntry<
         S<"add">,
