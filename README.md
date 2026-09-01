@@ -13,6 +13,8 @@
 
 
 ### Index:
+- [Install](#install)
+---
 - [Variables](#variables)
 - [Unpackments](#unpackments)
 - [Closures](#closures)
@@ -35,11 +37,34 @@
 - [Keywords List](#keywords-list)
 - [Reserved Punctuation](#reserved-punctuation)
 - [Comments](#comments)
-- [Install](#install)
 - [Community](#community)
 - [Contributors](#contributors)
 - [What was said about Pie](#quotes-about-pie-lang)
 
+
+## Install
+
+There are 2 ways to install Pie
+
+##### Pre-built binaries
+Binaries exist for:
+1- Linux
+2- Macos x86
+2- Macos Apple Silicon
+
+Check the [release section](https://github.com/AliAlmutawaJr/Pie/releases) for the download link
+
+
+#### Build from source
+Make sure you have `git`, `make`, and a C++ compiler that supports C++23. Then run the following in the terminal:
+
+```
+git clone https://github.com/AliAlmutawaJr/Pie
+cd Pie
+make
+```
+
+----
 
 ## Variables
 
@@ -880,33 +905,13 @@ this isn't
 - `=>`
 <!-- - `..` -->
 
-## Install
-
-There are 2 ways to install Pie
-
-##### Pre-built binaries
-Binaries exist for:
-1- Linux
-2- Macos x86
-2- Macos Apple Silicon
-
-Check the [release section](https://github.com/AliAlmutawaJr/Pie/releases) for the download link
-
-
-#### Build from source
-Make sure you have `git`, `make`, and a C++ compiler that supports C++23. Then run the following in the terminal:
-
-```
-git clone https://github.com/AliAlmutawaJr/Pie
-cd Pie
-make
-```
-
 
 ### Todo
 
 #### in order of priority
 
+- [ ] Make sure to expand args for EVERY builtin function (`ffi_call` and `defer` come to mind)
+- [ ] Make sure to expand args for EVERY builtin function (`ffi_call` and `defer` come to mind)
 - [ ] Add default values to function parameters
 - [ ] Breaking Out of Nested Loops
 - [ ] Use Big Int instead of `int64_t`
