@@ -451,11 +451,11 @@ public:
 
         auto snapshot = checkpoint();
 
-        for (auto& tokens : token.fstring_tokens) {
-            tokens.second.push_back({token::TokenKind::SEMI, ";", {}});
-            tokens.second.push_back({token::TokenKind::END, "EOF", {}});
-            resetTokens(std::move(tokens).second);
-            inners.emplace_back(tokens.first, parseExpr());
+        for (auto& [ind, tokens] : token.fstring_tokens) {
+            tokens.push_back({token::TokenKind::SEMI, ";", {}});
+            tokens.push_back({token::TokenKind::END, "EOF", {}});
+            resetTokens(std::move(tokens));
+            inners.emplace_back(ind, parseExpr());
         }
 
         restore(std::move(snapshot));
@@ -1663,7 +1663,7 @@ public:
 
             if (match(COLON)) { // map
                 // need to test the first pattern since the we didn't know the context back there
-                if (dynamic_cast<expr::Unpackment::Pack*>(pattern.get()))
+                if (dynamic_cast<Pack*>(pattern.get()))
                     util::error<except::SyntaxError>("Cannot have pack patterns inside map unpackments!");
 
                 auto map = Map::with(std::pair{std::move(pattern), parseUnpackmentPattern<Context::MAP>()});
@@ -1683,6 +1683,11 @@ public:
         }
         else if (match(ELLIPSIS)) { // pack
             if constexpr (CTX == Context::MAP) util::error<except::SyntaxError>("Cannot have pack patterns inside map unpackments!");
+
+            // nameless pack
+            if (check(L_BRACE) or check(COMMA)) {
+                return std::make_unique<Pack>(nullptr);
+            }
 
             return std::make_unique<Pack>(parseExpr());
         }
