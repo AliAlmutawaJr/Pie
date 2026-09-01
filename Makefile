@@ -27,7 +27,7 @@ WEB_OUTPUT_NAME = Pie.js
 REMOTE_INCLUDE_DIR = remote_includes
 MP11_DIR           = $(REMOTE_INCLUDE_DIR)/mp11
 CPP_STD_EXT_DIR    = $(REMOTE_INCLUDE_DIR)/cpp-std-extensions
-LIB_FFI_DIR        = $(REMOTE_INCLUDE_DIR)/libffi
+# LIB_FFI_DIR        = $(REMOTE_INCLUDE_DIR)/libffi
 
 
 # Saved locally
