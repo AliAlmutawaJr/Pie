@@ -93,7 +93,7 @@ public:
 
 
     void checkPattern(expr::Unpackment::Pattern*);
-    void checkPattern(expr::Unpackment::Pattern*, bool inferred); // tag to dispatch at compile time
+    void checkPattern(expr::Unpackment::Pattern*, bool inferred); // `inferred` is a tag to dispatch at compile time
     void operator()(expr::Unpackment *);
 
 

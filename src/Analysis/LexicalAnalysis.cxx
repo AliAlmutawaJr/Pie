@@ -58,7 +58,9 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
 
         "__builtin_print",
         "__builtin_concat", 
+
         "__builtin_create_class", 
+        "__builtin_parse", 
 
         "__builtin_defer", 
 
@@ -85,6 +87,7 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
         "__builtin_pop",
         "__builtin_pop_front",
         "__builtin_remove_at",
+        "__builtin_into_pack",
         "__builtin_add",
         "__builtin_sub",
         "__builtin_mul",
@@ -97,7 +100,7 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
         "__builtin_leq",
         "__builtin_lt",
         "__builtin_and",
-        "__builtin_or",  
+        "__builtin_or",
         "__builtin_conditional",
         "__builtin_str_slice",
         "__builtin_str_split",
@@ -403,6 +406,9 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern) {
         }
     }
     else if (auto pack = dynamic_cast<expr::Unpackment::Pack*>(pattern)) {
+        // nameless pack
+        if (not pack->expr) return;
+
         if (const auto id = findVariable(pack->expr->stringify()); id) {
             pack->expr->var_ID = *id;
             if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
