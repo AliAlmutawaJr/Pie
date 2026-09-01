@@ -20,6 +20,65 @@
 
 
 
+TEST_CASE("Multiple Expression FString", "[FString]") {
+{
+    const auto src = R"(
+name = "piee";
+cake = "cake";
+
+__builtin_print("B{name}C B{name}C B{name}C");
+__builtin_print("B{name}{cake}C B{name}C");
+__builtin_print("B{name}{cake}C B{name}{cake}C");
+__builtin_print("B{name}{cake}C B{name}{cake}C B{name}{cake}C");
+)";
+
+    REQUIRE(pie::test::run(src) == R"(BpieeC BpieeC BpieeC
+BpieecakeC BpieeC
+BpieecakeC BpieecakeC
+BpieecakeC BpieecakeC BpieecakeC)");
+}
+{
+    const auto src = R"(
+    __builtin_print("1{2}3");
+)";
+
+    REQUIRE(pie::test::run(src) == "123");
+}
+}
+
+
+TEST_CASE("Nameless Pack inside Unpackment", "[Unpack]") {
+{
+    const auto src = R"(
+    {one, ..., end} = {1, 2, 3, 4};
+    __builtin_print(one, end);
+)";
+
+    REQUIRE(pie::test::run(src) == "1 4");
+}
+{
+    const auto src = R"(
+    {one, ..., end} = {1, 4};
+    __builtin_print(one, end);
+)";
+
+    REQUIRE(pie::test::run(src) == "1 4");
+}
+}
+
+
+TEST_CASE("Empty Pack inside Unpackment", "[Unpack]") {
+{
+    const auto src = R"(
+    {one, ...mid, end} = {1, 4};
+    __builtin_print(one, end);
+)";
+
+    REQUIRE(pie::test::run(src) == "1 4");
+}
+}
+
+
 TEST_CASE("Expansions inside lists", "[List]") {
 {
     const auto src = R"(
@@ -354,7 +413,7 @@ ten six six seven;
 
 
 
-TEST_CASE("Nested F Strings", "[fstring]") {
+TEST_CASE("Nested F Strings", "[FString]") {
 
 {
     const auto src = R"(
@@ -369,7 +428,7 @@ __builtin_print("Hello, { "this is a nested fstring { "look! {"nested"}" }" }!")
 }
 
 
-TEST_CASE("F Strings", "[fstring]") {
+TEST_CASE("F Strings", "[FString]") {
 
 {
     const auto src = R"(
