@@ -1,8 +1,5 @@
 #pragma once
 
-#include <concepts>
-#include <filesystem>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -14,6 +11,9 @@
 #include <iterator>
 #include <optional>
 #include <utility>
+#include <memory>
+#include <filesystem>
+#include <concepts>
 
 
 #include <cctype>
@@ -37,8 +37,8 @@
 #include "../Expr/Expr.hxx"
 #include "../Type/Type.hxx"
 #include "../Parser/Parser.hxx"
-
 #include "../Value/Value.hxx"
+#include "TreeMaker.hxx"
 
 
 inline namespace pie {
@@ -1291,7 +1291,7 @@ public:
         else if (auto list = dynamic_cast<const List*>(pattern)) {
             const auto pack_index = [list] -> std::optional<size_t> {
                 for (size_t i{}; const auto& pattern : list->patterns)
-                    if (++i; dynamic_cast<expr::Unpackment::Pack*>(pattern.get())) return i - 1;
+                    if (++i; dynamic_cast<Pack*>(pattern.get())) return i - 1;
 
                 return {};
             }();
@@ -1317,23 +1317,25 @@ public:
                     bindPattern<INFERRED>(expr_str,pattern.get(), valuetype);
                 }
 
-                const auto pack_pattern = dynamic_cast<Pack*>(list->patterns[*pack_index].get());
 
-                auto pack = value::makePack(
-                    valuetypes
-                    | std::views::drop(leading_count)
-                    | std::views::take(size - leading_count - trailing_count)
-                    | std::views::transform([] (const auto& valuetype) { return valuetype.value; })
-                    | std::ranges::to<std::vector<value::Value>>()
-                );
-                auto type = typeOf(pack);
+                if (auto pack_pattern = dynamic_cast<Pack*>(list->patterns[*pack_index].get()); pack_pattern->expr) {
+                    auto pack = value::makePack(
+                        valuetypes
+                        | std::views::drop(leading_count)
+                        | std::views::take(size - leading_count - trailing_count)
+                        | std::views::transform([] (const auto& valuetype) { return valuetype.value; })
+                        | std::ranges::to<std::vector<value::Value>>()
+                    );
+                    auto type = typeOf(pack);
+    
+                    addVar(
+                        pack_pattern->expr->stringify(),
+                        pack_pattern->expr->var_ID,
+                        std::make_shared<value::Value>(std::move(pack)),
+                        std::move(type)
+                    );
+                }
 
-                addVar(
-                    pack_pattern->expr->stringify(),
-                    pack_pattern->expr->var_ID,
-                    std::make_shared<value::Value>(std::move(pack)),
-                    std::move(type)
-                );
 
                 for (
                     size_t pat_size = list->patterns.size();
@@ -2060,8 +2062,15 @@ There are no mistakes with art.)";
 
 
 
-        analysis::LexicalAnalysis ls{import_indices[0]};
-        import_indices.erase(import_indices.begin());
+        const auto import_index = [this] -> size_t {
+            if (import_indices.empty()) return 0;
+
+            const auto index = import_indices[0];
+            import_indices.erase(import_indices.begin());
+            return index;
+        }();
+
+        analysis::LexicalAnalysis ls{import_index};
 
         for (auto& expr : exprs)
             std::visit(ls, expr->variant());
@@ -3238,6 +3247,8 @@ There are no mistakes with art.)";
         // I added implicit syntax
         // not sure how that affects this...:)
         // I am not schizophrenic
+        // ==== ^^^ old new old ==== vvv new new new
+        // I added a method `expandArgs`. Use it for every future reference + refactor this code :))
         std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at;
         for (size_t i{}; i < args.size(); ++i) {
             if (const auto expand = dynamic_cast<const expr::Expansion*>(args[i].get())) {
@@ -4321,7 +4332,7 @@ There are no mistakes with art.)";
         for(const auto& builtin : {
             //* variadic
             "print", "concat", "defer",
-            "create_class",
+            "create_class", "parse",
 
             // debugging
             "print_env",
@@ -4333,7 +4344,7 @@ There are no mistakes with art.)";
 
             //* unary
             "type", "decltype",
-            "len", "reverse",
+            "len", "reverse", "into_pack",
             "reset", "eval",
             "neg", "abs",
             "not",
@@ -4470,7 +4481,12 @@ There are no mistakes with art.)";
 
 
         if (name == "defer") {
+            // TODO: expand args here
             return defer(call, std::move(args));
+        }
+
+        if (name == "parse") {
+            return std::visit(TreeMaker{}, args[0]->variant());
         }
 
 
@@ -4637,6 +4653,7 @@ There are no mistakes with art.)";
             "type"         ,
             "len"          ,
             "reverse"      ,
+            "into_pack"    ,
             "eval"         ,
             "abs"          ,
             "neg"          ,
@@ -4676,6 +4693,7 @@ There are no mistakes with art.)";
         if (name == "type"         ) return execute<1>(stdx::get<S<"type"      >>(functions).value, {value1}, this);
         if (name == "len"          ) return execute<1>(stdx::get<S<"len"       >>(functions).value, {value1}, this);
         if (name == "reverse"      ) return execute<1>(stdx::get<S<"reverse"   >>(functions).value, {value1}, this);
+        if (name == "into_pack"    ) return execute<1>(stdx::get<S<"into_pack" >>(functions).value, {value1}, this);
         if (name == "eval"         ) return execute<1>(stdx::get<S<"eval"      >>(functions).value, {value1}, this);
         if (name == "abs"          ) return execute<1>(stdx::get<S<"abs"       >>(functions).value, {value1}, this);
         if (name == "neg"          ) return execute<1>(stdx::get<S<"neg"       >>(functions).value, {value1}, this);
@@ -5744,6 +5762,7 @@ There are no mistakes with art.)";
     //         std::println("[{}] {}: {} = {}", ID, name.space->name, name.name, type->text(), stringify(*value));
     //     }
     // }
+
 };
 
 
