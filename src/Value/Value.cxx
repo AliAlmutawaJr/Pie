@@ -4,7 +4,7 @@
 #include "Value.hxx"
 
 
-inline namespace pie {
+namespace pie {
 namespace value {
 
 struct Members;

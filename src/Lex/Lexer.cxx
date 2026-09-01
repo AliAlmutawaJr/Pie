@@ -7,7 +7,7 @@
 #include "../Utils/Exceptions.hxx"
 
 
-inline namespace pie {
+namespace pie {
 namespace lex {
 
 
@@ -310,7 +310,12 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                             if (substr[i] == ';' or substr[i] == '}' or substr[i] == ')')
                                 util::error<except::LexerError>("Invalid Expression Inside f-string!");
 
-                            if (substr[i] == '{') while (++i < substr.size() and substr[i] != '}');
+
+                            size_t balance = substr[i] == '{';
+                            while (++i < substr.size() and balance) {
+
+                            }
+
                             if (i >= substr.size()) break;
                             if (substr[i] == '(') while (++i < substr.size() and substr[i] != ')');
                         }

@@ -15,7 +15,7 @@
 #endif
 
 
-inline namespace pie {
+namespace pie {
 namespace analysis {
 
 std::string stringify(const std::vector<std::string>& spaces) {

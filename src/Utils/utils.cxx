@@ -7,7 +7,7 @@
 #include "../Utils/Exceptions.hxx"
 
 
-inline namespace pie {
+namespace pie {
 namespace util {
 
 [[noreturn]] void expected(const token::TokenKind exp, const token::Token& got, const std::source_location& location) {

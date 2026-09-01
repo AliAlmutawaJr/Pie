@@ -6,7 +6,7 @@
 #include "../Value/Value.hxx"
 
 
-inline namespace pie {
+namespace pie {
 inline namespace funcs {
 
 

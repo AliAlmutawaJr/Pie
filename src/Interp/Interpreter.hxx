@@ -41,7 +41,7 @@
 #include "TreeMaker.hxx"
 
 
-inline namespace pie {
+namespace pie {
 
 namespace interp {
 

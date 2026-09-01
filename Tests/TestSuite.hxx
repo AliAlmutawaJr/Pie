@@ -12,7 +12,7 @@
 #include "../src/Interp/Interpreter.hxx"
 
 
-inline namespace pie {
+namespace pie {
 namespace test {
 
 struct Capture {
@@ -94,7 +94,7 @@ struct Capture {
     {
         // forces visitor destructor to run
         // which intern forces the global defers
-        interp::Visitor visitor{std::move(anal).indeces};
+        pie::interp::Visitor visitor{std::move(anal).indeces};
         for (const auto& expr : exprs)
             std::visit(visitor, expr->variant());
     }

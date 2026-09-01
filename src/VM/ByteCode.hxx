@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-inline namespace pie {
+namespace pie {
 namespace vm {
 
 enum class Code : size_t {

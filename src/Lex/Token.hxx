@@ -9,7 +9,7 @@
 #include <string>
 #include <ranges>
 
-inline namespace pie {
+namespace pie {
 namespace token {
 
 enum class TokenKind {
@@ -166,9 +166,9 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
 
 
 template <>
-struct std::formatter<token::Token> : std::formatter<std::string> {
-    auto format(const token::Token& token, auto& ctx) const {
-        if (token.kind == token::TokenKind::FSTRING) {
+struct std::formatter<pie::token::Token> : std::formatter<std::string> {
+    auto format(const pie::token::Token& token, auto& ctx) const {
+        if (token.kind == pie::token::TokenKind::FSTRING) {
             std::stringstream ss;
             ss << token;
             return std::format_to(ctx.out(), "{}", ss.str());
@@ -181,8 +181,8 @@ struct std::formatter<token::Token> : std::formatter<std::string> {
 
 
 template <>
-struct std::formatter<std::vector<token::Token>> : std::formatter<std::string_view> {
-    auto format(const std::vector<token::Token>& vec, auto& ctx) const {
+struct std::formatter<std::vector<pie::token::Token>> : std::formatter<std::string_view> {
+    auto format(const std::vector<pie::token::Token>& vec, auto& ctx) const {
         std::string result = "[";
         bool first = true;
         for (const auto& token : vec) {

@@ -11,7 +11,7 @@
 #include <filesystem>
 #include <stdexcept>
 
-inline namespace pie {
+namespace pie {
 
 [[nodiscard]] std::string readFile2(const std::string& fname);
 

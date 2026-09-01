@@ -11,7 +11,7 @@
 #include "ByteCode.hxx"
 
 
-inline namespace pie {
+namespace pie {
 namespace vm {
 
 using ID = ssize_t;

@@ -7,7 +7,7 @@
 #include <string_view>
 
 
-inline namespace pie {
+namespace pie {
 namespace lex {
 
 

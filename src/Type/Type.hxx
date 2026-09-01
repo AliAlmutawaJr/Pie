@@ -8,7 +8,7 @@
 #include "../Declarations.hxx"
 
 
-inline namespace pie {
+namespace pie {
 
 namespace expr {
     struct Expr;
@@ -87,8 +87,8 @@ namespace type {
         bool involvesT(const Type& T) const override { return T == *this; }
         bool typeCheck(interp::Visitor*, const value::Value&, const TypePtr& other) const override { return *this >= *other; }
 
-        bool operator> (const Type&) const override { return false; }
-        bool operator>=(const Type&) const override { return false; }
+        bool operator> (const Type& other) const override;
+        bool operator>=(const Type&) const override;
 
         TypePtr clone() const override { return std::make_shared<BuiltinFunctionType>(*this); }
     };

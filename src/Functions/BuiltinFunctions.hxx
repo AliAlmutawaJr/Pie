@@ -24,7 +24,7 @@
 #endif
 
 
-inline namespace pie {
+namespace pie {
 inline namespace funcs {
 inline namespace builtins {
 

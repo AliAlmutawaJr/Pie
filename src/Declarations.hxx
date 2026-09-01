@@ -16,7 +16,7 @@ using BigInt = long long;
 using BigInt = ssize_t;
 #endif
 
-inline namespace pie {
+namespace pie {
 
 namespace type {
     using TypePtr = std::shared_ptr<struct Type>;

@@ -20,7 +20,7 @@
 #endif
 
 
-inline namespace pie {
+namespace pie {
 namespace ffi {
 
 // ============================================================================

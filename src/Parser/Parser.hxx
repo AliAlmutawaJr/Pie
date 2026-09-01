@@ -30,7 +30,7 @@
 
 
 
-inline namespace pie {
+namespace pie {
 
 inline namespace parse {
 

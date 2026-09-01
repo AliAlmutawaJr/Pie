@@ -9,7 +9,7 @@
 #include "../Expr/Expr.hxx"
 
 
-inline namespace pie {
+namespace pie {
 
 namespace prec {
   inline constexpr auto BASE = 1 << 10; // 1024

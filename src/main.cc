@@ -49,7 +49,7 @@ static int pieMain(int argc, char *argv[]) {
         else if (argv[1] == "-vm"sv or argv[1] == "--machine"sv) vm                 = true;
         else if (argv[1] == "-c"sv  or argv[1] == "--command"sv) command            = true;
         else if (argv[1] == "-r"sv  or argv[1] == "--repl"sv   ) repl               = true;
-        else if (not fname.empty()) util::error<except::UknownOption>("Unrecognized Option: "s + argv[1]);
+        else if (not fname.empty()) pie::util::error<pie::except::UknownOption>("Unrecognized Option: "s + argv[1]);
         else fname = argv[1];
     }
 

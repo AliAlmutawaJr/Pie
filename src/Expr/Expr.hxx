@@ -24,7 +24,7 @@
 
 
 
-inline namespace pie {
+namespace pie {
 
 
 namespace expr {

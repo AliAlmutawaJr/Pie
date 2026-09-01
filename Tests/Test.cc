@@ -20,6 +20,27 @@
 
 
 
+TEST_CASE("Builtin Function Type", "[Type]") {
+{
+    const auto src = R"(
+BF = __builtin_type(__builtin_print);
+x: BF = __builtin_print;
+x: BF = __builtin_add;
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+{
+    const auto src = R"(
+    BF = __builtin_type(__builtin_print);
+    x: BF = 1;
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+}
+
+
 TEST_CASE("Multiple Expression FString", "[FString]") {
 {
     const auto src = R"(
@@ -3712,10 +3733,10 @@ class { })");
 
 
 TEST_CASE("List Types", "[Type]") {
-    auto Any  = type::builtins::Any();
-    auto Int  = type::builtins::Int();
-    auto Int_list = std::make_shared<type::ListType>(type::builtins::Int());
-    auto Any_list = std::make_shared<type::ListType>(type::builtins::Any());
+    auto Any  = pie::type::builtins::Any();
+    auto Int  = pie::type::builtins::Int();
+    auto Int_list = std::make_shared<pie::type::ListType>(pie::type::builtins::Int());
+    auto Any_list = std::make_shared<pie::type::ListType>(pie::type::builtins::Any());
 
 
     REQUIRE_FALSE(*Int_list >  *Int);
@@ -4431,10 +4452,10 @@ a =  300)"
 
 
 TEST_CASE("Any vs Func", "[Type]") {
-    auto Any  = type::builtins::Any();
+    auto Any  = pie::type::builtins::Any();
 
-    auto func = std::make_shared<type::FuncType>( // functions taking 2 ints and returns an int
-        std::vector{type::builtins::Int(), type::builtins::Int()}, type::builtins::Int()
+    auto func = std::make_shared<pie::type::FuncType>( // functions taking 2 ints and returns an int
+        std::vector{pie::type::builtins::Int(), pie::type::builtins::Int()}, pie::type::builtins::Int()
     );
 
 
@@ -4447,10 +4468,10 @@ TEST_CASE("Any vs Func", "[Type]") {
 
 
 TEST_CASE("Variadics", "[Type]") {
-    auto Any  = type::builtins::Any();
-    auto Int  = type::builtins::Int();
-    auto Int_var = std::make_shared<type::VariadicType>(type::builtins::Int());
-    auto Any_var = std::make_shared<type::VariadicType>(type::builtins::Any());
+    auto Any  = pie::type::builtins::Any();
+    auto Int  = pie::type::builtins::Int();
+    auto Int_var = std::make_shared<pie::type::VariadicType>(pie::type::builtins::Int());
+    auto Any_var = std::make_shared<pie::type::VariadicType>(pie::type::builtins::Any());
 
 
     REQUIRE(*Int_var >  *Int);

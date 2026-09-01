@@ -12,7 +12,7 @@
 #include "../Expr/Expr.hxx"
 
 
-inline namespace pie {
+namespace pie {
 namespace vm {
 
 using Chunk = std::vector<Code>;

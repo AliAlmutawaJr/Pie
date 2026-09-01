@@ -13,7 +13,7 @@
     }                                                                       \
 
 
-inline namespace pie {
+namespace pie {
 
 namespace except {
     DefineError(UknownOption       );

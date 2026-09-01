@@ -5,7 +5,7 @@
 
 
 
-inline namespace pie {
+namespace pie {
 namespace cli {
 
     void help();

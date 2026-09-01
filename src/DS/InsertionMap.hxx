@@ -4,7 +4,7 @@
 // #include <ranges>
 
 
-inline namespace pie {
+namespace pie {
 namespace ds {
 
 template<typename Key, typename Value>

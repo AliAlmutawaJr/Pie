@@ -5,7 +5,7 @@
 #include <variant>
 
 
-inline namespace pie {
+namespace pie {
 
 namespace type {
 
@@ -54,6 +54,18 @@ namespace type {
 
         const auto& type = text();
         return type == "Any" or type == other.text();
+    }
+
+
+    // * BuiltinFunction * //
+    bool BuiltinFunctionType::operator>(const Type& other) const {
+        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        return false;
+    }
+
+    bool BuiltinFunctionType::operator>=(const Type& other) const {
+        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        return dynamic_cast<const BuiltinFunctionType*>(&other);
     }
 
 

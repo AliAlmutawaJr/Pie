@@ -12,7 +12,7 @@
 #include "../VM/VM.hxx"
 
 
-inline namespace pie {
+namespace pie {
 namespace cli {
 
     void help() {

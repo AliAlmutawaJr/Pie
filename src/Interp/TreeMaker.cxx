@@ -10,7 +10,7 @@
 #include "../Type/Type.hxx"
 
 
-inline namespace pie {
+namespace pie {
 namespace interp {
 
     // default type for objects

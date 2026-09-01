@@ -3,7 +3,7 @@
 #include "../Expr/Expr.hxx"
 #include <cstddef>
 
-inline namespace pie {
+namespace pie {
 namespace analysis {
 
 template <typename EXPR> const EXPR *checkPattern(expr::Match::Case::Pattern &);

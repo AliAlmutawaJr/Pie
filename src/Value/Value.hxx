@@ -13,7 +13,7 @@
 
 
 
-inline namespace pie {
+namespace pie {
 namespace value {
 
 struct Fields;
@@ -72,10 +72,10 @@ std::string stringify(const Value& value, const size_t indent = {});
 
 // needed for maps
 template<>
-struct std::hash<value::Value> { size_t operator()(const value::Value& value) const { return std::hash<std::string>{}(pie::value::stringify(value)); } };
+struct std::hash<pie::value::Value> { size_t operator()(const pie::value::Value& value) const { return std::hash<std::string>{}(pie::value::stringify(value)); } };
 
 
-inline namespace pie {
+namespace pie {
 namespace value {
 
 struct Fields   { std::vector<std::tuple<expr::Name, type::TypePtr, expr::ExprPtr>> fields;  };
