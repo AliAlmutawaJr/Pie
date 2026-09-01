@@ -83,19 +83,18 @@ struct FString : Expr {
     : str{std::move(s)}, exprs{std::move(es)} {}
 
     std::string stringify(const size_t indent = 0) const override {
-        std::string s = "\"";
+        std::string s;
+
 
         for (size_t i{}, e{}; i < str.size() or e < exprs.size(); ++i) {
-            for (; e < exprs.size() and exprs[e].first <= i; ++e) {
+            for (; e < exprs.size() and exprs[e].first == i; ++e) {
                 s += '{' + exprs[e].second->stringify(indent + 2) + '}';
             }
 
             if (i < str.size()) s.push_back(str[i]);
         }
 
-        s.push_back('"');
-
-        return s;
+        return '"' + s + '"';
     }
 
     bool involvesName(const std::string_view sv) const override {
@@ -394,6 +393,7 @@ struct Unpackment : Expr {
 
     struct Pack : Pattern {
         ExprPtr expr;
+        // Pack() = default;
         Pack(ExprPtr e) noexcept : expr{std::move(e)} { }
     };
 
@@ -459,7 +459,9 @@ struct Unpackment : Expr {
             s += '}';
         }
         else if (auto pack = dynamic_cast<const Pack*>(pattern)) {
-            s += "..." + pack->expr->stringify();
+            s += "...";
+
+            if (pack->expr) s+= pack->expr->stringify();
         }
         else util::error();
 
