@@ -1,8 +1,10 @@
 #include "Lexer.hxx"
 
+#include <cstdio>
+
+#include "Token.hxx"
 #include "../Utils/utils.hxx"
 #include "../Utils/Exceptions.hxx"
-#include "Token.hxx"
 
 
 inline namespace pie {
@@ -67,7 +69,7 @@ bool validNameChar(const char c) noexcept {
     return isalnum(c);
 }
 
-[[nodiscard]] token::Tokens lex(const std::string& src, const bool check_for_semis) {
+token::Tokens lex(const std::string& src, const bool check_for_semis) {
     token::TokenLines lines = {{}};
     token::Tokens line;
 
@@ -96,11 +98,11 @@ bool validNameChar(const char c) noexcept {
             #pragma GCC diagnostic pop
             {
                 const auto beginning = index;
-                while (isdigit(static_cast<unsigned char>(src.at(++index))));
+                while (++index < src.size() and isdigit(static_cast<unsigned char>(src[index])));
 
                 bool is_name = validNameChar(src[index]);
                 if (is_name) {
-                    while (validNameChar(src.at(++index)));
+                    while (++index < src.size() and validNameChar(src[index]));
                     emplace(NAME, src.substr(beginning, index - beginning));
                     --index;
                     break;
@@ -145,7 +147,7 @@ bool validNameChar(const char c) noexcept {
             #pragma GCC diagnostic pop
             {
                 const auto beginning = index;
-                while (validNameChar(src.at(++index)));
+                while (++index < src.size() and validNameChar(src[index]));
 
                 const auto word = src.substr(beginning, index - beginning);
 
@@ -244,9 +246,7 @@ bool validNameChar(const char c) noexcept {
             case '(': push({L_PAREN, {src[index]}, {}}); break;
             case ')': push({R_PAREN, {src[index]}, {}}); break;
 
-            case '{':
-                push({L_BRACE, {src[index]}, {}});
-                break;
+            case '{': push({L_BRACE, {src[index]}, {}}); break;
 
             case '}': push({R_BRACE, {src[index]}, {}}); break;
 
@@ -304,17 +304,18 @@ bool validNameChar(const char c) noexcept {
                         // if closing brace == index or index + 1
                         if (closing_brace <= index + 1) util::error<except::LexerError>("Invalid fstring!");
 
-                        auto substr = src.substr(index + 1, closing_brace - index);
+                        auto substr = src.substr(index + 1, closing_brace - index - 1);
 
                         for (size_t i{}; i < substr.size(); ++i) {
-                            if (substr[i] == ';') util::error<except::LexerError>("Invalid Expression Inside f-string!");
+                            if (substr[i] == ';' or substr[i] == '}' or substr[i] == ')')
+                                util::error<except::LexerError>("Invalid Expression Inside f-string!");
 
                             if (substr[i] == '{') while (++i < substr.size() and substr[i] != '}');
                             if (i >= substr.size()) break;
                             if (substr[i] == '(') while (++i < substr.size() and substr[i] != ')');
                         }
 
-                        fstring_tokens.push_back({str_len, lex(std::move(substr), false)});
+                        fstring_tokens.push_back({str_len - fstring_tokens.size(), lex(std::move(substr), false)});
                         index = closing_brace;
                     }
                     else {
@@ -340,6 +341,9 @@ bool validNameChar(const char c) noexcept {
         }
         catch(const except::LexerError& e) {
             throw;
+        }
+        catch (...) {
+            util::error("Lexer Error!");
         }
         // catch(const std::exception& err) {
         //     util::error();
