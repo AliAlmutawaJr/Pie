@@ -20,14 +20,33 @@
 
 
 
-TEST_CASE("Invalid Unpackment", "[Unpack]") {
+TEST_CASE("Expansions inside lists", "[List]") {
+{
+    const auto src = R"(
 
+makeList =
+    (args1: ...) =>
+        (args2: ...) =>
+            (args3: ...) =>
+                { args1..., args2..., args3... };
+
+
+__builtin_print(makeList(1, 2, 3)(4, 5, 6)(7, 8, 9));
+
+)";
+
+    REQUIRE(pie::test::run(src) == "{1, 2, 3, 4, 5, 6, 7, 8, 9}");
+}
+}
+
+
+
+TEST_CASE("Invalid Unpackment", "[Unpack]") {
 {
     const auto src = R"({i, e} =  true;)";
 
     REQUIRE_THROWS(pie::test::run(src));
 }
-
 }
 
 

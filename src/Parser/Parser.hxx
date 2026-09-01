@@ -1388,11 +1388,22 @@ public:
 
         std::vector<expr::ExprPtr> exprs = { parseExpr(), };
 
-        // the `and` check allows for trailing commas..I hope
-        while (match(COMMA) /* and not check(R_BRACE) */ ) exprs.push_back(parseExpr()); 
+        if (match(ELLIPSIS)) {
+            exprs[0] = std::make_shared<expr::Expansion>(std::move(exprs[0]));
+        }
+
+
+        // // the `and` check allows for trailing commas..I hope
+        while (match(COMMA) /* and not check(R_BRACE) */ ) {
+            exprs.push_back(parseExpr());
+
+            if (match(ELLIPSIS)) {
+                exprs.back() = std::make_shared<expr::Expansion>(std::move(exprs.back()));
+            }
+        }
+
 
         consume(R_BRACE);
-
         return std::make_shared<expr::List>(std::move(exprs));
     }
 

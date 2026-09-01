@@ -336,10 +336,29 @@ public:
         if (const auto& var = getVar(list->var_ID, liftName(list)); var) return *var;
 
         std::vector<value::Value> values;
-        std::transform(
-            list->elements.cbegin(), list->elements.cend(), std::back_inserter(values),
-            [this] (const auto& expr) { return std::visit(*this, expr->variant()).value; }
-        );
+        // std::transform(
+        //     list->elements.cbegin(), list->elements.cend(), std::back_inserter(values),
+        //     [this] (const auto& expr) { return std::visit(*this, expr->variant()).value; }
+        // );
+
+        for (auto& elt : list->elements) {
+            // pack expansion
+            if (auto exp = expr::is<expr::Expansion>(elt.get())) {
+                auto pack = std::visit(*this, std::move(exp)->pack->variant()).value;
+
+                if (not std::holds_alternative<value::Pack>(pack))
+                    util::error(
+                        "Expansion applied on a non-pack variable `" + elt->stringify() +
+                        "\nWhich evaluated to: " + stringify(pack)
+                    );
+
+
+
+                for (auto& v : get<value::Pack>(pack)->values) values.push_back(std::move(v));
+            }
+            else values.push_back(std::visit(*this, std::move(elt)->variant()).value);
+        }
+
 
         auto list_value = value::makeList(std::move(values));
         auto type = typeOf(list_value);
