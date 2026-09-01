@@ -694,17 +694,17 @@ struct Loop : Expr {
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "loop ";
 
-        if (var) s += Unpackment::stringifyPattern(var.get(), indent + 4) + (kind ? " : " : ": ");
+        if (var) s += "var" + Unpackment::stringifyPattern(var.get(), indent + 4) + (kind ? " : " : ": ");
 
-        if (kind) s += kind->stringify(indent + 4) + ' ';
+        if (kind) s += "kind" + kind->stringify(indent + 4) + ' ';
 
         // s += " {\n";
 
-        s += body->stringify(indent + 4);
+        s += "body" + body->stringify(indent + 4);
 
         // s += "\n" + std::string(indent, ' ') + "}";
 
-        if (els) s += " => " + els->stringify();
+        if (els) s += "else => " + els->stringify();
 
         return s;
     }

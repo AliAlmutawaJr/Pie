@@ -1211,10 +1211,12 @@ public:
         auto snapshot = checkpoint();
         try {
             // test to see if there is one more expression (for the body)
+            auto body = parseExpr();
             return std::make_shared<expr::Loop>(
-                parseExpr(),
+                std::move(body),
                 std::move(loop_var),
-                std::move(kind_or_body)
+                std::move(kind_or_body),
+                match(FAT_ARROW) ? parseExpr() : nullptr // don't forget to check for an else branch
             );
         }
         catch (const std::runtime_error     &) { }
