@@ -146,15 +146,15 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
 
     if (token.kind == TokenKind::FSTRING) {
         os << ", [";
-        for (const auto& [_, tokens] : token.fstring_tokens) {
+        for (const auto& [ind, tokens] : token.fstring_tokens) {
             // guaranteed by the lexer to have at least one element
-            os << tokens.front();
+            os << "{" << ind << ": " << tokens.front() << "}";
             for (const auto& token : tokens | std::views::drop(1)) {
-                os << ", " << token;
+                os << ", {" << ind << ": " << token << "}";
             }
-
-            os << ']';
         }
+
+        os << ']';
     }
 
     return os << '}';

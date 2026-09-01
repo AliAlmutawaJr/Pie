@@ -133,7 +133,7 @@ namespace type {
 
 
     struct LiteralType : Type {
-        std::shared_ptr<pie::value::ClassValue> cls;
+        std::shared_ptr<value::ClassValue> cls;
         // std::string t;
 
         explicit LiteralType(std::shared_ptr<pie::value::ClassValue> c) noexcept : cls{std::move(c)} {}

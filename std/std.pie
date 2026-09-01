@@ -1,4 +1,5 @@
 
+
 space std {
     print = __builtin_print;
     panic = __builtin_panic;
@@ -75,10 +76,10 @@ space std {
 
     .: mixfix(LOW +) either : : = (`this`, `that`) =>
     .:     __builtin_conditional(
-            
     .:     );
 
     mixfix([]) : [ : ] = (cont, at) => __builtin_get(cont, at);
+
 
 
     Enumerate = class {
@@ -140,3 +141,5 @@ space std {
 
 };
 
+.: convension: yield all space names
+{"std"};

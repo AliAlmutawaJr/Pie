@@ -1,7 +1,7 @@
-#include "Value.hxx"
 #include <string>
 #include <variant>
 
+#include "Value.hxx"
 
 
 inline namespace pie {

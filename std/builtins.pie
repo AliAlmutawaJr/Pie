@@ -1,0 +1,22 @@
+
+space std {
+    neg = __builtin_neg;
+
+    add = __builtin_add;
+    sub = __builtin_sub;
+    mul = __builtin_mul;
+    div = __builtin_div;
+    pow = __builtin_pow;
+    mod = __builtin_mod;
+
+    not = __builtin_not;
+    and = __builtin_and;
+    or  = __builtin_or;
+
+    geq = __builtin_geq;
+    gt  = __builtin_gt;
+    eq  = __builtin_eq;
+    lt  = __builtin_lt;
+    leq = __builtin_leq;
+};
+

@@ -2,5 +2,6 @@
 space std {
     Some = class { data = 0; };
     None = "Some Sentinal Value";
-    Result = union { Some; None; };
+    Option = union { Some; None; };
 };
+
