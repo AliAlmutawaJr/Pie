@@ -313,11 +313,11 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
 
                             size_t balance = substr[i] == '{';
                             while (++i < substr.size() and balance) {
-
+                                balance += substr[i] == '{';
+                                balance -= substr[i] == '}';
                             }
 
-                            if (i >= substr.size()) break;
-                            if (substr[i] == '(') while (++i < substr.size() and substr[i] != ')');
+                            if (balance) util::error<except::LexerError>("Imbalanced braces inside ");
                         }
 
                         fstring_tokens.push_back({str_len - fstring_tokens.size(), lex(std::move(substr), false)});
