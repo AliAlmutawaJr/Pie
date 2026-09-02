@@ -1,20 +1,58 @@
 # Welcome to Pie Lang!
 
-![Pie Lang Logo](assets/images/PieLang_Big_Transparent.png){width=500px}
+<img src="assets/images/PieLang_Big_Transparent.png" width="500">
+<!-- ![Pie Lang Logo](assets/images/PieLang_Big_Transparent.png) -->
 
 [![C++ CI](https://github.com/AliAlmutawaJr/Pie/actions/workflows/cpp.yml/badge.svg)](https://github.com/AliAlmutawaJr/Pie/actions/workflows/cpp.yml)
 
 ## Philosophy
-<!-- This language aims to be unique, but it also should still feel familiar. Here are some of it's "features": -->
 - Pie aims to be unique yet feel familiar
 - Everything is an expression (no null/unit/none type)
 - Bare-bones (if it doesn't need to be keyword, then it isn't + no operators)
 - Still quirky (different even if the difference is not good)
 
 
+
+## Install
+
+There are 2 ways to install Pie
+
+### Pre-built binaries
+Binaries exist for:
+1- Linux
+2- Macos x86
+2- Macos Apple Silicon
+
+Check the [release section](https://github.com/AliAlmutawaJr/Pie/releases) for the download link
+
+
+### Build from source (MacOS & Linux)
+**Prerequisites:**
+
+- `git`
+- `cmake`
+- `make`
+- `C++23`
+
+Run the following in the terminal:
+```
+git clone https://github.com/AliAlmutawaJr/Pie
+cd Pie
+mkdir build
+cd build
+cmake ..
+make
+```
+
+### Build from source (Windows)
+fuck windows (for now)
+
+
+-------
+
+# Docs
+
 ### Index:
-- [Install](#install)
----
 - [Variables](#variables)
 - [Unpackments](#unpackments)
 - [Closures](#closures)
@@ -41,28 +79,6 @@
 - [Contributors](#contributors)
 - [What was said about Pie](#quotes-about-pie-lang)
 
-
-## Install
-
-There are 2 ways to install Pie
-
-##### Pre-built binaries
-Binaries exist for:
-1- Linux
-2- Macos x86
-2- Macos Apple Silicon
-
-Check the [release section](https://github.com/AliAlmutawaJr/Pie/releases) for the download link
-
-
-#### Build from source
-Make sure you have `git`, `make`, and a C++ compiler that supports C++23. Then run the following in the terminal:
-
-```
-git clone https://github.com/AliAlmutawaJr/Pie
-cd Pie
-make
-```
 
 ----
 
@@ -1008,6 +1024,7 @@ this isn't
 - [ShawSumma](https://github.com/ShawSumma)
 - [DerkT](https://github.com/DrkWithT)
 - [TheDevConnor](https://github.com/TheDevConnor)
+- [aesmail](https://github.com/aesmail)
 
 
 ##### Website forked from:

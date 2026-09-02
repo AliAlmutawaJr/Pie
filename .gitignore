@@ -3,7 +3,6 @@ Pie_debug
 run_tests
 code/
 .vscode/
-remote_includes/
 *.dSYM/
 *.txt
 !CMakeLists.txt

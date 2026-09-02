@@ -1,10 +1,12 @@
-# PIE_CMAKE_V5
 # Bundled libffi is intentionally built outside the project tree because
 # libffi's configure script rejects source directories containing spaces.
 
 cmake_minimum_required(VERSION 3.21)
 
 project(Pie LANGUAGES C CXX)
+
+# for clangd
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
