@@ -6,6 +6,7 @@ code/
 remote_includes/
 *.dSYM/
 *.txt
+!CMakeLists.txt
 testing/
 Tests/dylib
 build
