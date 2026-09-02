@@ -797,7 +797,7 @@ public:
     ValueType accessAssign(const expr::Assignment *ass, expr::Access *acc) {
         if (auto name = dynamic_cast<const expr::Name*>(acc->var.get()); name and name->name == "self") {
             if (selves.empty())
-                util::error("Can't use 'self' outside of class scope: " + ass->stringify()); // shouldn't happen anyway
+                util::error("Can't use 'self' outside of class scope: " + ass->stringify()); // ~shouldn't happen anyway~ now happens since we have static methods
 
             if (not checkMemberInThisObject(acc->name))
                 util::error("Name '" + acc->name + "' not found in object '" + acc->var->stringify() + "' in assignment: " + ass->stringify());
@@ -835,11 +835,10 @@ public:
 
 
     ValueType spaceAccessAssign(const expr::Assignment *ass, expr::SpaceAccess *sa) {
-        const auto space = findNS(sa->spaces, sa->global);
-
-        auto [_, __, type] = space->members[sa->name.ID];
-
         value::Value value = std::visit(*this, ass->rhs->variant()).value;
+
+        const auto space = findNS(sa->spaces, sa->global);
+        auto [_, __, type] = space->members[sa->name.ID];
 
         *get<value::ValuePtr>(space->members[sa->name.ID]) = typeCheck(value, type,
             "In assignment: " + ass->stringify() +
@@ -847,7 +846,7 @@ public:
         );
 
         // was this a bug??
-        // *get<value::ValuePtr>(space->members[sa->name.ID]) = std::move(value);
+        *get<value::ValuePtr>(space->members[sa->name.ID]) = std::move(value);
         return {*get<value::ValuePtr>(space->members[sa->name.ID]), type};
     }
 
@@ -2100,6 +2099,7 @@ There are no mistakes with art.)";
 
         const auto space = findNS(sa->spaces, sa->global);
         const auto& member = space->members[sa->name.ID];
+
         return {*get<value::ValuePtr>(member), get<type::TypePtr>(member)};
     }
 
@@ -5254,7 +5254,17 @@ There are no mistakes with art.)";
 
 
 
-    void print(const value::Value& value, const bool new_line = true) const { std::print("{}{}", stringify(value), new_line? '\n' : '\0'); }
+    void print(const value::Value& value, const bool new_line = true) const {
+
+        // for (const auto& [name, _, value_ptr] : v.second->members) {
+        //     if (name.name == "toString" and std::holds_alternative<expr::Closure>(*value_ptr)) {
+        //         const auto& func = get<expr::Closure>(*value_ptr);
+                
+        //     }
+        // }
+
+        std::print("{}{}", stringify(value), new_line? '\n' : '\0');
+    }
 
 
     type::TypePtr validateType(const type::TypePtr& type) {

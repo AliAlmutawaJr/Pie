@@ -20,6 +20,28 @@
 
 
 
+TEST_CASE("Weird Namespace Bug", "[BugFix]") {
+{
+    const auto src = R"(
+    space outer {
+        C1 = class { };
+        C2 = class { };
+    };
+
+    space outer {
+        CLASS = class {
+            x = outer::C1 = outer::C2();
+        };
+    };
+
+    outer::CLASS();
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+}
+
+
 TEST_CASE("Builtin Function Type", "[Type]") {
 {
     const auto src = R"(

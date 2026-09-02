@@ -284,7 +284,7 @@ void LexicalAnalysis::spaceAccessAssign(expr::SpaceAccess *acc, expr::Assignment
     for (const auto& [var, id] : space->members) {
         if (var == acc->name.name) {
             acc->name.ID = id;
-            return;
+            break;
         }
     }
 
@@ -297,7 +297,7 @@ void LexicalAnalysis::operator()(expr::Assignment *ass) {
     if (auto *acc = dynamic_cast<expr::Access*>(ass->lhs.get()))
         return accessAssign(acc, ass);
 
-    if (auto *acc = dynamic_cast<expr::SpaceAccess*>(ass->lhs.get()))
+    if (auto *acc = dynamic_cast<expr::SpaceAccess*>(ass->lhs.get())) 
         return spaceAccessAssign(acc, ass);
 
 
