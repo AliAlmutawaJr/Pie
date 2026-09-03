@@ -136,7 +136,7 @@ web: checklibs
 # ============================== GH Actions ==============================
 
 test_dylib_mac:
-	$(CC) $(VER) -dynamiclib Tests/ffi_test.cpp -o Tests/dylib
+	$(CC) $(VER) -dynamiclib -arch arm64 -arch x86_64 Tests/ffi_test.cpp -o Tests/dylib
 
 test_dylib_lnx:
 	$(CC) $(VER) -fPIC -shared Tests/ffi_test.cpp -o Tests/dylib
