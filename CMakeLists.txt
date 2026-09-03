@@ -111,7 +111,6 @@ file(MAKE_DIRECTORY "${LIBFFI_INSTALL_DIR}/lib")
 
 find_program(MAKE_EXECUTABLE NAMES gmake make REQUIRED)
 
-message(STATUS "PIE_CMAKE_V6")
 message(STATUS "libffi source:  ${LIBFFI_SOURCE_DIR}")
 message(STATUS "libffi build:   ${LIBFFI_BINARY_DIR}")
 message(STATUS "libffi install: ${LIBFFI_INSTALL_DIR}")

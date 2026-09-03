@@ -14,8 +14,14 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install GCC 14
-      run: sudo apt update && sudo apt install -y g++-14
+      run: |
+        sudo apt update
+        sudo apt install -y gcc-14 g++-14
 
     - name: Testing
-      run: mkdir build && cd build && cmake .. && make CC=g++-14 test_dylib_lnx && make CC=g++-14 gh-actions
-
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
+        cmake --build . --target test_dylib_lnx
+        cmake --build . --target gh-actions
