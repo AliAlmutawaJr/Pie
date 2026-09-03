@@ -1,7 +1,10 @@
-#include <string>
-#include <variant>
-
 #include "Value.hxx"
+
+#include <string>
+#include <utility>
+#include <variant>
+#include <unordered_set>
+
 
 
 namespace pie {
@@ -14,6 +17,11 @@ using Object = std::pair<type::TypePtr, std::shared_ptr<Members>>;
 
 
 std::string stringify(const Value& value, const size_t indent) {
+    static size_t depth = 0;
+    static std::unordered_set<Object*> seen{};
+
+    ++depth;
+
     std::string s;
 
     if (std::holds_alternative<bool>(value)) {
@@ -57,13 +65,26 @@ std::string stringify(const Value& value, const size_t indent) {
             s = "Object {\n";
 
             const std::string space(indent + 4, ' ');
-            for (const auto& [name, _, value] : v.second->members) {
+            for (const auto& [name, _, value_ptr] : v.second->members) {
                 s += space + name.stringify() + " = ";
 
-                const bool is_string = std::holds_alternative<std::string>(*value);
+                const bool is_string = std::holds_alternative<std::string>(*value_ptr);
                 if (is_string) s += '\"';
 
-                s += stringify(*value, indent + 4);
+
+                if (std::holds_alternative<Object>(*value_ptr)) {
+                    if (seen.contains(&get<Object>(*value_ptr))) {
+                        s += "...";
+                    }
+                    else {
+                        seen.insert(&get<Object>(*value_ptr));
+                        s += stringify(*value_ptr, indent + 4);
+                    }
+                }
+                else {
+                    s += stringify(*value_ptr, indent + 4);
+                }
+
 
                 if (is_string) s += '\"';
 
@@ -117,8 +138,12 @@ std::string stringify(const Value& value, const size_t indent) {
         s += '}';
     }
 
-
     else util::error("Type not found! Index: " + std::to_string(value.index()));
+
+
+    --depth;
+
+    if (depth == 0) seen.clear();
 
     return s;
 }

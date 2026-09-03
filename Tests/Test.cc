@@ -20,6 +20,62 @@
 
 
 
+TEST_CASE("Stack Overflow Issue.", "[BugFix]") {
+{
+    const auto src = R"(
+space Extended {
+  space Types {
+
+    generic: Type = class {
+      object: Any = "";
+      toString = () => object.value;
+    };
+
+    string: Type = class {
+      value: String = "";
+      metadata: Any = "";
+
+      init = () => self.metadata = generic(self);
+
+      length = (): Int => __builtin_len(value);
+      add  = (str) => __builtin_concat(self.value, str); .: returns a new value.
+      add! = (str) => self.value = self.add(str); .: changes the value itself and returns it.
+      empty? = (): Bool => __builtin_lt(self.length(), 1);
+
+      __builtin_stringify = () => "I'm a string!";
+    };
+
+  };
+
+  space Utils {
+    print = (arg) => __builtin_print(arg.__builtin_stringify());
+  };
+};
+
+String: Type = Extended::Types::string;
+
+infix + = (a: String, b: String) => String(__builtin_concat(a.value, b.value));
+
+s = String("Hello World");
+s.init();
+f = String("Goodbye World");
+__builtin_print(s.length());
+__builtin_print(s.add(", pie."));
+__builtin_print(s.value);
+__builtin_print(s.add!(", pie."));
+__builtin_print(s.value);
+n = s + f;
+__builtin_print(n.value);
+__builtin_print(s.empty?());
+
+
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+}
+
+
 TEST_CASE("Class Member Inspection", "[Class][Builtin]") {
 {
     const auto src = R"(
