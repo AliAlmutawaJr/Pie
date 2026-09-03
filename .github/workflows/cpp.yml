@@ -17,5 +17,5 @@ jobs:
       run: sudo apt update && sudo apt install -y g++-14
 
     - name: Testing
-      run: make CC=g++-14 test_dylib_lnx && make CC=g++-14 gh-actions
+      run: mkdir build && cd build && cmake .. && make CC=g++-14 test_dylib_lnx && make CC=g++-14 gh-actions
 
