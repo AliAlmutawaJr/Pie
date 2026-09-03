@@ -111,7 +111,7 @@ file(MAKE_DIRECTORY "${LIBFFI_INSTALL_DIR}/lib")
 
 find_program(MAKE_EXECUTABLE NAMES gmake make REQUIRED)
 
-message(STATUS "PIE_CMAKE_V5")
+message(STATUS "PIE_CMAKE_V6")
 message(STATUS "libffi source:  ${LIBFFI_SOURCE_DIR}")
 message(STATUS "libffi build:   ${LIBFFI_BINARY_DIR}")
 message(STATUS "libffi install: ${LIBFFI_INSTALL_DIR}")
@@ -315,9 +315,11 @@ else()
 endif()
 
 # ============================================================================
-# GitHub Actions: make gh-actions
+# Test FFI dynamic library + GitHub Actions
 # ============================================================================
 
+# The tests open "../Tests/dylib" directly, so the library must be emitted
+# exactly as Tests/dylib (no "lib" prefix and no .dylib/.so suffix).
 add_library(ffi_test_dylib SHARED EXCLUDE_FROM_ALL
     Tests/ffi_test.cpp
 )
@@ -326,8 +328,46 @@ set_target_properties(ffi_test_dylib PROPERTIES
     PREFIX ""
     SUFFIX ""
     OUTPUT_NAME "dylib"
+
+    # LIBRARY_OUTPUT_DIRECTORY is used by macOS/Linux shared libraries.
+    # RUNTIME_OUTPUT_DIRECTORY also keeps the runtime artifact in Tests on
+    # platforms where shared libraries are treated as runtime targets.
     LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/Tests"
+    RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/Tests"
 )
+
+if(APPLE)
+    # Match the original Makefile:
+    #   -dynamiclib -arch arm64 -arch x86_64
+    #
+    # SHARED already makes CMake use -dynamiclib on macOS. This property makes
+    # only the test dylib universal; Pie/libffi can still use one architecture.
+    set_target_properties(ffi_test_dylib PROPERTIES
+        OSX_ARCHITECTURES "arm64;x86_64"
+    )
+
+    add_custom_target(test_dylib_mac
+        DEPENDS ffi_test_dylib
+    )
+
+    set(PIE_TEST_DYLIB_TARGET test_dylib_mac)
+
+elseif(UNIX)
+    # SHARED already uses -shared; make PIC explicit to match the Makefile's "-fPIC -shared"
+    set_target_properties(ffi_test_dylib PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+    )
+
+    add_custom_target(test_dylib_lnx
+        DEPENDS ffi_test_dylib
+    )
+
+    set(PIE_TEST_DYLIB_TARGET test_dylib_lnx)
+
+else()
+    # Keep the library buildable on other platforms
+    set(PIE_TEST_DYLIB_TARGET ffi_test_dylib)
+endif()
 
 add_executable(run_tests_gh EXCLUDE_FROM_ALL
     Tests/Test.cc
@@ -342,7 +382,7 @@ target_compile_options(run_tests_gh PRIVATE
 
 add_custom_target(gh-actions
     COMMAND $<TARGET_FILE:run_tests_gh>
-    DEPENDS ffi_test_dylib run_tests_gh
+    DEPENDS ${PIE_TEST_DYLIB_TARGET} run_tests_gh
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     USES_TERMINAL
 )
