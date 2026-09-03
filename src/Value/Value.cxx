@@ -141,9 +141,7 @@ std::string stringify(const Value& value, const size_t indent) {
     else util::error("Type not found! Index: " + std::to_string(value.index()));
 
 
-    --depth;
-
-    if (depth == 0) seen.clear();
+    if (--depth == 0) seen.clear();
 
     return s;
 }
