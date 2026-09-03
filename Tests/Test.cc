@@ -1088,7 +1088,7 @@ S2 = class {
 
 getS2_cif = CIF({}, S2());
 
-dylib = __builtin_dlopen("Tests/dylib");
+dylib = __builtin_dlopen("../Tests/dylib");
 
 getS2_handle = __builtin_dlsym(dylib, "getS2");
 
@@ -1128,7 +1128,7 @@ S2 = class {
 modify_cif = CIF({S});
 modifyS1_cif = CIF({P});
 
-dylib = __builtin_dlopen("Tests/dylib");
+dylib = __builtin_dlopen("../Tests/dylib");
 
 modifyS1_handle    = __builtin_dlsym(dylib, "modifyS1"   );
 modifyS1Ref_handle = __builtin_dlsym(dylib, "modifyS1Ref");
@@ -1166,7 +1166,7 @@ CIF = class {
 
 getStr_cif = CIF({}, C);
 
-dylib = __builtin_dlopen("Tests/dylib");
+dylib = __builtin_dlopen("../Tests/dylib");
 
 getStr_handle = __builtin_dlsym(dylib, "getStr");
 
@@ -1191,7 +1191,7 @@ CIF = class {
 
 printText_cif = CIF({C});
 
-dylib = __builtin_dlopen("Tests/dylib");
+dylib = __builtin_dlopen("../Tests/dylib");
 
 printText_handle = __builtin_dlsym(dylib, "printText");
 
@@ -1318,7 +1318,7 @@ CIF = class {
 
 void_cif = CIF();
 
-dylib = __builtin_dlopen("Tests/dylib");
+dylib = __builtin_dlopen("../Tests/dylib");
 
 greet_handle = __builtin_dlsym(dylib, "greet");
 
@@ -1337,7 +1337,7 @@ CIF = class {
     __return_type = 0;
 };
 
-dylib = __builtin_dlopen("Tests/dylib");
+dylib = __builtin_dlopen("../Tests/dylib");
 
 add_handle = __builtin_dlsym(dylib, "add");
 
@@ -1358,7 +1358,7 @@ V = __builtin_ffi_type_void  ();
 S = __builtin_ffi_type_struct();
 I = __builtin_ffi_type_int   ();
 
-dylib = __builtin_dlopen("Tests/dylib");
+dylib = __builtin_dlopen("../Tests/dylib");
 
 printS_handle = __builtin_dlsym(dylib, "printS2");
 
