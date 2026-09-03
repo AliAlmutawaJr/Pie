@@ -13,10 +13,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install GCC 14
-      run: |
-        sudo apt update
-        sudo apt install -y gcc-14 g++-14
+    # - name: Install GCC 14
+    #   run: |
+    #     sudo apt update
+    #     sudo apt install -y gcc-14 g++-14
 
     - name: Testing
       run: |
