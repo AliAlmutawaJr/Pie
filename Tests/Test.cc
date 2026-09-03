@@ -20,11 +20,27 @@
 
 
 
+TEST_CASE("Invalid toString()", "[Class][Object][Func]") {
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+
+    toString = () => 0;
+};
+
+__builtin_print(Human("Ali", 3));
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
+
 TEST_CASE("toString() method", "[Class][Object][Func]") {
 {
     const auto src = R"(
-
-
 Human = class {
     name = "";
     age = 0;
@@ -40,8 +56,6 @@ __builtin_print(Human("Ali", 3));
 }
 {
     const auto src = R"(
-
-
 Human = class {
     name = "";
     age = 0;
@@ -50,9 +64,10 @@ Human = class {
 };
 
 __builtin_print(Human("Ali", 3));
+__builtin_print(__builtin_to_string(Human("Ali", 3)));
 )";
 
-    REQUIRE(pie::test::run(src) == R"(Ali is 3 years old!)");
+    REQUIRE(pie::test::run(src) == "Ali is 3 years old!\nAli is 3 years old!");
 }
 }
 

@@ -225,7 +225,7 @@ public:
 
         for (size_t i{}, e{}; i < fs->str.size() or e < fs->exprs.size(); ++i) {
             for (; e < fs->exprs.size() and fs->exprs[e].first == i; ++e) {
-                s += value::stringify(std::visit(*this, fs->exprs[e].second->variant()).value, 2);
+                s += stringify(std::visit(*this, fs->exprs[e].second->variant()).value, 2);
             }
 
             if (i < fs->str.size()) s.push_back(fs->str[i]);
@@ -1650,7 +1650,7 @@ public:
 
 
 
-        util::error("Namespace `" + stringify(names) + "` not found!");
+        util::error("Namespace `" + analysis::stringify(names) + "` not found!");
 
         // auto fixed_spaces = current_space;
 
@@ -2156,7 +2156,7 @@ There are no mistakes with art.)";
             type::isClass(type) and
             patterns.size() > dynamic_cast<type::LiteralType*>(type.get())->cls->blueprint->fields.size()
         )
-            util::error("Number of singles is greater than number of fields in class " + value::stringify(type));
+            util::error("Number of singles is greater than number of fields in class " + stringify(type));
 
 
         const auto& obj = get<value::Object>(value);
@@ -4087,7 +4087,7 @@ There are no mistakes with art.)";
         auto *cls = dynamic_cast<const type::LiteralType*>(type.get())->cls.get();
 
         if (call->args.size() > cls->blueprint->fields.size())
-            util::error("Too many arguments passed to constructor of class: " + value::stringify(type) + "\nin constructor call:\n" + call->stringify());
+            util::error("Too many arguments passed to constructor of class: " + stringify(type) + "\nin constructor call:\n" + call->stringify());
 
 
         value::Object obj{type, std::make_shared<value::Members>(
@@ -4124,7 +4124,7 @@ There are no mistakes with art.)";
                     auto new_type = validateType(type);
 
                     typeCheck(v, new_type,
-                        "Type mis-match in constructor of:\n" + value::stringify(new_type) + "\nMember `" +
+                        "Type mis-match in constructor of:\n" + stringify(new_type) + "\nMember `" +
                         name.stringify() + "` expected: " + new_type->text() + "\n"
                         "but got: " + arg->stringify() + " which is " + typeOf(v)->text()
                     );
@@ -4139,7 +4139,7 @@ There are no mistakes with art.)";
                 auto new_type = validateType(type); // is this.....fine??
 
                 typeCheck(v, new_type,
-                    "Type mis-match in constructor of:\n" + value::stringify(new_type) + "\nMember `" +
+                    "Type mis-match in constructor of:\n" + stringify(new_type) + "\nMember `" +
                     name.stringify() + "` expected: " + new_type->text() + "\n"
                     "but got: " + arg->stringify() + " which is " + typeOf(v)->text()
                 );
@@ -4462,7 +4462,7 @@ There are no mistakes with art.)";
                     args.cend(),
                     std::string{},
                     [this] (const auto& acc, const auto& elt) {
-                        return acc + " " + value::stringify(std::visit(*this, elt->variant()).value);
+                        return acc + " " + stringify(std::visit(*this, elt->variant()).value);
                     }
                 )
             );
@@ -4499,14 +4499,14 @@ There are no mistakes with art.)";
 
             for (ssize_t i{-10}; auto& arg : arguments) {
                 if (not std::holds_alternative<value::List>(arg))
-                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its arguments as lists. Got: " + value::stringify(arg));
+                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its arguments as lists. Got: " + stringify(arg));
 
                 auto& list = get<value::List>(arg);
                 if (list.elts->values.size() > 3)
-                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its list to have at most size 3: " + value::stringify(arg));
+                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its list to have at most size 3: " + stringify(arg));
 
                 if (list.elts->values.size() < 2)
-                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its list to have at least 2 elements {name, value}: " + value::stringify(arg));
+                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its list to have at least 2 elements {name, value}: " + stringify(arg));
 
                 value::Value name = list.elts->values.front();
                 type::TypePtr type;
@@ -4514,7 +4514,7 @@ There are no mistakes with art.)";
                     if (not std::holds_alternative<type::TypePtr>(list.elts->values[1]))
                         util::error<except::InvalidArgument>(
                             "Second member `__builtin_create_class` list argument must be a type. Got: "
-                            + value::stringify(list.elts->values[1])
+                            + stringify(list.elts->values[1])
                             + " which is: " + typeOf(list.elts->values[1])->text()
                         );
 
@@ -4527,7 +4527,7 @@ There are no mistakes with art.)";
                 if (not std::holds_alternative<std::string>(name))
                     util::error<except::InvalidArgument>(
                         "First member `__builtin_create_class` list argument must be a string. Got: "
-                        + value::stringify(name)
+                        + stringify(name)
                         + " which is: " + typeOf(name)->text()
                     );
 
@@ -4965,7 +4965,7 @@ There are no mistakes with art.)";
                 util::error(
                     "At call: " + call->stringify() + 
                     ", `__builtin_defer` expected an integer for optional argument `depth`. "
-                    "Got: " + value::stringify(depth_value) +
+                    "Got: " + stringify(depth_value) +
                     "\nwhich is: " + typeOf(depth_value)->text()
                 );
 
@@ -5082,7 +5082,7 @@ There are no mistakes with art.)";
 
 
                     if (not std::holds_alternative<BigInt>(type))
-                        util::error("Invalid C Type: " + value::stringify(type));
+                        util::error("Invalid C Type: " + stringify(type));
 
                     const auto type_id = get<BigInt>(type);
 
@@ -5123,7 +5123,7 @@ There are no mistakes with art.)";
                         if (not std::holds_alternative<value::Object>(*template_elem))
                             util::error(
                                 "A `pointer` argument was given a List, but its elements aren't structs - "
-                                "pointers to arrays of raw numbers aren't supported yet: " + value::stringify(value)
+                                "pointers to arrays of raw numbers aren't supported yet: " + stringify(value)
                             );
 
                         auto elem_shape = ffi::prepareFFI(*template_elem, FFI_TYPE_STRUCT);
@@ -5177,12 +5177,12 @@ There are no mistakes with art.)";
 
                 if (not std::holds_alternative<BigInt>(return_type_desc) and
                     not std::holds_alternative<value::Object>(return_type_desc))
-                    util::error("`__return_type` must be a C Type or a struct template Object: " + value::stringify(return_type_desc));
+                    util::error("`__return_type` must be a C Type or a struct template Object: " + stringify(return_type_desc));
             }
         }
 
-        if (not found_params) util::error("Pie CIF must have member named `__param_types`: " + value::stringify(pie_cif));
-        if (not found_return) util::error("Pie CIF must have member named `__return_type`: " + value::stringify(pie_cif));
+        if (not found_params) util::error("Pie CIF must have member named `__param_types`: " + stringify(pie_cif));
+        if (not found_return) util::error("Pie CIF must have member named `__return_type`: " + stringify(pie_cif));
 
         const auto return_type_id =
             std::holds_alternative<value::Object>(return_type_desc) ?
@@ -5262,8 +5262,7 @@ There are no mistakes with art.)";
     }
 
 
-    void print(const value::Value& value, const bool new_line = true) {
-
+    std::string stringify(const value::Value& value, const size_t indent = {}) {
         if (std::holds_alternative<value::Object>(value)) {
             const auto& object = get<value::Object>(value);
 
@@ -5281,12 +5280,15 @@ There are no mistakes with art.)";
                         );
 
 
-                    std::print("{}{}", get<std::string>(result), new_line? '\n' : '\0');
-                    return;
+                    return get<std::string>(result);
                 }
             }
         }
 
+        return value::stringify(value, indent);
+    }
+
+    void print(const value::Value& value, const bool new_line = true) {
         // fall back
         std::print("{}{}", stringify(value), new_line? '\n' : '\0');
     }
@@ -5406,7 +5408,7 @@ There are no mistakes with art.)";
 
 
 
-    type::TypePtr typeOf(const value::Value& value) const {
+    type::TypePtr typeOf(const value::Value& value) {
         if (std::holds_alternative<expr::Node > (value)) return type::builtins::Syntax();
         if (std::holds_alternative<BigInt     > (value)) return type::builtins::Int();
         if (std::holds_alternative<double     > (value)) return type::builtins::Double();
@@ -5774,7 +5776,7 @@ There are no mistakes with art.)";
 
 
 
-    static void printEnv(const value::Environment& e) noexcept {
+    void printEnv(const value::Environment& e) noexcept {
         // const auto& e = envStackToEnvMap();
 
         for (const auto& [ID, v] : e) {

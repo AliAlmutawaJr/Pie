@@ -16,6 +16,7 @@
 #include "../Utils/ConstexprLookup.hxx"
 #include "../Utils/Exceptions.hxx"
 #include "../Utils/utils.hxx"
+#include "Value/Value.hxx"
 
 
 // for libffi
@@ -163,7 +164,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"to_string">,
         Func<
-            decltype([](const auto& x, const auto&) { return stringify(x); }),
+            decltype([](const auto& x, const auto& v) { return v->stringify(x); }),
             TypeList<Any>
         >
     >{},
@@ -671,7 +672,12 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"eq">,
         Func<
-            decltype([](auto a, auto b, const auto&) { return a == b; }),
+            decltype([](auto a, auto b, const auto&) {
+                // std::clog << v->stringify(a) << " vs " << v->stringify(b) << std::endl;
+                // return a == b;
+
+                return value::operator==(a, b);
+            }),
             TypeList<Any, Any>
         >
     >{},

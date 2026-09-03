@@ -26,7 +26,10 @@ namespace type {
 namespace expr { struct Fix; }
 using Operators  = std::unordered_map<std::string, std::shared_ptr<expr::Fix>>;
 
-namespace interp { struct NameSpace; }
+namespace interp {
+    class Visitor;
+    struct NameSpace;
+}
 
 namespace value {
     struct Value;

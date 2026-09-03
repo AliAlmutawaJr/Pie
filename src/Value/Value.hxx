@@ -67,6 +67,8 @@ using ValuePtr = std::shared_ptr<Value>;
 
 std::string stringify(const Value& value, const size_t indent = {});
 [[nodiscard]] bool operator==(const Value& lhs, const Value& rhs) noexcept;
+
+
 }
 }
 
