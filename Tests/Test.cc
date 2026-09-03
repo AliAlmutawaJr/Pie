@@ -20,6 +20,44 @@
 
 
 
+TEST_CASE("Class Member Inspection", "[Class][Builtin]") {
+{
+    const auto src = R"(
+    Human = class {
+        name = "";
+        age = 0;
+    };
+
+    Named = class { name = ""; };
+
+
+__builtin_print(__builtin_object_has(Human(), "name"));
+__builtin_print(__builtin_object_has(Human(), "age"));
+
+)";
+
+    REQUIRE(pie::test::run(src) == "true\ntrue");
+}
+{
+    const auto src = R"(
+    Human = class {
+        name = "";
+        age = 0;
+    };
+
+    Named = class { name = ""; };
+
+
+__builtin_print(__builtin_object_has(Named(), "name"));
+__builtin_print(__builtin_object_has(Named(), "age"));
+
+)";
+
+    REQUIRE(pie::test::run(src) == "true\nfalse");
+}
+}
+
+
 TEST_CASE("Weird Namespace Bug", "[BugFix]") {
 {
     const auto src = R"(

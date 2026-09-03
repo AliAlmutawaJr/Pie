@@ -87,6 +87,7 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
         "__builtin_pop",
         "__builtin_pop_front",
         "__builtin_remove_at",
+        "__builtin_object_has",
         "__builtin_into_pack",
         "__builtin_add",
         "__builtin_sub",
@@ -1069,9 +1070,9 @@ void LexicalAnalysis::operator()(expr::OpCall *oc) {
 void LexicalAnalysis::visitType(const type::TypePtr& type) {
     if (auto expr_type = type::isExpr(type)) {
         // leave em empty for now...
-        if (const auto n = dynamic_cast<const expr::Num*>(expr_type->t.get()));
-        else if (const auto b = dynamic_cast<const expr::Bool*>(expr_type->t.get()));
-        else if (const auto s = dynamic_cast<const expr::String*>(expr_type->t.get()));
+        if      ([[maybe_unused]] const auto n = dynamic_cast<const expr::Num*>(expr_type->t.get()));
+        else if ([[maybe_unused]] const auto b = dynamic_cast<const expr::Bool*>(expr_type->t.get()));
+        else if ([[maybe_unused]] const auto s = dynamic_cast<const expr::String*>(expr_type->t.get()));
 
         else if (const auto id = findVariable(type->text()); id) {
             expr_type->ID = *id;
@@ -1088,8 +1089,9 @@ void LexicalAnalysis::visitType(const type::TypePtr& type) {
         std::visit(*this, expr_type->t->variant());
         // else util::error<except::NameLookup>("Type `" + type->text() + "` not found!");
     }
-    else if (const auto func = type::isFunction(type)) {
-
+    else if ([[maybe_unused]] const auto func = type::isFunction(type)) {
+        for (const auto& param_type : func->params) visitType(param_type);
+        visitType(func->ret);
     }
 
     else if(const auto var = type::isList(type)) {

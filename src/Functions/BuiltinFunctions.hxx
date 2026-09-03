@@ -380,6 +380,21 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
     //* BINARY FUNCTIONS
     MapEntry<
+        S<"object_has">,
+        Func<
+            decltype([](const auto& obj, const auto& mem, const auto&) -> value::Value {
+                return std::ranges::find_if(
+                    obj.second->members,
+                    [&mem] (const auto& member) { return get<expr::Name>(member).name == mem; }
+                ) 
+                !=
+                obj.second->members.cend();
+            }),
+            TypeList<value::Object, std::string>
+        >
+    >{},
+
+    MapEntry<
         S<"get">,
         Func<
             decltype([](const auto& a, const auto& ind, const auto&) -> value::Value {

@@ -4351,7 +4351,7 @@ There are no mistakes with art.)";
             "to_int", "to_double", "to_string",
 
             //* binary
-            "get", "push", "pop", "pop_front", "remove_at",
+            "get", "push", "pop", "pop_front", "remove_at", "object_has",
             "add", "sub", "mul", "div", "mod",
             "pow",
             "gt", "geq", "eq", "leq", "lt",
@@ -4737,6 +4737,7 @@ There are no mistakes with art.)";
             "get"sv,
             "push"sv,
             "remove_at"sv,
+            "object_has"sv,
             "str_split"sv,
             "add"sv,
             "sub"sv,
@@ -4761,10 +4762,11 @@ There are no mistakes with art.)";
             const value::Value value2 = std::visit(*this, args[1]->variant()).value;
 
             // this is disgusting..I know
-            if (name == "get"      ) return execute<2>(stdx::get<S<"get"      >>(functions).value, {value1, value2}, this);
-            if (name == "push"     ) return execute<2>(stdx::get<S<"push"     >>(functions).value, {value1, value2}, this);
-            if (name == "remove_at") return execute<2>(stdx::get<S<"remove_at">>(functions).value, {value1, value2}, this);
-            if (name == "str_split") return execute<2>(stdx::get<S<"str_split">>(functions).value, {value1, value2}, this);
+            if (name == "get"       ) return execute<2>(stdx::get<S<"get"       >>(functions).value, {value1, value2}, this);
+            if (name == "push"      ) return execute<2>(stdx::get<S<"push"      >>(functions).value, {value1, value2}, this);
+            if (name == "remove_at" ) return execute<2>(stdx::get<S<"remove_at" >>(functions).value, {value1, value2}, this);
+            if (name == "object_has") return execute<2>(stdx::get<S<"object_has">>(functions).value, {value1, value2}, this);
+            if (name == "str_split" ) return execute<2>(stdx::get<S<"str_split" >>(functions).value, {value1, value2}, this);
 
             if (name == "add"     ) return execute<2>(stdx::get<S<"add"     >>(functions).value, {value1, value2}, this);
             if (name == "sub"     ) return execute<2>(stdx::get<S<"sub"     >>(functions).value, {value1, value2}, this);
