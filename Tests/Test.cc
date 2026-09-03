@@ -20,6 +20,43 @@
 
 
 
+TEST_CASE("toString() method", "[Class][Object][Func]") {
+{
+    const auto src = R"(
+
+
+Human = class {
+    name = "";
+    age = 0;
+};
+
+__builtin_print(Human("Ali", 3));
+)";
+
+    REQUIRE(pie::test::run(src) == R"(Object {
+    name = "Ali";
+    age = 3;
+})");
+}
+{
+    const auto src = R"(
+
+
+Human = class {
+    name = "";
+    age = 0;
+
+    toString = () => "{name} is {age} years old!";
+};
+
+__builtin_print(Human("Ali", 3));
+)";
+
+    REQUIRE(pie::test::run(src) == R"(Ali is 3 years old!)");
+}
+}
+
+
 TEST_CASE("Stack Overflow Issue.", "[BugFix]") {
 {
     const auto src = R"(
@@ -74,6 +111,7 @@ __builtin_print(s.empty?());
     REQUIRE_NOTHROW(pie::test::run(src));
 }
 }
+
 
 
 TEST_CASE("Class Member Inspection", "[Class][Builtin]") {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Declarations.hxx"
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -5255,16 +5256,38 @@ There are no mistakes with art.)";
     #endif
 
 
+    ValueType pieCall(const expr::Closure& func) {
+        expr::Call toString_call{std::make_shared<expr::Closure>(func)};
+        return std::visit(*this, toString_call.variant());
+    }
 
-    void print(const value::Value& value, const bool new_line = true) const {
 
-        // for (const auto& [name, _, value_ptr] : v.second->members) {
-        //     if (name.name == "toString" and std::holds_alternative<expr::Closure>(*value_ptr)) {
-        //         const auto& func = get<expr::Closure>(*value_ptr);
-                
-        //     }
-        // }
+    void print(const value::Value& value, const bool new_line = true) {
 
+        if (std::holds_alternative<value::Object>(value)) {
+            const auto& object = get<value::Object>(value);
+
+            for (const auto& [name, _, value_ptr] : object.second->members) {
+                if (name.name == "toString" and std::holds_alternative<expr::Closure>(*value_ptr)) {
+                    auto func = objectAccess(object, "toString").value;
+                    if (not std::holds_alternative<expr::Closure>(func)) continue;
+
+                    auto result = pieCall(get<expr::Closure>(func)).value;
+
+                    if (not std::holds_alternative<std::string>(result))
+                        util::error(
+                            "`.toString()` method must yield a string, got: " +
+                            stringify(result) + " which is " + typeOf(result)->text()
+                        );
+
+
+                    std::print("{}{}", get<std::string>(result), new_line? '\n' : '\0');
+                    return;
+                }
+            }
+        }
+
+        // fall back
         std::print("{}{}", stringify(value), new_line? '\n' : '\0');
     }
 
