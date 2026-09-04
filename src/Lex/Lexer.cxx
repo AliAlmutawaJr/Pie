@@ -69,6 +69,64 @@ bool validNameChar(const char c) noexcept {
     return isalnum(c);
 }
 
+
+CharClass classify(const char c) noexcept {
+    using enum CharClass;
+
+    if (c >= '0' and c <= '9') return DIGIT;
+    if (
+        (c >= 'a' and c <= 'z') or
+        (c >= 'A' and c <= 'Z')
+    ) return NAME;
+
+    switch (c) {
+        case '=': return ASSIGN  ;
+        case ':': return COLON   ;
+        case ',': return COMMA   ;
+        case '.': return DOT     ;
+        case ';': return SEMI    ;
+
+        case '"': return QUOTE   ;
+        case '`': return BACKTICK;
+
+        case '(': return OPEN_PAREN  ;
+        case ')': return CLOSED_PAREN;
+
+        case '{': return OPEN_BRACE  ;
+        case '}': return CLOSED_BRACE;
+
+        case '\n': return NEW_LINE;
+
+        case '?':
+        case '!':
+        case '@':
+        case '#':
+        case '$':
+        case '%':
+        case '^':
+        case '&':
+        case '|':
+        case '*':
+        case '+':
+        case '~':
+        case '-':
+        case '_':
+        case '\\':
+        case '\'':
+        case '/':
+        case '<':
+        case '>':
+        case '[':
+        case ']':
+        return NAME;
+    }
+
+
+    return NONE;
+    // util::error<except::LexerError>(std::string{"Uknown char: "} + c);
+}
+
+
 token::Tokens lex(const std::string& src, const bool check_for_semis) {
     token::TokenLines lines = {{}};
     token::Tokens line;
@@ -89,13 +147,12 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
 
     for (size_t index{}; index < src.length(); ++index) {
         try {
-        switch (src[index]) {
+        switch (classify(src[index])) {
             using enum token::TokenKind;
+            // using enum CharClass;
+            using CC = CharClass;
 
-            #pragma GCC diagnostic push
-            #pragma GCC diagnostic ignored "-Wpedantic"
-            case '0' ... '9':
-            #pragma GCC diagnostic pop
+            case CC::DIGIT:
             {
                 const auto beginning = index;
                 while (++index < src.size() and isdigit(static_cast<unsigned char>(src[index])));
@@ -119,33 +176,7 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
             } break;
 
 
-            case '?':
-            case '!':
-            case '@':
-            case '#':
-            case '$':
-            case '%':
-            case '^':
-            case '&':
-            case '|':
-            case '*':
-            case '+':
-            case '~':
-            case '-':
-            case '_':
-            case '\\':
-            case '\'':
-            case '/':
-            case '<':
-            case '>':
-            case '[':
-            case ']':
-            #pragma GCC diagnostic push
-            #pragma GCC diagnostic ignored "-Wpedantic"
-            case 'a' ... 'z':
-            case 'A' ... 'Z':
-            #pragma GCC diagnostic pop
-            {
+            case CC::NAME: {
                 const auto beginning = index;
                 while (++index < src.size() and validNameChar(src[index]));
 
@@ -177,7 +208,7 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
             } break;
 
 
-            case '=':
+            case CC::ASSIGN:
                 if (src.at(index + 1) == '>')
                     push({FAT_ARROW, {src[index], src[++index]}, {}});
                 // allows for "==" to be used as a name
@@ -192,8 +223,8 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
 
                 break;
 
-            case ',': push({COMMA, {src[index]}, {}}); break;
-            case '.':
+            case CC::COMMA: push({COMMA, {src[index]}, {}}); break;
+            case CC::DOT:
                 if (src.at(index + 1) == ':') {
                     if (src.at(index + 2) == ':') {
                         for(
@@ -224,33 +255,34 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
 
                 break;
 
-            case ':': 
+            case CC::COLON: 
                 if      (src.at(index + 1) == ':') push({SCOPE_RESOLVE, "::", {}}), ++index;
                 else if (src      [index + 1] == '=') push({WALRUS       , ":=", {}}), ++index;
                 else                                  push({COLON, ":", {}});
                 break;
 
-            case ';':
+            case CC::SEMI:
                 push({SEMI, ";", {}});
                 lines.push_back({});
                 break;
 
-            case '`': push({BACKTICK, "`", {}}); break;
+            case CC::BACKTICK: push({BACKTICK, "`", {}}); break;
 
-            case '\n':
+            case CC::NEW_LINE:
                 ++line_count;
                 column_count = 1;
                 line_starting_index = index + 1;
                 break;
 
-            case '(': push({L_PAREN, {src[index]}, {}}); break;
-            case ')': push({R_PAREN, {src[index]}, {}}); break;
+            case CC::OPEN_PAREN  : push({L_PAREN, {src[index]}, {}}); break;
+            case CC::CLOSED_PAREN: push({R_PAREN, {src[index]}, {}}); break;
 
-            case '{': push({L_BRACE, {src[index]}, {}}); break;
 
-            case '}': push({R_BRACE, {src[index]}, {}}); break;
+            case CC::OPEN_BRACE  : push({L_BRACE, {src[index]}, {}}); break;
+            case CC::CLOSED_BRACE: push({R_BRACE, {src[index]}, {}}); break;
 
-            case '"': {
+
+            case CC::QUOTE: {
                 size_t str_len{};
                 std::string str;
                 std::vector<std::pair<size_t, token::Tokens>> fstring_tokens;
