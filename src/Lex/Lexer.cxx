@@ -131,35 +131,52 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
     token::TokenLines lines = {{}};
     token::Tokens line;
 
-    const auto emplace = [&lines] (auto&&... args) {
-        return lines.back().emplace_back(std::forward<decltype(args)>(args)...);
-    };
 
-    const auto push = [&lines] (token::Token token) {
-        return lines.back().push_back(std::move(token));
-    };
-
-
-    [[maybe_unused]] size_t column_count = 1;
-    size_t line_count = 1;
+    size_t from_line   = 1, to_line = 1;
+    size_t from_column = 1, to_column = 1;
     size_t line_starting_index{};
 
 
-    for (size_t index{}; index < src.length(); ++index) {
+    const auto emplace = [&] (auto&&... args) {
+
+        if constexpr (sizeof...(args) == 2) {
+            return lines.back().emplace_back(
+                std::forward<decltype(args)>(args)...,
+                token::SourceSpan{{from_line, from_column}, {to_line, to_column}}
+            );
+        }
+        else
+            return lines.back().emplace_back(std::forward<decltype(args)>(args)...);
+    };
+
+    // const auto push = [&] (token::Token token) {
+    //     return lines.back().push_back(std::move(token));
+    // };
+
+
+
+    for (size_t index{}; index < src.length(); ++index, ++to_column) {
+        // catch up!
+        from_line   = to_line  ;
+        from_column = to_column;
+
+
         try {
         switch (classify(src[index])) {
             using enum token::TokenKind;
             // using enum CharClass;
             using CC = CharClass;
+            using token::SourceSpan;
 
-            case CC::DIGIT:
-            {
+            case CC::DIGIT: {
                 const auto beginning = index;
-                while (++index < src.size() and isdigit(static_cast<unsigned char>(src[index])));
+                // idky i obsecure code so much but it's kinda fun
+                for (++to_column; ++index < src.size() and isdigit(static_cast<unsigned char>(src[index])); ++to_column);
 
                 bool is_name = validNameChar(src[index]);
                 if (is_name) {
-                    while (++index < src.size() and validNameChar(src[index]));
+                    for (++to_column; ++index < src.size() and validNameChar(src[index]); ++to_column);
+                    --to_column;
                     emplace(NAME, src.substr(beginning, index - beginning));
                     --index;
                     break;
@@ -168,9 +185,10 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                 bool is_float = false;
                 if (src[index] == '.' and isdigit(static_cast<unsigned char>(src.at(index + 1)))) {
                     is_float = true;
-                    while (isdigit(static_cast<unsigned char>(src.at(++index))));
+                    for (++to_column; isdigit(static_cast<unsigned char>(src.at(++index))); ++to_column);
                 }
 
+                --to_column;
                 emplace(is_float ? FLOAT : INT, src.substr(beginning, index - beginning));
                 --index;
             } break;
@@ -178,10 +196,11 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
 
             case CC::NAME: {
                 const auto beginning = index;
-                while (++index < src.size() and validNameChar(src[index]));
+                for (++to_column; ++index < src.size() and validNameChar(src[index]); ++to_column);
 
+                --to_column;
                 const auto word = src.substr(beginning, index - beginning);
-
+                --index;
 
                 if (word == "__TEXT__") [[unlikely]] {
                     std::string line_text;
@@ -189,14 +208,12 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                     for (size_t ind = line_starting_index; ind < src.size() and src[ind] != '\n'; ++ind)
                         line_text += src[ind];
 
-                    push({STRING, line_text, {}});
-                    --index;
+                    emplace(STRING, line_text);
                     break;
                 }
 
                 if (word == "__LINE__") [[unlikely]] {
-                    push({INT, std::to_string(line_count), {}});
-                    --index;
+                    emplace(INT, std::to_string(to_line));
                     break;
                 }
 
@@ -204,26 +221,27 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                 const token::TokenKind token = keyword(word);
 
                 emplace(token, word);
-                --index;
             } break;
 
 
             case CC::ASSIGN:
-                if (src.at(index + 1) == '>')
-                    push({FAT_ARROW, {src[index], src[++index]}, {}});
+                if (src.at(index + 1) == '>') {
+                    ++to_column;
+                    emplace(FAT_ARROW, std::string{src[index], src[++index]});
+                }
                 // allows for "==" to be used as a name
                 else if ((src[index + 1] == '=')) {
                     const auto beginning = index++;
-                    for (; src.at(index + 1) == '='; ++index);
+                    for (++to_column; src.at(index + 1) == '='; ++index, ++to_column);
 
-                    push({NAME, src.substr(beginning, index - beginning + 1), {}});
+                    emplace(NAME, src.substr(beginning, index - beginning + 1));
                 }
                 else
-                    push({ASSIGN, {src[index]}, {}});
+                    emplace(ASSIGN, std::string{src[index]});
 
                 break;
 
-            case CC::COMMA: push({COMMA, {src[index]}, {}}); break;
+            case CC::COMMA: emplace(COMMA, std::string{src[index]}); break;
             case CC::DOT:
                 if (src.at(index + 1) == ':') {
                     if (src.at(index + 2) == ':') {
@@ -233,8 +251,8 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                             ++index
                         ) {
                             if (src[index] == '\n') {
-                                ++line_count;
-                                column_count = 1;
+                                ++to_line;
+                                to_column = 0;
                             }
                         }
 
@@ -242,44 +260,58 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                     }
                     else {
                         while(++index < src.length() and src[index] != '\n');
-                        ++line_count;
-                        column_count = 1;
+                        ++to_line;
+                        to_column = 0;
                     }
                 }
-                else if (src[index + 1] == '.' and src.at(index + 2) == '.')
-                    push({ELLIPSIS, {src[index], src[++index], src[++index]}, {}});
-                else if (src[index + 1] == '.')
-                    push({CASCADE , {src[index], src[++index], {}}, {}});
+                else if (src[index + 1] == '.' and src.at(index + 2) == '.') {
+                    to_column += 2;
+                    emplace(ELLIPSIS, std::string{src[index], src[++index], src[++index]});
+                }
+                else if (src[index + 1] == '.') {
+                    ++to_column;
+                    emplace(CASCADE ,std::string {src[index], src[++index]});
+                }
                 else
-                    push({DOT, {src[index]}, {}});
+                    emplace(DOT, std::string{src[index]});
 
                 break;
 
             case CC::COLON: 
-                if      (src.at(index + 1) == ':') push({SCOPE_RESOLVE, "::", {}}), ++index;
-                else if (src      [index + 1] == '=') push({WALRUS       , ":=", {}}), ++index;
-                else                                  push({COLON, ":", {}});
+                if (src.at(index + 1) == ':') {
+                    ++to_column;
+                    ++index;
+                    emplace(SCOPE_RESOLVE, "::");
+                }
+                else if (src[index + 1] == '=') {
+                    ++to_column;
+                    ++index;
+                    emplace(WALRUS, ":=");
+                }
+                else
+                    emplace(COLON, ":" );
+
                 break;
 
             case CC::SEMI:
-                push({SEMI, ";", {}});
-                lines.push_back({});
+                emplace(SEMI, ";");
+                lines.emplace_back();
                 break;
 
-            case CC::BACKTICK: push({BACKTICK, "`", {}}); break;
+            case CC::BACKTICK: emplace(BACKTICK, "`"); break;
 
             case CC::NEW_LINE:
-                ++line_count;
-                column_count = 1;
+                ++to_line;
+                to_column = 0;
                 line_starting_index = index + 1;
                 break;
 
-            case CC::OPEN_PAREN  : push({L_PAREN, {src[index]}, {}}); break;
-            case CC::CLOSED_PAREN: push({R_PAREN, {src[index]}, {}}); break;
+            case CC::OPEN_PAREN  : emplace(L_PAREN, std::string{src[index]}); break;
+            case CC::CLOSED_PAREN: emplace(R_PAREN, std::string{src[index]}); break;
 
 
-            case CC::OPEN_BRACE  : push({L_BRACE, {src[index]}, {}}); break;
-            case CC::CLOSED_BRACE: push({R_BRACE, {src[index]}, {}}); break;
+            case CC::OPEN_BRACE  : emplace(L_BRACE, std::string{src[index]}); break;
+            case CC::CLOSED_BRACE: emplace(R_BRACE, std::string{src[index]}); break;
 
 
             case CC::QUOTE: {
@@ -288,11 +320,13 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                 std::vector<std::pair<size_t, token::Tokens>> fstring_tokens;
 
                 while(src.at(++index) != '"') {
-                    const char c = src[index];
+                    ++to_column;
 
+                    const char c = src[index];
                     if (c == '\\') {
+                        ++to_column;
                         switch (src[++index]) {
-                            // f-strings
+                            // to avoid f-strings
                             case '{': str.push_back('{'); break;
                             case '}': str.push_back('}'); break;
 
@@ -300,8 +334,8 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                             case '"' : str.push_back('"' ); break;
                             case 'n' : 
                                 str.push_back('\n');
-                                ++line_count;
-                                column_count = 1;
+                                ++to_line;
+                                to_column = 1;
                                 break;
                             case 't' : str.push_back('\t'); break;
                             case 'v' : str.push_back('\v'); break;
@@ -337,6 +371,7 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                         if (closing_brace <= index + 1) util::error<except::LexerError>("Invalid fstring!");
 
                         auto substr = src.substr(index + 1, closing_brace - index - 1);
+                        to_column += closing_brace - index;
 
                         for (size_t i{}; i < substr.size(); ++i) {
                             if (substr[i] == ';' or substr[i] == '}' or substr[i] == ')')
@@ -352,28 +387,35 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                             if (balance) util::error<except::LexerError>("Imbalanced braces inside ");
                         }
 
-                        fstring_tokens.push_back({str_len - fstring_tokens.size(), lex(std::move(substr), false)});
                         index = closing_brace;
+                        fstring_tokens.push_back({str_len - fstring_tokens.size(), lex(std::move(substr), false)});
                     }
                     else {
+                        // if (c == '\n') {
+                            // ++to_line;
+                            // to_column = 0
+                        // };
 
-                        line_count += (c == '\n');
-                        column_count = 1;
+                        to_line += (c == '\n');
+                        to_column *= (1 - (c == '\n'));
 
                         str.push_back(c);
                     }
 
                     ++str_len;
                 }
+                ++to_column;
 
                 if (fstring_tokens.empty())
-                    push({STRING, str, {}});
+                    emplace(STRING, str);
                 else
-                    push({FSTRING, str, fstring_tokens});
+                    emplace(FSTRING, str, SourceSpan{{from_line, from_column}, {to_line, to_column}}, fstring_tokens);
             } break;
 
 
-            default: break;
+            default:
+            // ++to_column;
+                break;
         }
         }
         catch(const except::LexerError& e) {

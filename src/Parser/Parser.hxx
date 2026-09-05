@@ -452,8 +452,8 @@ public:
         auto snapshot = checkpoint();
 
         for (auto& [ind, tokens] : token.fstring_tokens) {
-            tokens.push_back({token::TokenKind::SEMI, ";", {}});
-            tokens.push_back({token::TokenKind::END, "EOF", {}});
+            tokens.emplace_back(token::TokenKind::SEMI, ";"  );
+            tokens.emplace_back(token::TokenKind::END , "EOF");
             resetTokens(std::move(tokens));
             inners.emplace_back(ind, parseExpr());
         }

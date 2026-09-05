@@ -123,15 +123,17 @@ constexpr const char* stringify(const TokenKind token) noexcept {
 }
 
 
+struct SourceLocation { size_t line, column; };
+using SourceSpan = std::pair<SourceLocation, SourceLocation>;
+// struct SourceSpan { std::pair<size_t, size_t> lines, columnsI ; };
 
-struct SourceSpan { size_t line, column; };
 struct Token {
     TokenKind kind;
     std::string text;
 
-
+    SourceSpan span;
     std::vector<std::pair<size_t, std::vector<Token>>> fstring_tokens;
-    // SourceSpan span;
+
 
     bool operator==(const Token& that) const { return kind == that.kind and text == that.text; }
 };
@@ -142,10 +144,10 @@ using TokenLines = std::vector<Tokens>;
 
 
 inline std::ostream& operator<<(std::ostream& os, const Token& token) {
-    os << "Token{" << stringify(token.kind) << ", '" << token.text << '\'';
+    os << "Token{" << stringify(token.kind) << ", ";
 
     if (token.kind == TokenKind::FSTRING) {
-        os << ", [";
+        os << '"' << token.text << '"' << ", [";
         for (const auto& [ind, tokens] : token.fstring_tokens) {
             // guaranteed by the lexer to have at least one element
             os << "{" << ind << ": " << tokens.front() << "}";
@@ -156,6 +158,14 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
 
         os << ']';
     }
+    else if (token.kind == TokenKind::STRING) {
+        os << '"' << token.text << '"';
+    }
+
+    #if !NO_ERR_LOC
+        os << ", <" << token.span.first .line << ":" << token.span.first .column
+           << ", "  << token.span.second.line << ":" << token.span.second.column << ">";
+    #endif
 
     return os << '}';
 }
@@ -168,13 +178,27 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
 template <>
 struct std::formatter<pie::token::Token> : std::formatter<std::string> {
     auto format(const pie::token::Token& token, auto& ctx) const {
-        if (token.kind == pie::token::TokenKind::FSTRING) {
+        if (
+            token.kind == pie::token::TokenKind::FSTRING or
+            token.kind == pie::token::TokenKind::STRING
+        ) {
             std::stringstream ss;
             ss << token;
             return std::format_to(ctx.out(), "{}", ss.str());
         }
         else {
-            return std::format_to(ctx.out(), "Token{{{}, '{}'}}", stringify(token.kind), token.text);
+            #if NO_ERR_LOC
+                return std::format_to(ctx.out(), "Token{{{}, '{}'}}", stringify(token.kind), token.text);
+            #else
+                return std::format_to(
+                    ctx.out(),
+                    "Token{{{}, '{}', <{}:{}, {}:{}>}}",
+                    stringify(token.kind),
+                    token.text,
+                    token.span.first .line, token.span.first .column,
+                    token.span.second.line, token.span.second.column
+                );
+            #endif
         }
     }
 };
@@ -183,14 +207,14 @@ struct std::formatter<pie::token::Token> : std::formatter<std::string> {
 template <>
 struct std::formatter<std::vector<pie::token::Token>> : std::formatter<std::string_view> {
     auto format(const std::vector<pie::token::Token>& vec, auto& ctx) const {
-        std::string result = "[";
+        std::string result = "[\n";
         bool first = true;
         for (const auto& token : vec) {
-            if (!first) result += ", ";
+            if (!first) result += ", \n";
             result += std::format("{}", token);
             first = false;
         }
-        result += "]";
+        result += "\n]";
         return std::format_to(ctx.out(), "{}", result);
     }
 };
