@@ -12,7 +12,7 @@ PLEASE NOTE THAT THE SPEC IS NOT DONE YET!
     - [2.2 Reserved Punctuation](#22-reserved-punctuation)
     - [2.3 Literal Values](#23-literal-values)
     - [2.4 Comments](#24-comments)
-- [Chapter 3: Grammer](#chapter-3-grammar)
+- [Chapter 3: Grammar](#chapter-3-grammar)
 - [Chapter 4: Expressions](#chapter-4-expressions)
     - [4.1 Numbers](#41-numbers)
     - [4.2 Booleans](#42-booleans)
@@ -232,12 +232,27 @@ type_annotation :=
 
 
 assignment :=
-      name "=" expr
+      expr "=" expr
     | name type_annotation? "=" expr
 
 
+inferred_assignment :=
+      expr ":=" expr
+
+
+unpack :=
+      "{" (expr ("," expr)*)? "}"
+    | "{" expr : expr ("," expr : expr)* "}"
+
+unpackment :=
+      unpack ("="|":=") expr
+
+
+expansion :=
+      expr "..."
+
 closure :=
-      "(" (expr type_annotation?)* ")" type_annotation?  "=>" expr
+      "(" ((expr|name type_annotation?))* ")" type_annotation?  "=>" expr
 
 
 fix :=
@@ -345,13 +360,15 @@ match :=
 
 
 loop :=
-    "loop" expr "=>" expr expr ("=>" expr)?
+    "loop" (((unpack|expr) ":")? expr)? expr ("=>" expr)?
 
 
-break := "break" expr
+break :=
+      "break" expr
 
 
-continue := "continue"
+continue :=
+      "continue"
 
 
 unary_fold :=
