@@ -7,6 +7,7 @@
 #include "../Lex/Lexer.hxx"
 #include "../Parser/Parser.hxx"
 #include "../Utils/Exceptions.hxx"
+#include "Expr/Expr.hxx"
 
 
 // potential macro
@@ -376,11 +377,11 @@ void LexicalAnalysis::operator()(expr::InferredAssignment *inf) {
 
 
 
-void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern) {
+void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern) {
     // regular assignment could re-assign an exisiting variable,
     // or create a new one if it doesn't already exisit
 
-    if (auto expr = dynamic_cast<expr::Unpackment::Expr*>(pattern)) {
+    if (auto expr = dynamic_cast<expr::unpack::Expr*>(pattern)) {
         if (
             dynamic_cast<expr::Access     *>(expr->expr.get()) or
             dynamic_cast<expr::SpaceAccess*>(expr->expr.get())
@@ -396,17 +397,17 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern) {
         expr->expr->var_ID = next();
         addVar(expr->expr->stringify(), expr->expr->var_ID);
     }
-    else if (auto list = dynamic_cast<expr::Unpackment::List*>(pattern)) {
+    else if (auto list = dynamic_cast<expr::unpack::List*>(pattern)) {
         // std::ranges::for_each(list->patterns, [this](const auto& pat) { return checkPattern(pat.get()); });
         for (const auto& pat : list->patterns) checkPattern(pat.get());
     }
-    else if (auto map = dynamic_cast<expr::Unpackment::Map*>(pattern)) {
+    else if (auto map = dynamic_cast<expr::unpack::Map*>(pattern)) {
         for (const auto& [key, val] : map->patterns) {
             checkPattern(key.get());
             checkPattern(val.get());
         }
     }
-    else if (auto pack = dynamic_cast<expr::Unpackment::Pack*>(pattern)) {
+    else if (auto pack = dynamic_cast<expr::unpack::Pack*>(pattern)) {
         // nameless pack
         if (not pack->expr) return;
 
@@ -423,27 +424,27 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern) {
 
 
 
-void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern, [[maybe_unused]] bool inferred) {
+void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern, [[maybe_unused]] bool inferred) {
     // Inferred Assignment always declares a new variable
 
-    if (auto expr = dynamic_cast<expr::Unpackment::Expr*>(pattern)) {
+    if (auto expr = dynamic_cast<expr::unpack::Expr*>(pattern)) {
         if (not dynamic_cast<expr::Name*>(expr->expr.get()))
             util::error("Only proper names may appear on the LHS of the walrus operator `:=`");
 
         expr->expr->var_ID = next();
         addVar(expr->expr->stringify(), expr->expr->var_ID);
     }
-    else if (auto list = dynamic_cast<expr::Unpackment::List*>(pattern)) {
+    else if (auto list = dynamic_cast<expr::unpack::List*>(pattern)) {
         // std::ranges::for_each(list->patterns, [this, inferred](const auto& pat) { return checkPattern(pat.get(), inferred); });
         for (const auto& pat : list->patterns) checkPattern(pat.get(), inferred);
     }
-    else if (auto map = dynamic_cast<expr::Unpackment::Map*>(pattern)) {
+    else if (auto map = dynamic_cast<expr::unpack::Map*>(pattern)) {
         for (const auto& [key, val] : map->patterns) {
             checkPattern(key.get(), inferred);
             checkPattern(val.get(), inferred);
         }
     }
-    else if (auto pack = dynamic_cast<expr::Unpackment::Pack*>(pattern)) {
+    else if (auto pack = dynamic_cast<expr::unpack::Pack*>(pattern)) {
         if (const auto id = findVariable(pack->expr->stringify()); id) {
             pack->expr->var_ID = *id;
             if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
@@ -457,15 +458,24 @@ void LexicalAnalysis::checkPattern(expr::Unpackment::Pattern *pattern, [[maybe_u
 
 
 
+void LexicalAnalysis::operator()(expr::InferredUnpackment *unpack) {
+    constexpr auto INFERRED = true;
+
+    std::visit(*this, unpack->rhs->variant());
+
+    checkPattern(unpack->pattern.get(), INFERRED);
+}
+
+
 void LexicalAnalysis::operator()(expr::Unpackment *unpack) {
     std::visit(*this, unpack->rhs->variant());
 
-    if (unpack->inferred) {
-        checkPattern(unpack->pattern.get(), unpack->inferred);
-    }
-    else {
-        checkPattern(unpack->pattern.get());
-    }
+    if (const auto id = findVariable(unpack->type->text()))
+        unpack->type->ID = *id;
+    else
+        std::visit(*this, expr::Type{unpack->type}.variant());
+
+    checkPattern(unpack->pattern.get());
 }
 
 
@@ -503,7 +513,7 @@ void LexicalAnalysis::operator()(expr::Closure *c) {
 
     ScopeGuard sg{this};
 
-    for (const auto& [name, type] : std::views::zip(c->params, c->type.params)) {
+    for (const auto& [param, type] : std::views::zip(c->params, c->type.params)) {
         std::visit(*this, expr::Type{type}.variant());
 
         if (auto expr_type = type::isExpr(type)) {
@@ -511,8 +521,16 @@ void LexicalAnalysis::operator()(expr::Closure *c) {
                 expr_type->t->var_ID = *id;
         }
 
-        name.ID = next();
-        addVar(name.name, name.ID);
+        if (std::holds_alternative<expr::unpack::PatternPtr>(param)) {
+            constexpr auto INFERRED = true;
+            checkPattern(get<expr::unpack::PatternPtr>(param).get(), INFERRED);
+            // std::visit(*this, param.expr->variant());
+        }
+        else {
+            auto& regular_param = get<expr::Closure::RegularParam>(param);
+            regular_param.ID = next();
+            addVar(regular_param.expr->stringify(), regular_param.ID);
+        }
     }
 
     std::visit(*this, expr::Type{c->type.ret}.variant());

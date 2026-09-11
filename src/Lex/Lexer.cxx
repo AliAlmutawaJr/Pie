@@ -142,7 +142,7 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
         if constexpr (sizeof...(args) == 2) {
             return lines.back().emplace_back(
                 std::forward<decltype(args)>(args)...,
-                token::SourceSpan{{from_line, from_column}, {to_line, to_column}}
+                util::SourceSpan{{from_line, from_column}, {to_line, to_column}}
             );
         }
         else
@@ -166,7 +166,7 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
             using enum token::TokenKind;
             // using enum CharClass;
             using CC = CharClass;
-            using token::SourceSpan;
+            using util::SourceSpan;
 
             case CC::DIGIT: {
                 const auto beginning = index;

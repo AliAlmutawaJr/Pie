@@ -39,7 +39,7 @@ struct StringID {
 struct Num : Expr {
     std::string num;
 
-    explicit Num(std::string n) noexcept : num{std::move(n)} {}
+    explicit Num(std::string n, util::SourceSpan sp) noexcept : Expr{std::move(sp)}, num{std::move(n)} { }
 
     std::string stringify(const size_t = 0) const override { return num; }
 
@@ -52,7 +52,7 @@ struct Num : Expr {
 struct Bool : Expr {
     bool boolean;
 
-    explicit Bool(const bool b) noexcept : boolean{b} {}
+    explicit Bool(const bool b, util::SourceSpan sp) noexcept : Expr{std::move(sp)}, boolean{b} { }
 
     std::string stringify(const size_t = 0) const override { return boolean ? "true" : "false"; }
 
@@ -65,7 +65,7 @@ struct Bool : Expr {
 struct String : Expr {
     std::string str;
 
-    explicit String(std::string s) noexcept : str{std::move(s)} {}
+    explicit String(std::string s, util::SourceSpan sp) noexcept : Expr{std::move(sp)} , str{std::move(s)} {}
 
     std::string stringify(const size_t = 0) const override { return '"' + str + '"'; }
 
@@ -79,8 +79,8 @@ struct FString : Expr {
     std::string str;
     std::vector<std::pair<size_t, ExprPtr>> exprs;
 
-    FString(std::string s, std::vector<std::pair<size_t, ExprPtr>> es) noexcept
-    : str{std::move(s)}, exprs{std::move(es)} {}
+    FString(std::string s, std::vector<std::pair<size_t, ExprPtr>> es, util::SourceSpan sp = {}) noexcept
+    : Expr{std::move(sp)}, str{std::move(s)}, exprs{std::move(es)} { }
 
     std::string stringify(const size_t indent = 0) const override {
         std::string s;
@@ -111,7 +111,7 @@ struct FString : Expr {
 struct Name : Expr {
     std::string name;
 
-    explicit Name(std::string n) noexcept : name{std::move(n)} {}
+    explicit Name(std::string n, util::SourceSpan sp) noexcept : Expr{std::move(sp)}, name{std::move(n)} { }
 
     std::string stringify(const size_t = 0) const override { return name; }
 
@@ -146,7 +146,7 @@ struct Name : Expr {
 struct List : Expr {
     std::vector<ExprPtr> elements;
 
-    explicit List(std::vector<ExprPtr> elts = {}) noexcept : elements{std::move(elts)} {}
+    explicit List(std::vector<ExprPtr> elts = {}, util::SourceSpan sp = {}) noexcept : Expr{std::move(sp)}, elements{std::move(elts)} { }
 
     std::string stringify(const size_t indent = 0) const override {
         if (elements.empty()) return "{}";
@@ -175,7 +175,7 @@ struct List : Expr {
 struct Map : Expr {
     std::vector<std::pair<ExprPtr, ExprPtr>> items;
 
-    explicit Map(std::vector<std::pair<ExprPtr, ExprPtr>> elts = {}) noexcept : items{std::move(elts)} {}
+    explicit Map(std::vector<std::pair<ExprPtr, ExprPtr>> elts = {}, util::SourceSpan sp = {}) noexcept : Expr{std::move(sp)}, items{std::move(elts)} { }
     // explicit Map(std::unordered_map<ExprPtr, ExprPtr> elts = {}) noexcept : elements{std::move(elts)} {}
 
     std::string stringify(const size_t indent = 0) const override {
@@ -207,7 +207,7 @@ struct Map : Expr {
 struct Expansion : Expr {
     ExprPtr pack;
 
-    explicit Expansion(ExprPtr p) noexcept : pack{std::move(p)} {}
+    explicit Expansion(ExprPtr p, util::SourceSpan sp = {}) noexcept : Expr{std::move(sp)}, pack{std::move(p)} { }
 
 
     std::string stringify(const size_t indent = 0) const override {
@@ -227,9 +227,9 @@ struct UnaryFold : Expr {
     std::string op;
     bool left_to_right;
 
-    UnaryFold(ExprPtr p, std::string o, const bool l2r) noexcept
-    : pack{std::move(p)}, op{std::move(o)}, left_to_right{l2r}
-    {}
+    UnaryFold(ExprPtr p, std::string o, const bool l2r, util::SourceSpan sp = {}) noexcept
+    : Expr{std::move(sp)}, pack{std::move(p)}, op{std::move(o)}, left_to_right{l2r}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         if (left_to_right)
@@ -252,9 +252,9 @@ struct SeparatedUnaryFold : Expr {
     std::string op1;
     std::string op2;
 
-    SeparatedUnaryFold(ExprPtr l, ExprPtr r, std::string o1, std::string o2) noexcept
-    : lhs{std::move(l)}, rhs{std::move(r)}, op1{std::move(o1)}, op2{std::move(o2)}
-    {}
+    SeparatedUnaryFold(ExprPtr l, ExprPtr r, std::string o1, std::string o2, util::SourceSpan sp = {}) noexcept
+    : Expr{std::move(sp)}, lhs{std::move(l)}, rhs{std::move(r)}, op1{std::move(o1)}, op2{std::move(o2)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         return '(' + lhs->stringify(indent) + ' ' + op1 + " ... " + op2 + ' ' + rhs->stringify(indent) + ')';
@@ -277,9 +277,15 @@ struct BinaryFold : Expr {
     ExprPtr sep;
 
 
-    explicit BinaryFold(ExprPtr p, ExprPtr i, std::string o, const bool l2r, ExprPtr s = nullptr) noexcept
-    : pack{std::move(p)}, init{std::move(i)}, op{std::move(o)}, left_to_right{std::move(l2r)}, sep{std::move(s)}
-    {}
+    explicit BinaryFold(ExprPtr p, ExprPtr i, std::string o, const bool l2r, ExprPtr s = nullptr, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    pack{std::move(p)},
+    init{std::move(i)},
+    op{std::move(o)},
+    left_to_right{std::move(l2r)},
+    sep{std::move(s)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         if (left_to_right and sep) 
@@ -311,19 +317,25 @@ struct Assignment : Expr {
     bool is_syntax;
 
 
-    Assignment(ExprPtr l, type::TypePtr t, ExprPtr r, const bool s = false) noexcept
-    : lhs{std::move(l)}, type{std::move(t)}, rhs{std::move(r)}, is_syntax{s}
-    {}
+    Assignment(ExprPtr l, type::TypePtr t, ExprPtr r, const bool s = false, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    lhs{std::move(l)},
+    type{std::move(t)},
+    rhs{std::move(r)},
+    is_syntax{s}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         if (auto name = dynamic_cast<const Name*>(lhs.get()); name and not type::shouldReassign(type)) {
-            return name->stringify(indent) + ": " + type->text() + " = " + rhs->stringify(indent + 4);
+            return name->stringify(indent) + ": " + type->text(indent + 4) + " = " + rhs->stringify(indent + 4);
         }
 
         return lhs->stringify(indent) + " = " + rhs->stringify(indent + 4);
     }
 
     bool involvesName(const std::string_view sv) const override {
+        // todo: check the type
         return sv == stringify() or lhs->involvesName(sv) or rhs->involvesName(sv);
     }
 
@@ -336,9 +348,12 @@ struct InferredAssignment : Expr{
     ExprPtr rhs;
 
 
-    InferredAssignment(std::string n, ExprPtr r) noexcept
-    : name{std::move(n)}, rhs{std::move(r)}
-    {}
+    InferredAssignment(std::string n, ExprPtr r, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    name{std::move(n)},
+    rhs{std::move(r)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         return name.name + " := " + rhs->stringify(indent + 4);
@@ -352,65 +367,177 @@ struct InferredAssignment : Expr{
 };
 
 
-// Unpack Assignment
-struct Unpackment : Expr {
+namespace unpack {
 
-    struct Pattern { virtual ~Pattern() = default; };
-    using PatternPtr = std::unique_ptr<Pattern>;
-    using Patterns = std::vector<PatternPtr>;
+struct Pattern { virtual ~Pattern() = default; };
+using PatternPtr = std::shared_ptr<Pattern>;
+using Patterns = std::vector<PatternPtr>;
 
-    struct Expr : Pattern {
-        ExprPtr expr;
-        Expr(ExprPtr e) noexcept : expr{std::move(e)} { }
-    };
+struct Expr : Pattern {
+    ExprPtr expr;
+    Expr(ExprPtr e) noexcept : expr{std::move(e)} { }
+};
 
-    struct List : Pattern {
+struct List : Pattern {
+    Patterns patterns;
+    List(Patterns p) noexcept : patterns{std::move(p)} { }
+
+    template <typename... Ts>
+    requires (std::same_as<std::remove_cvref_t<Ts>, PatternPtr> and ...)
+    static std::shared_ptr<List> with(Ts&&... members) {
         Patterns patterns;
-        List(Patterns p) noexcept : patterns{std::move(p)} { }
+        (..., patterns.push_back(std::forward<Ts>(members)));
+        return std::make_unique<List>(std::move(patterns));
+    }
+};
 
-        template <typename... Ts>
-        requires (std::same_as<std::remove_cvref_t<Ts>, PatternPtr> and ...)
-        static std::unique_ptr<List> with(Ts&&... members) {
-            Patterns patterns;
-            (..., patterns.push_back(std::forward<Ts>(members)));
-            return std::make_unique<List>(std::move(patterns));
-        }
-    };
+struct Map : Pattern {
+    std::vector<std::pair<PatternPtr, PatternPtr>> patterns;
+    Map(std::vector<std::pair<PatternPtr, PatternPtr>> p) noexcept : patterns{std::move(p)} { }
 
-    struct Map : Pattern {
+
+    template <typename... Ts>
+    requires (std::same_as<std::remove_cvref_t<Ts>, std::pair<PatternPtr, PatternPtr>> and ...)
+    static std::shared_ptr<Map> with(Ts&&... members) {
         std::vector<std::pair<PatternPtr, PatternPtr>> patterns;
-        Map(std::vector<std::pair<PatternPtr, PatternPtr>> p) noexcept : patterns{std::move(p)} { }
+        (..., patterns.push_back(std::forward<Ts>(members)));
+        return std::make_unique<Map>(std::move(patterns));
+    }
+};
+
+struct Pack : Pattern {
+    ExprPtr expr;
+    // Pack() = default;
+    Pack(ExprPtr e) noexcept : expr{std::move(e)} { }
+};
 
 
-        template <typename... Ts>
-        requires (std::same_as<std::remove_cvref_t<Ts>, std::pair<PatternPtr, PatternPtr>> and ...)
-        static std::unique_ptr<Map> with(Ts&&... members) {
-            std::vector<std::pair<PatternPtr, PatternPtr>> patterns;
-            (..., patterns.push_back(std::forward<Ts>(members)));
-            return std::make_unique<Map>(std::move(patterns));
+
+inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t indent = 0) {
+    std::string s;
+    if (auto expr = dynamic_cast<const unpack::Expr*>(pattern)) {
+        s = expr->expr->stringify();
+    }
+    else if (auto list = dynamic_cast<const unpack::List*>(pattern)) {
+        s += '{';
+
+        for (const auto& pat : list->patterns)
+            s += stringifyPattern(pat.get(), indent + 4) + ", ";
+
+
+        // removing the trailing comma
+        s.pop_back();
+        s.pop_back();
+
+        s += '}';
+    }
+    else if (auto map = dynamic_cast<const unpack::Map*>(pattern)) {
+        s += '{';
+        for (const auto& [key, value] : map->patterns) {
+            s +=
+                stringifyPattern(key  .get(), indent + 4)
+                + ": " +
+                stringifyPattern(value.get(), indent + 4)
+                + ", ";
         }
-    };
 
-    struct Pack : Pattern {
-        ExprPtr expr;
-        // Pack() = default;
-        Pack(ExprPtr e) noexcept : expr{std::move(e)} { }
-    };
+        // removing the trailing comma
+        s.pop_back();
+        s.pop_back();
+
+        s += '}';
+    }
+    else if (auto pack = dynamic_cast<const unpack::Pack*>(pattern)) {
+        s += "...";
+
+        if (pack->expr) s+= pack->expr->stringify();
+    }
+    else util::error();
+
+    return s;
+}
 
 
+
+inline bool patternInvolves(const unpack::Pattern *pattern, const std::string_view sv) {
+
+    if (auto expr = dynamic_cast<const unpack::Expr*>(pattern)) {
+        return expr->expr->involvesName(sv);
+    }
+    else if (auto list = dynamic_cast<const unpack::List*>(pattern)) {
+        for (const auto& pat : list->patterns)
+            if (patternInvolves(pat.get(), sv)) return true;
+    }
+    else if (auto map = dynamic_cast<const unpack::Map*>(pattern)) {
+        for (const auto& [key, value] : map->patterns) {
+            if (patternInvolves(key  .get(), sv)) return true;
+            if (patternInvolves(value.get(), sv)) return true;
+        }
+    }
+    else if (auto pack = dynamic_cast<const unpack::Pack*>(pattern)) {
+        return pack->expr->involvesName(sv);
+    }
+    else util::error();
+
+    return false;
+}
+} // namespace unpack
+
+
+struct Unpackment : Expr {
     // guranteed to have at leats one element
-    PatternPtr pattern;
+    unpack::PatternPtr pattern;
+    type::TypePtr type;
     ExprPtr rhs;
-    bool inferred;
+
+    Unpackment(unpack::PatternPtr p, type::TypePtr type, ExprPtr r, util::SourceSpan sp = {}) noexcept
+    :
+    expr::Expr{std::move(sp)}, // `Expr : Pattern` shadows expr::Expr, hence the qualified name
+    pattern{std::move(p)},
+    type{std::move(type)},
+    rhs{std::move(r)}
+    { }
 
 
-    Unpackment(PatternPtr p, ExprPtr r, bool infer) noexcept
-    : pattern{std::move(p)}, rhs{std::move(r)}, inferred{infer} { }
+    std::string stringify(const size_t indent = 0) const override {
+        std::string s = stringifyPattern(pattern.get(), indent + 4);
+
+        if (not type::shouldReassign(type)) {
+            s += ": " + type->text(indent + 4);
+        }
+
+        s += " = " + rhs->stringify(indent + 4);
+        return s;
+    }
+
+    bool involvesName(const std::string_view sv) const override {
+        return sv == stringify()
+            or patternInvolves(pattern.get(), sv)
+            or rhs->involvesName(sv);
+    }
+
+    Node variant() override { return this; }
+};
+
+
+
+// Unpack Assignment
+struct InferredUnpackment : Expr {
+    // guranteed to have at leats one element
+    unpack::PatternPtr pattern;
+    ExprPtr rhs;
+
+    InferredUnpackment(unpack::PatternPtr p, ExprPtr r, util::SourceSpan sp = {}) noexcept
+    :
+    expr::Expr{std::move(sp)}, // `Expr : Pattern` shadows expr::Expr, hence the qualified name
+    pattern{std::move(p)},
+    rhs{std::move(r)}
+    { }
 
 
     std::string stringify(const size_t indent = 0) const override {
         return stringifyPattern(pattern.get(), indent + 4)
-            + (inferred ? " := " : " = ")
+            + " := "
             + rhs->stringify(indent + 4);
     }
 
@@ -421,85 +548,18 @@ struct Unpackment : Expr {
     }
 
     Node variant() override { return this; }
-
-
-
-    static std::string stringifyPattern(const Pattern *pattern, const size_t indent = 0) {
-        std::string s;
-        if (auto expr = dynamic_cast<const Expr*>(pattern)) {
-            s = expr->expr->stringify();
-        }
-        else if (auto list = dynamic_cast<const List*>(pattern)) {
-            s += '{';
-
-            for (const auto& pat : list->patterns)
-                s += stringifyPattern(pat.get(), indent + 4) + ", ";
-
-
-            // removing the trailing comma
-            s.pop_back();
-            s.pop_back();
-
-            s += '}';
-        }
-        else if (auto map = dynamic_cast<const Map*>(pattern)) {
-            s += '{';
-            for (const auto& [key, value] : map->patterns) {
-                s +=
-                    stringifyPattern(key  .get(), indent + 4)
-                    + ": " +
-                    stringifyPattern(value.get(), indent + 4)
-                    + ", ";
-            }
-
-            // removing the trailing comma
-            s.pop_back();
-            s.pop_back();
-
-            s += '}';
-        }
-        else if (auto pack = dynamic_cast<const Pack*>(pattern)) {
-            s += "...";
-
-            if (pack->expr) s+= pack->expr->stringify();
-        }
-        else util::error();
-
-        return s;
-    }
-
-
-
-    static bool patternInvolves(const Pattern *pattern, const std::string_view sv) {
-
-        if (auto expr = dynamic_cast<const Expr*>(pattern)) {
-            return expr->expr->involvesName(sv);
-        }
-        else if (auto list = dynamic_cast<const List*>(pattern)) {
-            for (const auto& pat : list->patterns)
-                if (patternInvolves(pat.get(), sv)) return true;
-        }
-        else if (auto map = dynamic_cast<const Map*>(pattern)) {
-            for (const auto& [key, value] : map->patterns) {
-                if (patternInvolves(key  .get(), sv)) return true;
-                if (patternInvolves(value.get(), sv)) return true;
-            }
-        }
-        else if (auto pack = dynamic_cast<const Pack*>(pattern)) {
-            return pack->expr->involvesName(sv);
-        }
-        else util::error();
-
-        return false;
-    }
 };
+
 
 
 struct Class : Expr {
     std::vector<std::tuple<Name, type::TypePtr, ExprPtr>> fields;
 
-    explicit Class(std::vector<std::tuple<Name, type::TypePtr, ExprPtr>> f) noexcept
-    : fields{std::move(f)} {}
+    explicit Class(std::vector<std::tuple<Name, type::TypePtr, ExprPtr>> f, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    fields{std::move(f)}
+    { }
 
 
     std::string stringify(const size_t indent = 0) const override {
@@ -536,7 +596,12 @@ struct Class : Expr {
 struct Union : Expr {
     std::vector<type::TypePtr> types;
 
-    Union(std::vector<type::TypePtr> ts) noexcept : types{std::move(ts)} {}
+    Union(std::vector<type::TypePtr> ts, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    types{std::move(ts)}
+    { }
+
 
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "union {\n";
@@ -550,7 +615,7 @@ struct Union : Expr {
     }
 
     bool involvesName(const std::string_view name) const override {
-        const type::ExprType t{std::make_shared<expr::Name>(std::string{name})};
+        const type::ExprType t{std::make_shared<expr::Name>(std::string{name}, util::SourceSpan{})};
 
         for (const auto& type : types)
             if (type->involvesT(t)) return true;
@@ -560,6 +625,7 @@ struct Union : Expr {
 
     Node variant() override { return this; }
 };
+
 
 
 struct Match : Expr {
@@ -602,8 +668,11 @@ struct Match : Expr {
     ExprPtr expr;
     std::vector<Case> cases;
 
-    Match(ExprPtr e, std::vector<Case> cs) noexcept
-    : expr{std::move(e)}, cases{std::move(cs)}
+    Match(ExprPtr e, std::vector<Case> cs, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    expr{std::move(e)},
+    cases{std::move(cs)}
     { }
 
 
@@ -663,7 +732,11 @@ private:
 struct Type : Expr {
     type::TypePtr type;
 
-    explicit Type(type::TypePtr t) noexcept : type{std::move(t)} {}
+    explicit Type(type::TypePtr t, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    type{std::move(t)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override { return type->text(indent); }
 
@@ -675,26 +748,32 @@ struct Type : Expr {
 };
 
 
+
 struct Loop : Expr {
     ExprPtr kind;
 
     // changes of `var` over the years...lol
     // ExprPtr var;
     // StringID var;
-    Unpackment::PatternPtr var;
+    unpack::PatternPtr var;
 
     ExprPtr body;
     ExprPtr els;
 
-    Loop(ExprPtr b, Unpackment::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr e = nullptr) noexcept
-    : kind{std::move(k)}, var{std::move(v)}, body{std::move(b)}, els{std::move(e)}
+    Loop(ExprPtr b, unpack::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr e = nullptr, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    kind{std::move(k)},
+    var{std::move(v)},
+    body{std::move(b)},
+    els{std::move(e)}
     { }
 
 
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "loop ";
 
-        if (var) s += "var" + Unpackment::stringifyPattern(var.get(), indent + 4) + (kind ? " : " : ": ");
+        if (var) s += "var" + unpack::stringifyPattern(var.get(), indent + 4) + (kind ? " : " : ": ");
 
         if (kind) s += "kind" + kind->stringify(indent + 4) + ' ';
 
@@ -711,7 +790,7 @@ struct Loop : Expr {
 
     bool involvesName(const std::string_view sv) const override {
         if (sv == stringify()) return true;
-        if (var and Unpackment::patternInvolves(var.get(), sv)) return true;
+        if (var and unpack::patternInvolves(var.get(), sv)) return true;
         if (kind and kind->involvesName(sv)) return true;
         if (body->involvesName(sv)) return true;
         if (els and els->involvesName(sv)) return true;
@@ -726,7 +805,11 @@ struct Loop : Expr {
 struct Break : Expr {
     ExprPtr expr;
 
-    explicit Break(ExprPtr e = nullptr) noexcept : expr{std::move(e)} {}
+    explicit Break(ExprPtr e = nullptr, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    expr{std::move(e)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         if (expr) return "break " + expr->stringify(indent + 4);
@@ -745,7 +828,11 @@ struct Break : Expr {
 struct Continue : Expr {
     ExprPtr expr;
 
-    explicit Continue(ExprPtr e = nullptr) noexcept : expr{std::move(e)} {}
+    explicit Continue(ExprPtr e = nullptr, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    expr{std::move(e)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         if (expr) return "continue " + expr->stringify(indent + 4);
@@ -762,20 +849,25 @@ struct Continue : Expr {
 
 
 struct ListComp : Expr {
-    Unpackment::PatternPtr var;
+    unpack::PatternPtr var;
     ExprPtr kind;
     ExprPtr guard;
     ExprPtr body;
 
-    ListComp(ExprPtr b, Unpackment::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr g = nullptr) noexcept
-    : var{std::move(v)}, kind{std::move(k)}, guard{std::move(g)}, body{std::move(b)}
+    ListComp(ExprPtr b, unpack::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr g = nullptr, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    var{std::move(v)},
+    kind{std::move(k)},
+    guard{std::move(g)},
+    body{std::move(b)}
     { }
 
 
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "{loop ";
 
-        if (var ) s += Unpackment::stringifyPattern(var.get(), indent + 4);
+        if (var ) s += unpack::stringifyPattern(var.get(), indent + 4);
         if (kind) s += ' ' + kind->stringify(indent + 4);
         if (guard) s += ", " + guard->stringify(indent + 4);
 
@@ -785,7 +877,7 @@ struct ListComp : Expr {
 
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify()
-            or (var and sv == Unpackment::stringifyPattern(var.get()))
+            or (var and sv == unpack::stringifyPattern(var.get()))
             or (kind and kind->involvesName(sv))
             or (guard and guard->involvesName(sv))
             or body->involvesName(sv);
@@ -795,21 +887,27 @@ struct ListComp : Expr {
 };
 
 struct MapComp : Expr {
-    Unpackment::PatternPtr var;
+    unpack::PatternPtr var;
     ExprPtr kind;
     ExprPtr guard;
     ExprPtr body1;
     ExprPtr body2;
 
-    MapComp(ExprPtr b1, ExprPtr b2, Unpackment::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr g = nullptr) noexcept
-    : var{std::move(v)}, kind{std::move(k)}, guard{std::move(g)}, body1{std::move(b1)}, body2{std::move(b2)}
+    MapComp(ExprPtr b1, ExprPtr b2, unpack::PatternPtr v = nullptr, ExprPtr k = nullptr, ExprPtr g = nullptr, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    var{std::move(v)},
+    kind{std::move(k)},
+    guard{std::move(g)},
+    body1{std::move(b1)},
+    body2{std::move(b2)}
     { }
 
 
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "{loop ";
 
-        if (var  ) s += Unpackment::stringifyPattern(var.get(), indent + 4);
+        if (var  ) s += unpack::stringifyPattern(var.get(), indent + 4);
         if (kind ) s += ' ' + kind->stringify(indent + 4);
         if (guard) s += ", " + guard->stringify(indent + 4);
 
@@ -819,7 +917,7 @@ struct MapComp : Expr {
 
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify()
-            or (var and sv == Unpackment::stringifyPattern(var.get()))
+            or (var and sv == unpack::stringifyPattern(var.get()))
             or (kind and kind->involvesName(sv))
             or (guard and guard->involvesName(sv))
             or body1->involvesName(sv)
@@ -834,9 +932,12 @@ struct Access : Expr {
     ExprPtr var;
     std::string name;
 
-    Access(ExprPtr v, std::string n) noexcept
-    : var{std::move(v)}, name{std::move(n)}
-    {}
+    Access(ExprPtr v, std::string n, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    var{std::move(v)},
+    name{std::move(n)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         return var->stringify(indent) + '.' + name;
@@ -856,9 +957,12 @@ struct Namespace : Expr {
     std::vector<ExprPtr> space;
 
 
-    explicit Namespace(std::string n, std::vector<ExprPtr> exprs) noexcept
-    : name{std::move(n)}, space{std::move(exprs)}
-    {}
+    explicit Namespace(std::string n, std::vector<ExprPtr> exprs, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    name{std::move(n)},
+    space{std::move(exprs)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "space " + name + " {\n";
@@ -884,9 +988,13 @@ struct Use : Expr {
     std::vector<std::string> spaces;
     StringID name;
 
-    Use(bool g, std::vector<std::string> ns, std::string n) noexcept
-    : global{g}, spaces{std::move(ns)}, name{std::move(n)}
-    {}
+    Use(bool g, std::vector<std::string> ns, std::string n, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    global{g},
+    spaces{std::move(ns)},
+    name{std::move(n)}
+    { }
 
 
     std::string stringify(const size_t = 0) const override {
@@ -913,9 +1021,13 @@ struct UseSpace : Expr {
     bool pull_ops;
 
 
-    UseSpace(bool g, std::vector<std::string> ns, bool ops) noexcept
-    : global{g}, spaces{std::move(ns)}, pull_ops{ops}
-    {}
+    UseSpace(bool g, std::vector<std::string> ns, bool ops, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    global{g},
+    spaces{std::move(ns)},
+    pull_ops{ops}
+    { }
 
 
     std::string stringify(const size_t = 0) const override {
@@ -949,9 +1061,14 @@ struct UseFix : Expr {
     std::string op_name;
 
 
-    UseFix(bool g, std::vector<std::string> ns, const token::TokenKind f = token::TokenKind::NONE, std::string op = "") noexcept
-    : global{g}, spaces{std::move(ns)}, filter{f}, op_name{std::move(op)}
-    {}
+    UseFix(bool g, std::vector<std::string> ns, const token::TokenKind f = token::TokenKind::NONE, std::string op = "", util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    global{g},
+    spaces{std::move(ns)},
+    filter{f},
+    op_name{std::move(op)}
+    { }
 
 
     std::string stringify(const size_t = 0) const override {
@@ -989,8 +1106,11 @@ struct UseFix : Expr {
 struct Import : Expr {
     std::filesystem::path path;
 
-    explicit Import(std::filesystem::path p) noexcept
-    : path{std::move(p)} {}
+    explicit Import(std::filesystem::path p, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    path{std::move(p)}
+    { }
 
     std::string stringify(const size_t = 0) const override {
         // auto path_str = path.string();
@@ -1014,8 +1134,13 @@ struct SpaceAccess : Expr {
     StringID name;
 
 
-    SpaceAccess(bool g, std::vector<std::string> s, std::string n) noexcept
-    : global{g}, spaces{std::move(s)}, name{std::move(n)} {}
+    SpaceAccess(bool g, std::vector<std::string> s, std::string n, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    global{g},
+    spaces{std::move(s)},
+    name{std::move(n)}
+    { }
 
     std::string stringify(const size_t = 0) const override {
 
@@ -1037,7 +1162,11 @@ struct SpaceAccess : Expr {
 
 struct Syntax : Expr {
     ExprPtr expr;
-    Syntax(ExprPtr e) noexcept : expr{std::move(e)} {}
+    Syntax(ExprPtr e, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    expr{std::move(e)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         return '`' + expr->stringify(indent + 4) + '`';
@@ -1058,7 +1187,11 @@ struct Syntax : Expr {
 // but is this the behaviour that I want?
 struct Grouping : Expr {
     ExprPtr expr;
-    Grouping(ExprPtr e) noexcept : expr{std::move(e)} {}
+    Grouping(ExprPtr e, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    expr{std::move(e)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         // return '(' + expr->stringify(indent) + ')';
@@ -1073,14 +1206,18 @@ struct Grouping : Expr {
 };
 
 
+
 struct UnaryOp : Expr {
     std::string op;
     ExprPtr expr;
 
 
-    UnaryOp(std::string o, ExprPtr e) noexcept
-    : op{std::move(o)}, expr{std::move(e)}
-    {}
+    UnaryOp(std::string o, ExprPtr e, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    op{std::move(o)},
+    expr{std::move(e)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         return '(' + op + ' ' + expr->stringify(indent) + ')';
@@ -1093,15 +1230,21 @@ struct UnaryOp : Expr {
     Node variant() override { return this; }
 };
 
+
+
 struct BinOp : Expr {
     ExprPtr lhs;
     std::string op;
     ExprPtr rhs;
 
 
-    BinOp(ExprPtr e1, std::string o, ExprPtr e2) noexcept
-    : lhs{std::move(e1)}, op{std::move(o)}, rhs{std::move(e2)}
-    {}
+    BinOp(ExprPtr e1, std::string o, ExprPtr e2, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    lhs{std::move(e1)},
+    op{std::move(o)},
+    rhs{std::move(e2)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         return '(' + lhs->stringify(indent) + ' ' + op + ' ' + rhs->stringify(indent) + ')';
@@ -1120,9 +1263,12 @@ struct PostOp : Expr {
     ExprPtr expr;
 
 
-    PostOp(std::string o, ExprPtr e) noexcept
-    : op{std::move(o)}, expr{std::move(e)}
-    {}
+    PostOp(std::string o, ExprPtr e, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    op{std::move(o)},
+    expr{std::move(e)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         return '(' + expr->stringify(indent) + ' ' + op + ')';
@@ -1136,14 +1282,19 @@ struct PostOp : Expr {
 };
 
 
-// circumfix operators
+
 struct CircumOp : Expr {
     std::string op1;
     std::string op2;
     ExprPtr expr;
 
-    CircumOp(std::string o1, std::string o2, ExprPtr e) noexcept
-    : op1{std::move(o1)}, op2{std::move(o2)}, expr{std::move(e)} {}
+    CircumOp(std::string o1, std::string o2, ExprPtr e, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    op1{std::move(o1)},
+    op2{std::move(o2)},
+    expr{std::move(e)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         return '(' + op1 + ' ' + expr->stringify(indent) + ' ' + op2 + ')';
@@ -1165,11 +1316,16 @@ struct OpCall : Expr {
 
     OpCall(
         std::string f, std::vector<std::string> ops, std::vector<ExprPtr> ex,
-        std::vector<bool> pos
+        std::vector<bool> pos,
+        util::SourceSpan sp = {}
     ) noexcept
     :
-    first{std::move(f)}, rest{std::move(ops)}, exprs{std::move(ex)}, op_pos{std::move(pos)}
-    {}
+    Expr{std::move(sp)},
+    first{std::move(f)},
+    rest{std::move(ops)},
+    exprs{std::move(ex)},
+    op_pos{std::move(pos)}
+    { }
 
 
     std::string stringify(const size_t indent = 0) const override {
@@ -1200,6 +1356,7 @@ struct OpCall : Expr {
 };
 
 
+
 struct Call : Expr {
     ExprPtr func;
 
@@ -1207,8 +1364,13 @@ struct Call : Expr {
     std::vector<ExprPtr> args;
 
 
-    Call(ExprPtr function, std::unordered_map<std::string, ExprPtr> named = {}, std::vector<ExprPtr> pos = {})
-    : func{std::move(function)}, named_args{std::move(named)}, args{std::move(pos)} { }
+    Call(ExprPtr function, std::unordered_map<std::string, ExprPtr> named = {}, std::vector<ExprPtr> pos = {}, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    func{std::move(function)},
+    named_args{std::move(named)},
+    args{std::move(pos)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         std::string s;
@@ -1251,12 +1413,16 @@ struct Call : Expr {
 };
 
 
+
 struct Closure : Expr {
-    struct Param {
-        std::string name;
+    struct RegularParam {
+        // std::string name;
+        ExprPtr expr;
         ssize_t ID = -1;
         bool is_syntax = false;
     };
+
+    using Param = std::variant<RegularParam, unpack::PatternPtr>;
 
     std::vector<Param> params;
     ExprPtr body;
@@ -1276,8 +1442,20 @@ struct Closure : Expr {
 
     std::vector<interp::NameSpace*> spaces;
 
-    Closure(std::vector<Param> ps, ExprPtr b, type::FuncType t) noexcept
-    : params{std::move(ps)}, body{std::move(b)}, type{std::move(t)} { }
+    Closure(std::vector<Param> ps, ExprPtr b, type::FuncType t, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    params{std::move(ps)},
+    body{std::move(b)},
+    type{std::move(t)}
+    { }
+
+
+    Closure(const Closure&) = default;
+    Closure(Closure&&) = default;
+    Closure& operator=(const Closure&) = default;
+    Closure& operator=(Closure&&) = default;
+    ~Closure() = default;
 
     // Closure(std::vector<std::string> ps, ExprPtr b, type::FuncType t)
     // :
@@ -1331,29 +1509,69 @@ struct Closure : Expr {
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "(";
 
-        if (not params.empty())
-            s += params[0].name + (type::shouldReassign(type.params[0]) ? "" : ": " + type.params[0]->text(indent));
+        if (not params.empty()) {
+            if (std::holds_alternative<RegularParam>(params[0])) {
+                s += get<RegularParam>(params[0]).expr->stringify();
+            }
+            else {
+                s += unpack::stringifyPattern(get<unpack::PatternPtr>(params[0]).get());
+            }
+
+            if (not type::shouldReassign(type.params[0]))
+                s+= ": " + type.params[0]->text(indent);
+        }
 
 
 
-        for(const auto& [name, type] : std::views::zip(params, type.params) | std::views::drop(1))
-            s += ", " + name.name + (type::shouldReassign(type) ? "" : ": " + type->text());
+        for(const auto& [param, type] : std::views::zip(params, type.params) | std::views::drop(1)) {
+            if (std::holds_alternative<RegularParam>(param)) {
+                s += get<RegularParam>(param).expr->stringify();
+            }
+            else {
+                s += unpack::stringifyPattern(get<unpack::PatternPtr>(param).get());
+            }
+
+            if (not type::shouldReassign(type))
+                s+= ": " + type->text(indent);
+
+            // s += ", " + name.expr->stringify() + (type::shouldReassign(type) ? "" : ": " + type->text());
+        }
 
         return s + ")" + (type::shouldReassign(type.ret)? + "" : ": " + type.ret->text()) + " => " + body->stringify(indent);
     }
 
     bool involvesName(const std::string_view sv) const override {
-        return sv == stringify() or body->involvesName(sv);
+        if (sv == stringify()) return true;
+
+        for (const auto& [param, type] : std::views::zip(params, type.params)) {
+
+            if (std::holds_alternative<RegularParam>(param)) {
+                if (get<RegularParam>(param).expr->stringify() == sv) return true;
+            }
+            // else {
+            //     // ???
+            // }
+
+
+            if (type->text() == sv) return true;
+        }
+
+        return body->involvesName(sv);
     }
 
     Node variant() override { return this; }
 };
 
 
+
 struct Block : Expr {
     std::vector<ExprPtr> lines;
 
-    explicit Block(std::vector<ExprPtr> l) noexcept : lines{std::move(l)} {};
+    explicit Block(std::vector<ExprPtr> l, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    lines{std::move(l)}
+    { }
 
 
     std::string stringify(const size_t indent = 0) const override {
@@ -1392,8 +1610,13 @@ struct Fix : Expr {
     // ExprPtr func;
 
 
-    Fix(std::string n, std::string up, std::string down, const int s)
-    : name{std::move(n)}, high{std::move(up)}, low{std::move(down)}, shift{s}
+    Fix(std::string n, std::string up, std::string down, const int s, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    name{std::move(n)},
+    high{std::move(up)},
+    low{std::move(down)},
+    shift{s}
     { }
 
 
@@ -1410,6 +1633,7 @@ struct Fix : Expr {
     virtual token::TokenKind type() const = 0;
     virtual bool isPrefix() const = 0;
 };
+
 
 
 struct Prefix : Fix {
@@ -1469,6 +1693,7 @@ struct Infix : Fix {
 struct Suffix : Fix {
     using Fix::Fix;
 
+
     std::string stringify(const size_t indent = 0) const override {
         const auto [c, token] = [this] -> std::pair<char, std::string> {
             if (shift < 0) return {'-', high};
@@ -1484,6 +1709,7 @@ struct Suffix : Fix {
         return "suffix(" + token + shifts + ") " + name + " = " + funcs[0]->stringify(indent);
     }
 
+
     std::unique_ptr<Fix> clone() const override { return std::make_unique<Suffix>(*this); }
     std::string OpName() const override { return name; }
     token::TokenKind type() const override { return token::TokenKind::SUFFIX; }
@@ -1494,8 +1720,13 @@ struct Suffix : Fix {
 
 struct Exfix : Fix {
     std::string name2;
-    Exfix(std::string n1, std::string n2, std::string up, std::string down, const int s)
-    : Fix{std::move(n1), std::move(up), std::move(down), s}, name2{std::move(n2)} {}
+
+
+    Exfix(std::string n1, std::string n2, std::string up, std::string down, const int s, util::SourceSpan sp = {}) noexcept
+    :
+    Fix{std::move(n1), std::move(up), std::move(down), s, std::move(sp)},
+    name2{std::move(n2)}
+    { }
 
     std::string stringify(const size_t indent = 0) const override {
         const auto [c, token] = [this] -> std::pair<char, std::string> {
@@ -1521,6 +1752,7 @@ struct Exfix : Fix {
 };
 
 
+
 struct Operator : Fix {
     std::vector<std::string> rest;
     std::vector<bool> op_pos;
@@ -1528,12 +1760,14 @@ struct Operator : Fix {
     Operator(
         std::string first, std::vector<std::string> rst, std::vector<bool> pos,
         std::string up, std::string down,
-        const int s
+        const int s,
+        util::SourceSpan sp = {}
     )
     : Fix{
         std::move(first),
         std::move(up), std::move(down),
-        s
+        s,
+        std::move(sp)
     },
     rest{std::move(rst)}, op_pos{std::move(pos)}
     // begin_expr{begin}, end_expr{end}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Declarations.hxx"
+#include "Lex/Token.hxx"
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -40,6 +41,9 @@
 #include "../Parser/Parser.hxx"
 #include "../Value/Value.hxx"
 #include "TreeMaker.hxx"
+
+
+#define LIFT(expr) [&] { return expr; }
 
 
 namespace pie {
@@ -424,6 +428,49 @@ public:
     }
 
 
+    std::string stringifyParam(const expr::Closure::Param& param) {
+        if (std::holds_alternative<expr::Closure::RegularParam>(param)) {
+            return get<expr::Closure::RegularParam>(param).expr->stringify();
+        }
+        else {
+            return expr::unpack::stringifyPattern(get<expr::unpack::PatternPtr>(param).get());
+        }
+    }
+
+
+    void bindParam(const expr::Closure::Param& parameter, ValueType valuetype, value::Environment& args_env) {
+        if (std::holds_alternative<expr::Closure::RegularParam>(parameter)) {
+            auto& param = get<expr::Closure::RegularParam>(parameter);
+
+            // if (param.is_syntax) {
+            //     // args_env[param.ID] = {
+            //     //     {param.expr->stringify()},
+            //     //     std::make_shared<value::Value>(valuetype.value),
+            //     //     valuetype.type
+            //     // };
+            //     // return
+            // }
+
+            args_env[param.ID] = {
+                {param.expr->stringify()},
+                std::make_shared<value::Value>(valuetype.value),
+                valuetype.type
+            };
+        }
+        else {
+            constexpr auto INFERRED = true;
+            auto& pattern = get<expr::unpack::PatternPtr>(parameter);
+            ScopeGuard sg{this};
+            bindPattern<INFERRED>(LIFT(expr::unpack::stringifyPattern(pattern.get())), pattern.get(), valuetype);
+
+            for (auto& [id, space_ref] : env.back()->env) {
+                auto& [ref, value, type] = space_ref;
+                args_env[id] = {{std::move(ref).name}, std::move(value), std::move(type)};
+            }
+        }
+    }
+
+
     ValueType operator()(const expr::UnaryFold *fold) {
         if (const auto& var = getVar(fold->var_ID, liftName(fold)); var) return *var;
 
@@ -463,11 +510,22 @@ public:
             func->type.params[second_idx] = validateType(std::move(func)->type.params[second_idx]);
 
 
+            const std::array params_strs = {
+                stringifyParam(func->params[0]),
+                stringifyParam(func->params[1]),
+            };
+
+            // const std::array args_str = {
+            //     stringifyParam(func->params[first_idx ]),
+            //     stringifyParam(func->params[second_idx]),
+            // };
+
+
             for (const auto& value : values) {
 
                 typeCheck(ret, func->type.params[first_idx],
                     "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
-                    "', parameter '" + func->params[0].name +
+                    "', parameter '" + params_strs[0] +
                     "' expected: " + func->type.params[0]->text() +
                     ", got: " + stringify(ret) + " which is " + typeOf(ret)->text()
                 );
@@ -475,14 +533,18 @@ public:
 
                 typeCheck(value, func->type.params[second_idx], 
                     "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
-                    "', parameter '" + func->params[1].name +
+                    "', parameter '" + params_strs[1] +
                     "' expected: " + func->type.params[1]->text() +
                     ", got: " + stringify(value) + " which is " + typeOf(value)->text()
                 );
 
+
                 value::Environment args_env;
-                args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret  ), func->type.params[ first_idx]};
-                args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
+
+                bindParam(func->params[ first_idx], {std::move(ret  ), func->type.params[ first_idx]}, args_env);
+                bindParam(func->params[second_idx], {std::move(value), func->type.params[second_idx]}, args_env);
+                // args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].expr->stringify()}, std::make_shared<value::Value>(ret  ), func->type.params[ first_idx]};
+                // args_env[func->params[second_idx].ID] = {{func->params[second_idx].expr->stringify()}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
 
 
                 ScopeGuard sg{this, args_env};
@@ -507,15 +569,19 @@ public:
 
 
                 value::Environment args_env;
-                args_env[func->params[1 - fold->left_to_right].ID] =
-                    {{func->params[1 - fold->left_to_right].name}, std::make_shared<value::Value>(ret)  , func->type.params[1 - fold->left_to_right]};
 
-                args_env[func->params[    fold->left_to_right].ID] =
-                    {{func->params[    fold->left_to_right].name}, std::make_shared<value::Value>(value), func->type.params[    fold->left_to_right]};
+
+                bindParam(func->params[ first_idx], {std::move(ret  ), func->type.params[ first_idx]}, args_env);
+                bindParam(func->params[second_idx], {std::move(value), func->type.params[second_idx]}, args_env);
+
+                // args_env[func->params[1 - fold->left_to_right].ID] =
+                //     {{func->params[1 - fold->left_to_right].expr->stringify()}, std::make_shared<value::Value>(ret)  , func->type.params[1 - fold->left_to_right]};
+
+                // args_env[func->params[    fold->left_to_right].ID] =
+                //     {{func->params[    fold->left_to_right].expr->stringify()}, std::make_shared<value::Value>(value), func->type.params[    fold->left_to_right]};
 
 
                 ScopeGuard sg{this, args_env};
-
                 ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
             }
         }
@@ -577,7 +643,6 @@ public:
 
 
 
-
         // // can't have any syntax type since the pack consists of values, not expressions..
         // // unless...!
         // // TODO: allow for folding over syntax...maybe
@@ -605,14 +670,16 @@ public:
             ret_type = func->type.ret;
 
             value::Environment args_env;
-            args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
-            args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
+            bindParam(func->params[ first_idx], {std::move(ret  ), func->type.params[ first_idx]}, args_env);
+            bindParam(func->params[second_idx], {std::move(value), func->type.params[second_idx]}, args_env);
+            // args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].expr->stringify()}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
+            // args_env[func->params[second_idx].ID] = {{func->params[second_idx].expr->stringify()}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
 
 
             ScopeGuard sg{this, args_env};
-
             ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
         }
+
 
         // // no overload resolution required
         // if (op->funcs.size() == 1) {
@@ -689,7 +756,7 @@ public:
 
 
         if (packlist->values.empty()) return std::visit(*this, fold->init->variant());
-    
+
         value::Value ret = std::visit(*this, fold->init->variant()).value;
 
         std::vector<value::Value> values;
@@ -739,11 +806,17 @@ public:
             func->type.params[second_idx] = validateType(std::move(func)->type.params[second_idx]);
 
 
+            const std::array params_strs = {
+                stringifyParam(func->params[0]),
+                stringifyParam(func->params[1]),
+            };
+
+
             for (value::Environment args_env; const auto& value : values) {
 
                 typeCheck(ret, func->type.params[first_idx],
                     "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
-                    "', parameter '" + func->params[0].name +
+                    "', parameter '" + params_strs[0] +
                     "' expected: " + func->type.params[0]->text() +
                     ", got: " + stringify(ret) + " which is " + typeOf(ret)->text()
                 );
@@ -751,18 +824,18 @@ public:
 
                 typeCheck(ret, func->type.params[second_idx],
                         "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
-                        "', parameter '" + func->params[1].name +
+                        "', parameter '" + params_strs[1] +
                         "' expected: " + func->type.params[1]->text() +
                         ", got: " + stringify(ret) + " which is " + typeOf(ret)->text()
                 );
 
 
-                args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
-                args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
-
+                bindParam(func->params[ first_idx], {std::move(ret  ), func->type.params[ first_idx]}, args_env);
+                bindParam(func->params[second_idx], {std::move(value), func->type.params[second_idx]}, args_env);
+                // args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].expr->stringify()}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
+                // args_env[func->params[second_idx].ID] = {{func->params[second_idx].expr->stringify()}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
 
                 ScopeGuard sg{this, args_env};
-
                 ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
             }
         }
@@ -780,12 +853,13 @@ public:
                 func->type.params[second_idx] = validateType(std::move(func)->type.params[second_idx]);
 
 
-                args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
-                args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
+                bindParam(func->params[ first_idx], {std::move(ret  ), func->type.params[ first_idx]}, args_env);
+                bindParam(func->params[second_idx], {std::move(value), func->type.params[second_idx]}, args_env);
+                // args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].expr->stringify()}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
+                // args_env[func->params[second_idx].ID] = {{func->params[second_idx].expr->stringify()}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
 
 
                 ScopeGuard sg{this, args_env};
-
                 ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
             }
         }
@@ -930,10 +1004,10 @@ public:
         if (std::holds_alternative<expr::Closure>(value)) {
             auto& closure = get<expr::Closure>(value);
             // we verified types are compatible so this is fine..should be...I hope
-            if (const auto* t = dynamic_cast<type::FuncType*>(type.get()))
+            if (const auto *t = type::isFunction(type))
                 closure.type = *t;
-            else if (const auto* t = dynamic_cast<type::BuiltinType*>(type.get()); t and t->text() != "Any")
-                    util::error();
+            else if (not type::isAny(type))
+                util::error();
             // else error("Again, Incompatible types. This should never happen. File a bug report!");
         }
 
@@ -1275,13 +1349,13 @@ public:
     template <bool INFERRED>
     void bindPattern(
         const auto& expr_str,
-        const expr::Unpackment::Pattern *pattern,
+        const expr::unpack::Pattern *pattern,
         ValueType valuetype
     ) {
-        using Expr = expr::Unpackment::Expr;
-        using List = expr::Unpackment::List;
-        using Pack = expr::Unpackment::Pack;
-        using Map  = expr::Unpackment::Map;
+        using Expr = expr::unpack::Expr;
+        using List = expr::unpack::List;
+        using Pack = expr::unpack::Pack;
+        using Map  = expr::unpack::Map;
 
         // supposedly I don't need to check if the expression is a name
         // since LexicalAnalysis should've done it..i think :)
@@ -1362,19 +1436,38 @@ public:
     }
 
 
+    ValueType operator()(const expr::InferredUnpackment *unpack) {
+        auto rhs = std::visit(*this, unpack->rhs->variant());
+        constexpr auto INFERRED = true;
+
+        bindPattern<INFERRED>(liftName(unpack), unpack->pattern.get(), rhs);
+
+
+        return rhs;
+    }
+
+
     ValueType operator()(const expr::Unpackment *unpack) {
         auto rhs = std::visit(*this, unpack->rhs->variant());
         constexpr auto INFERRED = true;
 
-        if (unpack->inferred) {
-            bindPattern<    INFERRED>(liftName(unpack), unpack->pattern.get(), rhs);
-        }
-        else {
+
+        if (type::shouldReassign(unpack->type)) {
             bindPattern<not INFERRED>(liftName(unpack), unpack->pattern.get(), rhs);
+            return rhs;
         }
+        else { // still inferred
+            auto expected_type = validateType(unpack->type);
 
+            auto checked_value = typeCheck(rhs.value, expected_type,
+                "In unpackment: " + unpack->stringify() +
+                "\nType mis-match! Expected: " + expected_type->text() + ", got: " + typeOf(rhs.value)->text()
+            );
 
-        return rhs;
+            bindPattern<INFERRED>(liftName(unpack), unpack->pattern.get(), {checked_value, expected_type});
+
+            return {checked_value, expected_type};
+        }
     }
 
 
@@ -2216,7 +2309,7 @@ There are no mistakes with art.)";
 
     void handleLoop(
         expr::Expr *body,
-        expr::Unpackment::Pattern *var,
+        expr::unpack::Pattern *var,
         expr::Expr *kind,
         expr::Expr *els,
         std::invocable<expr::Node> auto handle,
@@ -2705,7 +2798,11 @@ There are no mistakes with art.)";
             for (
                 const auto& param :closure->params
             ) {
-                if (param.is_syntax) util::error("Cannot have a 'Syntax' paramater in an overload set!");
+                if (
+                    std::holds_alternative<expr::Closure::RegularParam>(param)
+                    and get<expr::Closure::RegularParam>(param).is_syntax
+                ) 
+                    util::error("Cannot have a 'Syntax' paramater in an overload set!");
             }
         }
         return;
@@ -2788,36 +2885,56 @@ There are no mistakes with art.)";
         if (op->funcs.size() == 1) {
             func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
 
-            if (func->params[0].is_syntax) {
-                args_env[func->params[0].ID] = {
-                    {func->params[0].name},
-                    std::make_shared<value::Value>(up->expr->variant()),
-                    type::builtins::Syntax()
-                };
-            }
-            else {
+            if (std::holds_alternative<expr::unpack::PatternPtr>(func->params[0])) {
                 func->type.params[0] = validateType(std::move(func)->type.params[0]);
-                const auto arg = std::visit(*this, up->expr->variant()).value;
+                const auto arg = std::visit(*this, up->expr->variant());
 
-                typeCheck(arg, func->type.params[0],
+                typeCheck(arg.value, func->type.params[0],
                     "Type mis-match! Prefix operator '" + up->op + 
                     "' expected: " + func->type.params[0]->text() +
-                    ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+                    ", got: " + up->expr->stringify() + "\nwhich evaluated to: "
+                    + stringify(arg.value) + "\nwhich is of type" + typeOf(arg.value)->text()
                 );
 
-                args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+                constexpr auto INFERRED = true;
+                bindPattern<INFERRED>(liftName(up->expr.get()), get<expr::unpack::PatternPtr>(func->params[0]).get(), std::move(arg));
             }
+            else {
+                auto& regular_param = get<expr::Closure::RegularParam>(func->params[0]);
 
-            //* maybe should use Syntax() instead of Any() for all operators?
+                if (regular_param.is_syntax) {
+                    args_env[regular_param.ID] = {
+                        {regular_param.expr->stringify()},
+                        std::make_shared<value::Value>(up->expr->variant()),
+                        type::builtins::Syntax()
+                    };
+                }
+                else {
+                    func->type.params[0] = validateType(std::move(func)->type.params[0]);
+                    const auto arg = std::visit(*this, up->expr->variant()).value;
+
+                    typeCheck(arg, func->type.params[0],
+                        "Type mis-match! Prefix operator '" + up->op + 
+                        "' expected: " + func->type.params[0]->text() +
+                        ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+                    );
+
+                    args_env[regular_param.ID] = {{regular_param.expr->stringify()}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+                }
+
+                //* maybe should use Syntax() instead of Any() for all operators?
+            }
         }
         else { // do selection based on type
             checkNoSyntaxType(op->funcs);
 
-            const value::Value arg = std::visit(*this, up->expr->variant()).value;
+            value::Value arg = std::visit(*this, up->expr->variant()).value;
 
             func = resolveOverloadSet(op->OpName(), op->funcs, {arg});
 
-            args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+
+            bindParam(func->params[0], {std::move(arg), func->type.params[0]}, args_env);
+            // args_env[func->params[0].ID] = {{func->params[0].expr->stringify()}, std::make_shared<value::Value>(arg), func->type.params[0]};
         }
 
 
@@ -2864,51 +2981,113 @@ There are no mistakes with art.)";
         if (op->funcs.size() == 1) {
             func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
 
-            if (func->params[0].is_syntax) {
-                args_env[func->params[0].ID] = {
-                    {func->params[0].name},
-                    std::make_shared<value::Value>(bp->lhs->variant()),
-                    type::builtins::Syntax()
-                };
-            }
-            else {
+
+            if (std::holds_alternative<expr::unpack::PatternPtr>(func->params[0])) {
                 func->type.params[0] = validateType(std::move(func)->type.params[0]);
+                const auto arg = std::visit(*this, bp->lhs->variant());
 
-                const value::Value arg1 = std::visit(*this, bp->lhs->variant()).value;
-
-                typeCheck(arg1, func->type.params[0],
+                typeCheck(arg.value, func->type.params[0],
                     "Type mis-match! Infix operator '" + bp->op + 
-                    "', parameter '" + func->params[0].name +
                     "' expected: " + func->type.params[0]->text() +
-                    ", got: " + stringify(arg1) + " which is " + typeOf(arg1)->text()
+                    ", got: " + bp->lhs->stringify() + "\nwhich evaluated to: "
+                    + stringify(arg.value) + "\nwhich is of type" + typeOf(arg.value)->text()
                 );
 
-                args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg1), func->type.params[0]};
+                constexpr auto INFERRED = true;
+                bindPattern<INFERRED>(liftName(bp->lhs.get()), get<expr::unpack::PatternPtr>(func->params[0]).get(), std::move(arg));
             }
+            else {
+                auto& regular_param = get<expr::Closure::RegularParam>(func->params[0]);
+
+                if (regular_param.is_syntax) {
+                    args_env[regular_param.ID] = {
+                        {regular_param.expr->stringify()},
+                        std::make_shared<value::Value>(bp->lhs->variant()),
+                        type::builtins::Syntax()
+                    };
+                }
+                else {
+                    func->type.params[0] = validateType(std::move(func)->type.params[0]);
+
+                    const value::Value arg1 = std::visit(*this, bp->lhs->variant()).value;
+
+                    typeCheck(arg1, func->type.params[0],
+                        "Type mis-match! Infix operator '" + bp->op + 
+                        "', parameter '" + regular_param.expr->stringify() +
+                        "' expected: " + func->type.params[0]->text() +
+                        ", got: " + stringify(arg1) + " which is " + typeOf(arg1)->text()
+                    );
+
+                    args_env[regular_param.ID] = {{regular_param.expr->stringify()}, std::make_shared<value::Value>(arg1), func->type.params[0]};
+                }
+            }
+
 
 
             // RHS
-            if (func->params[1].is_syntax) {
-                args_env[func->params[1].ID] = {
-                    {func->params[1].name},
-                    std::make_shared<value::Value>(bp->lhs->variant()),
-                    type::builtins::Syntax()
-                };
-            }
-            else {
+            if (std::holds_alternative<expr::unpack::PatternPtr>(func->params[1])) {
                 func->type.params[1] = validateType(std::move(func)->type.params[1]);
+                auto arg = std::visit(*this, bp->rhs->variant());
 
-                const value::Value arg2 = std::visit(*this, bp->rhs->variant()).value;
-
-                typeCheck(arg2, func->type.params[1],
+                typeCheck(arg.value, func->type.params[1],
                     "Type mis-match! Infix operator '" + bp->op + 
-                    "', parameter '" + func->params[1].name +
                     "' expected: " + func->type.params[1]->text() +
-                    ", got: " + stringify(arg2) + " which is " + typeOf(arg2)->text()
+                    ", got: " + bp->rhs->stringify() + "\nwhich evaluated to: "
+                    + stringify(arg.value) + "\nwhich is of type" + typeOf(arg.value)->text()
                 );
 
-                args_env[func->params[1].ID] = {{func->params[1].name}, std::make_shared<value::Value>(arg2), func->type.params[1]};
+                constexpr auto INFERRED = true;
+                bindPattern<INFERRED>(liftName(bp->rhs.get()), get<expr::unpack::PatternPtr>(func->params[1]).get(), std::move(arg));
             }
+            else {
+                auto& regular_param = get<expr::Closure::RegularParam>(func->params[1]);
+
+                if (regular_param.is_syntax) {
+                    args_env[regular_param.ID] = {
+                        {regular_param.expr->stringify()},
+                        std::make_shared<value::Value>(bp->rhs->variant()),
+                        type::builtins::Syntax()
+                    };
+                }
+                else {
+                    func->type.params[1] = validateType(std::move(func)->type.params[1]);
+
+                    const value::Value arg1 = std::visit(*this, bp->rhs->variant()).value;
+
+                    typeCheck(arg1, func->type.params[1],
+                        "Type mis-match! Infix operator '" + bp->op + 
+                        "', parameter '" + regular_param.expr->stringify() +
+                        "' expected: " + func->type.params[1]->text() +
+                        ", got: " + stringify(arg1) + " which is " + typeOf(arg1)->text()
+                    );
+
+                    args_env[regular_param.ID] = {{regular_param.expr->stringify()}, std::make_shared<value::Value>(arg1), func->type.params[1]};
+                }
+            }
+
+
+            // // OLD RHS
+            // if (func->params[1].is_syntax) {
+            //     args_env[func->params[1].ID] = {
+            //         {func->params[1].expr->stringify()},
+            //         std::make_shared<value::Value>(bp->lhs->variant()),
+            //         type::builtins::Syntax()
+            //     };
+            // }
+            // else {
+            //     func->type.params[1] = validateType(std::move(func)->type.params[1]);
+
+            //     const value::Value arg2 = std::visit(*this, bp->rhs->variant()).value;
+
+            //     typeCheck(arg2, func->type.params[1],
+            //         "Type mis-match! Infix operator '" + bp->op + 
+            //         "', parameter '" + func->params[1].expr->stringify() +
+            //         "' expected: " + func->type.params[1]->text() +
+            //         ", got: " + stringify(arg2) + " which is " + typeOf(arg2)->text()
+            //     );
+
+            //     args_env[func->params[1].ID] = {{func->params[1].expr->stringify()}, std::make_shared<value::Value>(arg2), func->type.params[1]};
+            // }
         }
         else {
             checkNoSyntaxType(op->funcs);
@@ -2918,8 +3097,11 @@ There are no mistakes with art.)";
 
             func = resolveOverloadSet(op->OpName(), op->funcs, {arg1, arg2});
 
-            args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg1), func->type.params[0]};
-            args_env[func->params[1].ID] = {{func->params[1].name}, std::make_shared<value::Value>(arg2), func->type.params[1]};
+
+            bindParam(func->params[0], {std::move(arg1), func->type.params[0]}, args_env);
+            bindParam(func->params[1], {std::move(arg2), func->type.params[1]}, args_env);
+            // args_env[func->params[0].ID] = {{func->params[0].expr->stringify()}, std::make_shared<value::Value>(arg1), func->type.params[0]};
+            // args_env[func->params[1].ID] = {{func->params[1].expr->stringify()}, std::make_shared<value::Value>(arg2), func->type.params[1]};
         }
 
 
@@ -2981,36 +3163,78 @@ There are no mistakes with art.)";
         if (op->funcs.size() == 1) {
             func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
 
-            if (func->params[0].is_syntax) {
-                args_env[func->params[0].ID] = {
-                    {func->params[0].name},
-                    std::make_shared<value::Value>(pp->expr->variant()),
-                    type::builtins::Syntax()
-                };
-            }
-            else {
+            if (std::holds_alternative<expr::unpack::PatternPtr>(func->params[0])) {
                 func->type.params[0] = validateType(std::move(func)->type.params[0]);
+                const auto arg = std::visit(*this, pp->expr->variant());
 
-                const value::Value arg = std::visit(*this, pp->expr->variant()).value;
-
-                typeCheck(arg, func->type.params[0],
+                typeCheck(arg.value, func->type.params[0],
                     "Type mis-match! Suffix operator '" + pp->op + 
-                    "', parameter '" + func->params[0].name +
                     "' expected: " + func->type.params[0]->text() +
-                    ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+                    ", got: " + pp->expr->stringify() + "\nwhich evaluated to: "
+                    + stringify(arg.value) + "\nwhich is of type" + typeOf(arg.value)->text()
                 );
 
-                args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+                constexpr auto INFERRED = true;
+                bindPattern<INFERRED>(liftName(pp->expr.get()), get<expr::unpack::PatternPtr>(func->params[0]).get(), std::move(arg));
             }
+            else {
+                auto& regular_param = get<expr::Closure::RegularParam>(func->params[0]);
+
+                if (regular_param.is_syntax) {
+                    args_env[regular_param.ID] = {
+                        {regular_param.expr->stringify()},
+                        std::make_shared<value::Value>(pp->expr->variant()),
+                        type::builtins::Syntax()
+                    };
+                }
+                else {
+                    func->type.params[0] = validateType(std::move(func)->type.params[0]);
+                    const auto arg = std::visit(*this, pp->expr->variant()).value;
+
+                    typeCheck(arg, func->type.params[0],
+                        "Type mis-match! Suffix operator '" + pp->op + 
+                        "', parameter '" + regular_param.expr->stringify() +
+                        "' expected: " + func->type.params[0]->text() +
+                        ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+                    );
+
+                    args_env[regular_param.ID] = {{regular_param.expr->stringify()}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+                }
+
+                //* maybe should use Syntax() instead of Any() for all operators?
+            }
+
+            // if (func->params[0].is_syntax) {
+            //     args_env[func->params[0].ID] = {
+            //         {func->params[0].expr->stringify()},
+            //         std::make_shared<value::Value>(pp->expr->variant()),
+            //         type::builtins::Syntax()
+            //     };
+            // }
+            // else {
+            //     func->type.params[0] = validateType(std::move(func)->type.params[0]);
+            //     const value::Value arg = std::visit(*this, pp->expr->variant()).value;
+
+            //     typeCheck(arg, func->type.params[0],
+            //         "Type mis-match! Suffix operator '" + pp->op + 
+            //         "', parameter '" + func->params[0].expr->stringify() +
+            //         "' expected: " + func->type.params[0]->text() +
+            //         ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+            //     );
+
+            //     args_env[func->params[0].ID] = {{func->params[0].expr->stringify()}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+            // }
         }
         else {
             checkNoSyntaxType(op->funcs);
 
-            const value::Value arg  = std::visit(*this, pp->expr->variant()).value;
+            value::Value arg  = std::visit(*this, pp->expr->variant()).value;
 
             func = resolveOverloadSet(op->OpName(), op->funcs, {arg});
 
-            args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]};
+
+            bindParam(func->params[0], {std::move(arg), func->type.params[0]}, args_env);
+            // args_env[func->params[0].ID] = {{func->params[0].expr->stringify()}, std::make_shared<value::Value>(arg), func->type.params[0]};
         }
 
 
@@ -3055,36 +3279,79 @@ There are no mistakes with art.)";
         if (op->funcs.size() == 1) {
             func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
 
-            if (func->params[0].is_syntax) {
-                args_env[func->params[0].ID] = {
-                    {func->params[0].name},
-                    std::make_shared<value::Value>(cp->expr->variant()),
-                    type::builtins::Syntax()
-                };
-            }
-            else {
+            if (std::holds_alternative<expr::unpack::PatternPtr>(func->params[0])) {
                 func->type.params[0] = validateType(std::move(func)->type.params[0]);
+                const auto arg = std::visit(*this, cp->expr->variant());
 
-                const value::Value arg = std::visit(*this, cp->expr->variant()).value;
-
-                typeCheck(arg, func->type.params[0],
-                    "Type mis-match! Exfix operator '" + cp->op1 + 
-                    "', parameter '" + func->params[0].name +
-                    "' expected: " + func->type.params[0]->text() +
-                    ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+                typeCheck(arg.value, func->type.params[0],
+                    "Type mis-match! Suffix operator `" + cp->op1 + " : " + cp->op2 +
+                    "` expected: " + func->type.params[0]->text() +
+                    ", got: " + cp->expr->stringify() + "\nwhich evaluated to: "
+                    + stringify(arg.value) + "\nwhich is of type" + typeOf(arg.value)->text()
                 );
 
-                args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+                constexpr auto INFERRED = true;
+                bindPattern<INFERRED>(liftName(cp->expr.get()), get<expr::unpack::PatternPtr>(func->params[0]).get(), std::move(arg));
             }
+            else {
+                auto& regular_param = get<expr::Closure::RegularParam>(func->params[0]);
+
+                if (regular_param.is_syntax) {
+                    args_env[regular_param.ID] = {
+                        {regular_param.expr->stringify()},
+                        std::make_shared<value::Value>(cp->expr->variant()),
+                        type::builtins::Syntax()
+                    };
+                }
+                else {
+                    func->type.params[0] = validateType(std::move(func)->type.params[0]);
+                    const auto arg = std::visit(*this, cp->expr->variant()).value;
+
+                    typeCheck(arg, func->type.params[0],
+                        "Type mis-match! Suffix operator `" + cp->op1 + " : " + cp->op2 +
+                        "` parameter '" + regular_param.expr->stringify() +
+                        "' expected: " + func->type.params[0]->text() +
+                        ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+                    );
+
+                    args_env[regular_param.ID] = {{regular_param.expr->stringify()}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+                }
+
+                //* maybe should use Syntax() instead of Any() for all operators?
+            }
+
+
+            // if (func->params[0].is_syntax) {
+            //     args_env[func->params[0].ID] = {
+            //         {func->params[0].expr->stringify()},
+            //         std::make_shared<value::Value>(cp->expr->variant()),
+            //         type::builtins::Syntax()
+            //     };
+            // }
+            // else {
+            //     func->type.params[0] = validateType(std::move(func)->type.params[0]);
+
+            //     const value::Value arg = std::visit(*this, cp->expr->variant()).value;
+
+            //     typeCheck(arg, func->type.params[0],
+            //         "Type mis-match! Exfix operator '" + cp->op1 + 
+            //         "', parameter '" + func->params[0].expr->stringify() +
+            //         "' expected: " + func->type.params[0]->text() +
+            //         ", got: " + stringify(arg) + " which is " + typeOf(arg)->text()
+            //     );
+
+            //     args_env[func->params[0].ID] = {{func->params[0].expr->stringify()}, std::make_shared<value::Value>(arg), func->type.params[0]}; //? fixed
+            // }
         }
         else {
             checkNoSyntaxType(op->funcs);
 
-            const value::Value arg  = std::visit(*this, cp->expr->variant()).value;
+            value::Value arg  = std::visit(*this, cp->expr->variant()).value;
 
             func = resolveOverloadSet(op->OpName(), op->funcs, {arg});
 
-            args_env[func->params[0].ID] = {{func->params[0].name}, std::make_shared<value::Value>(arg), func->type.params[0]};
+            bindParam(func->params[0], {std::move(arg), func->type.params[0]}, args_env);
+            // args_env[func->params[0].ID] = {{func->params[0].expr->stringify()}, std::make_shared<value::Value>(arg), func->type.params[0]};
         }
 
 
@@ -3130,6 +3397,8 @@ There are no mistakes with art.)";
         expr::Closure* func;
         value::Environment args_env;
 
+        const auto op_name = op->OpName();
+
         if (op->funcs.size() == 1) {
 
             func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
@@ -3143,26 +3412,44 @@ There are no mistakes with art.)";
                 std::views::zip(oc->exprs, func->params, func->type.params)
             ) {
 
-                if (param.is_syntax) {
-                    args_env[param.ID] = {
-                        {param.name},
-                        std::make_shared<value::Value>(arg_expr->variant()),
-                        type::builtins::Syntax()
-                    };
-                }
-                else {
-                    param_type = validateType(std::move(param_type));
 
-                    const value::Value arg = std::visit(*this, arg_expr->variant()).value;
+                if (std::holds_alternative<expr::unpack::PatternPtr>(param)) {
+                    auto validated_type = validateType(param_type);
+                    const auto arg = std::visit(*this, arg_expr->variant());
 
-                    const auto op_name = op->OpName();
-                    typeCheck(arg, param_type,
-                        "Type mis-match! Parameter '" +
-                        op_name + "' expected type: " + param_type->text() + ", got: " + typeOf(arg)->text()
+                    typeCheck(arg.value, validated_type,
+                        "Type mis-match! Prefix operator `" + op_name + 
+                        // "`\nParameter: " + "" +
+                        "` expected: " + validated_type->text() +
+                        ", got: " + arg_expr->stringify() + "\nwhich evaluated to: "
+                        + stringify(arg.value) + "\nwhich is of type" + typeOf(arg.value)->text()
                     );
 
+                    constexpr auto INFERRED = true;
+                    bindPattern<INFERRED>(liftName(arg_expr.get()), get<expr::unpack::PatternPtr>(param).get(), std::move(arg));
+                }
+                else {
+                    auto& regular_param = get<expr::Closure::RegularParam>(param);
 
-                    args_env[param.ID] = {{param.name}, std::make_shared<value::Value>(arg), param_type};
+                    if (regular_param.is_syntax) {
+                        args_env[regular_param.ID] = {
+                            {regular_param.expr->stringify()},
+                            std::make_shared<value::Value>(arg_expr->variant()),
+                            type::builtins::Syntax()
+                        };
+                    }
+                    else {
+                        param_type = validateType(std::move(param_type));
+
+                        auto arg = std::visit(*this, arg_expr->variant()).value;
+
+                        typeCheck(arg, param_type,
+                            "Type mis-match! Parameter '" +
+                            op_name + "' expected type: " + param_type->text() + ", got: " + typeOf(arg)->text()
+                        );
+
+                        args_env[regular_param.ID] = {{regular_param.expr->stringify()}, std::make_shared<value::Value>(std::move(arg)), param_type};
+                    }
                 }
             }
         }
@@ -3180,7 +3467,10 @@ There are no mistakes with art.)";
             func = resolveOverloadSet(op->OpName(), op->funcs, args);
 
             for (const auto& [param, arg, type] : std::views::zip(func->params, args, func->type.params))
-                args_env[param.ID] = {{param.name}, std::make_shared<value::Value>(arg), type};
+                bindParam(param, {arg, type}, args_env);
+
+            // for (const auto& [param, arg, type] : std::views::zip(func->params, args, func->type.params))
+            //     args_env[param.ID] = {{param.expr->stringify()}, std::make_shared<value::Value>(arg), type};
         }
 
 
@@ -3348,15 +3638,21 @@ There are no mistakes with art.)";
             // it doesn't matter if there are multiple arguments with this name
             // `validateType` will choose the lastly-bounded one
             // we just need to proof that A parameter exists in order to call `validateType`
-            for (size_t i{}; i <= p; ++i)
-                if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(func.params[i].name)}))
-                    return true;
+            for (size_t i{}; i <= p; ++i) {
+                if (std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) {
+                    const auto& param = get<expr::Closure::RegularParam>(func.params[i]);
+
+                    if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
+                        return true;
+                }
+                else; // handle unpackmeters
+            }
 
             // // look in the arguments env (from a partially evaluated function that yielded this function)
             // for (const auto& [key, _] : func.args_env)
             for (const auto& [_, obj] : func.envs.env.env) {
                 const auto& [name, __, ___] = obj;
-                if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name.name)})) {
+                if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name.name, util::SourceSpan{})})) {
                     return true;
                 }
             }
@@ -3371,12 +3667,16 @@ There are no mistakes with art.)";
             arg_index < args.size(); // can't be args_size since arg_index is only used to index into args
         ) {
             auto [sid, type] = pos_params[param_index];
-            const auto& [name, id, is_syntax] = sid;
+            // const auto& [param_expr, id, is_syntax] = sid;
+
+            if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue;
+
+            const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
             type = type->clone();
 
             value::Value value;
 
-            if (param_index == variadic_index){
+            if (param_index == variadic_index) {
                 if (findType(param_index, type)) {
                     // ScopeGuard sg{this, func.args_env, args_env};
                     ScopeGuard sg{this, func.envs.env.env, args_env};
@@ -3389,7 +3689,7 @@ There are no mistakes with art.)";
                         value = std::move(expand_at[curr_expansion].second[pack_index++]);
 
                         value = typeCheck(value, type,
-                            "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+                            "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
                         );
 
                         if (std::holds_alternative<expr::Closure>(value))
@@ -3403,14 +3703,14 @@ There are no mistakes with art.)";
                         }
                     }
                     else {
-                        const auto& expr = args[arg_index];
+                        // const auto& expr = args[arg_index];
 
                         // if (type->text() == "Syntax") util::error(); //* allow this the future
 
-                        value = std::visit(*this, expr->variant()).value;
+                        value = std::visit(*this, args[arg_index]->variant()).value;
 
                         value = typeCheck(value, type,
-                            "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+                            "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
                         );
 
                         if (std::holds_alternative<expr::Closure>(value))
@@ -3425,7 +3725,7 @@ There are no mistakes with art.)";
                 ++param_index;
 
                 // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
-                args_env[id] = {{name}, std::make_shared<value::Value>(std::move(pack)), std::move(type)};
+                args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(pack)), std::move(type)};
             }
             else {
                 if (findType(param_index, type)) {
@@ -3439,7 +3739,7 @@ There are no mistakes with art.)";
                     value = expand_at[curr_expansion].second[pack_index++];
 
                     value = typeCheck(value, type,
-                        "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+                        "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
                     );
 
                     if (std::holds_alternative<expr::Closure>(value))
@@ -3458,7 +3758,7 @@ There are no mistakes with art.)";
                     value = std::visit(*this, expr->variant()).value;
 
                     value = typeCheck(value, type,
-                        "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+                        "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
                     );
 
                     if (std::holds_alternative<expr::Closure>(value))
@@ -3469,26 +3769,34 @@ There are no mistakes with art.)";
 
                 ++param_index;
                 // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
-                args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
+                args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
             }
         }
 
 
         if (variadic_size == 0) {
-            sg.addEnv({{
-                pos_params[variadic_index].first.ID,
-                {
-                    {pos_params[variadic_index].first.name},
-                    std::make_shared<value::Value>(value::makePack()),
-                    pos_params[variadic_index].second
-                }
-            }});
+            // sg.addEnv({{
+            //     pos_params[variadic_index].first.ID,
+            //     {
+            //         {pos_params[variadic_index].first.expr->stringify()},
+            //         std::make_shared<value::Value>(value::makePack()),
+            //         pos_params[variadic_index].second
+            //     }
+            // }});
 
-            args_env[pos_params[variadic_index].first.ID] = {
-                {pos_params[variadic_index].first.name},
-                std::make_shared<value::Value>(value::makePack()),
-                std::move(pos_params)[variadic_index].second
-            };
+            // args_env[pos_params[variadic_index].first.ID] = {
+            //     {pos_params[variadic_index].first.expr->stringify()},
+            //     std::make_shared<value::Value>(value::makePack()),
+            //     std::move(pos_params)[variadic_index].second
+            // };
+
+            {
+                value::Environment sg_env;
+                bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, sg_env);
+                sg.addEnv(std::move(sg_env));
+            }
+
+            bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, args_env);
         }
     }
 
@@ -3500,23 +3808,30 @@ There are no mistakes with art.)";
         std::vector<std::pair<size_t, std::vector<value::Value>>>& expand_at,
         const std::vector<pie::expr::ExprPtr>& args,
         const size_t args_size,
-        // ScopeGuard& sg,
-        value::Environment& args_env
+        value::Environment& args_env,
+        const auto& expr_str
     ) {
 
         const auto findType = [&func] (const size_t p, const type::TypePtr& type) {
             // it doesn't matter if there are multiple arguments with this name
-            // `validateType` will choose the lastly-bounded one
+            // even if `validateType` will always choose the lastly-bounded one
             // we just need to proof that A parameter exists in order to call `validateType`
-            for (size_t i{}; i <= p; ++i)
-                if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(func.params[i].name)}))
-                    return true;
+            for (size_t i{}; i <= p; ++i) {
+                if (std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) {
+                    const auto& param = get<expr::Closure::RegularParam>(func.params[i]);
 
-            // // look in the arguments env (from a partially evaluated function that yielded this function)
+                    if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})})) {
+                        return true;
+                    }
+                }
+            }
+
+            // look in the arguments env (from a partially evaluated function that yielded this function)
+
             // for (const auto& [key, _] : func.args_env)
             for (const auto& [_, obj] : func.envs.env.env) {
                 const auto& [name, __, ___] = obj;
-                if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name.name)})) {
+                if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name.name, util::SourceSpan{})})) {
                     return true;
                 }
             }
@@ -3529,25 +3844,58 @@ There are no mistakes with art.)";
             if (curr < expand_at.size() and i == expand_at[curr].first) {
                 for (auto& val : expand_at[curr++].second) {
                     auto& [sid, type] = pos_params[p];
-                    const auto& [name, id, is_syntax] = sid;
-                    if (findType(p, type)) {
-                        // ScopeGuard sg{this, func.args_env, args_env};
-                        ScopeGuard sg{this, func.envs.env.env, args_env};
-                        type = validateType(std::move(type));
+
+                    // const auto& [param_expr, id, is_syntax] = sid;
+
+                    if (std::holds_alternative<expr::Closure::RegularParam>(sid)) {
+                        const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+
+                        if (findType(p, type)) {
+                            // ScopeGuard sg{this, func.args_env, args_env};
+                            ScopeGuard sg{this, func.envs.env.env, args_env};
+                            type = validateType(std::move(type));
+                        }
+
+                        ++p; // important to do after findType call!
+
+
+                        val = typeCheck(val, type,
+                            "Type mis-match! Parameter '" + param_expr->stringify() +
+                            "' expected type: " + type->text() +
+                            ", got: " + typeOf(val)->text()
+                        );
+
+                        if (std::holds_alternative<expr::Closure>(val))
+                            captureEnvForPassedClosure(get<expr::Closure>(val));
+
+
+                        // sg.addEnv({{name, {std::make_shared<value::Value>(val), type}}});
+                        args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(val)), std::move(type)};
                     }
+                    else {
+                        constexpr auto INFERRED = true;
 
-                    ++p; // important!
+                        const auto& pattern = get<expr::unpack::PatternPtr>(sid);
 
-                    val = typeCheck(val, type,
-                        "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(val)->text()
-                    );
+                        val = typeCheck(val, type,
+                            "Type mis-match! Parameter '" + expr::unpack::stringifyPattern(pattern.get()) +
+                            "' expected type: " + type->text() +
+                            ", got: " + typeOf(val)->text()
+                        );
 
-                    if (std::holds_alternative<expr::Closure>(val))
-                        captureEnvForPassedClosure(get<expr::Closure>(val));
+
+                        if (std::holds_alternative<expr::Closure>(val))
+                            captureEnvForPassedClosure(get<expr::Closure>(val));
 
 
-                    // sg.addEnv({{name, {std::make_shared<value::Value>(val), type}}});
-                    args_env[id] = {{name}, std::make_shared<value::Value>(std::move(val)), std::move(type)};
+                        ScopeGuard sg{this}; // to store the vars bindPattern will add
+                        bindPattern<INFERRED>(expr_str, pattern.get(), {std::move(val), std::move(type)});
+
+                        for (auto& [id, space_ref] : env.back()->env) {
+                            auto& [ref, value, type] = space_ref;
+                            args_env[id] = {{std::move(ref).name}, std::move(value), std::move(type)};
+                        }
+                    }
                 }
                 --p; // the parameter index will have gone one too far. bring it back
             }
@@ -3561,26 +3909,55 @@ There are no mistakes with art.)";
 
                 const auto& expr = args[i];
 
-                const auto& [name, id, is_syntax] = sid;
+                // const auto& [param_expr, id, is_syntax] = sid;
+                if (std::holds_alternative<expr::Closure::RegularParam>(sid)) {
+                    const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
 
-                value::Value value;
-                if (is_syntax) {
-                    value = expr->variant();
+                    auto name = param_expr->stringify();
+
+                    value::Value value;
+                    if (is_syntax) {
+                        value = expr->variant();
+                    }
+                    else {
+                        value = std::visit(*this, expr->variant()).value;
+
+                        value = typeCheck(value, type,
+                            "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+                        );
+
+                        if (std::holds_alternative<expr::Closure>(value))
+                            captureEnvForPassedClosure(get<expr::Closure>(value));
+                    }
+
+                    args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
                 }
                 else {
-                    value = std::visit(*this, expr->variant()).value;
+                    constexpr auto INFERRED = true;
+                    const auto& pattern = get<expr::unpack::PatternPtr>(sid);
 
+                    auto value = std::visit(*this, expr->variant()).value;
                     value = typeCheck(value, type,
-                        "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+                        "Type mis-match! Unpackmeter `" + expr::unpack::stringifyPattern(pattern.get()) +
+                        "` expected type: " + type->text() +
+                        "\nGot expression: " + expr->stringify() +
+                        " which evaluated to: " + value::stringify(value) +
+                        ", which is of type: " + typeOf(value)->text()
                     );
 
                     if (std::holds_alternative<expr::Closure>(value))
                         captureEnvForPassedClosure(get<expr::Closure>(value));
+
+
+                    ScopeGuard sg{this}; // to store the vars bindPattern will add
+                    bindPattern<INFERRED>(expr_str, pattern.get(), {std::move(value), std::move(type)});
+
+                    for (auto& [id, space_ref] : env.back()->env) {
+                        auto& [ref, value, type] = space_ref;
+
+                        args_env[id] = {{std::move(ref).name}, std::move(value), std::move(type)};
+                    }
                 }
-
-
-                // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
-                args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
             }
         }
     }
@@ -3622,7 +3999,16 @@ There are no mistakes with art.)";
 
         // check for invalid named arguments
         for (const auto& [name, _] : call->named_args) {
-            if (std::ranges::find(func.params, name, &expr::Closure::Param::name) == func.params.end())
+            auto result = std::ranges::find_if(
+                func.params,
+                [&name] (const auto& param) {
+                    if (not std::holds_alternative<expr::Closure::RegularParam>(param)) return false;
+
+                    return get<expr::Closure::RegularParam>(param).expr->stringify() == name;
+                }
+            );
+
+            if (result == func.params.end())
                 util::error("Named argument '" + name + "' does not name a parameter name!");
         }
 
@@ -3648,12 +4034,23 @@ There are no mistakes with art.)";
             type::TypePtr type;
             ssize_t id;
 
-            for (const auto& [n, t] : std::views::zip(func.params, func.type.params)) {
-                if (n.name == name) {
-                    type = t;
-                    id = n.ID;
-                    break;
+            for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
+
+                if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+                    auto& param = get<expr::Closure::RegularParam>(p);
+                    if (param.expr->stringify() == name) {
+                        type = t;
+                        id = param.ID;
+                        break;
+                    }
                 }
+
+                // old code
+                // if (p.expr->stringify() == name) {
+                //     type = t;
+                //     id = p.ID;
+                //     break;
+                // }
             }
 
             if (not type) util::error(); // should never happen anyway
@@ -3675,14 +4072,19 @@ There are no mistakes with art.)";
         for (const auto& [param, type] : std::views::zip(func.params, func.type.params))
             pos_params.push_back({param, type});
 
-        std::erase_if(pos_params, [named_args = call->named_args] (const auto& p)  mutable {
-            const auto cond = std::ranges::find_if(named_args, [&p] (const auto& n) { return n.first == p.first.name; }) != named_args.cend();
-            if (cond) named_args.erase(p.first.name);
+        std::erase_if(pos_params, [named_args = call->named_args] (const auto& param) mutable {
+            // patterns should always be positional
+            if (std::holds_alternative<expr::unpack::PatternPtr>(param.first)) return false;
+
+            const auto& p = get<expr::Closure::RegularParam>(param.first);
+            const auto cond = std::ranges::find_if(named_args, [&p] (const auto& n) { return n.first == p.expr->stringify(); }) != named_args.cend();
+            if (cond) named_args.erase(p.expr->stringify());
             return cond;
         });
 
 
-        // todo: this is needed but it doesn't work well rn
+        // todo: this is needed but it doesn't work well rn bc of expansions
+        // todo: fix using the new expandArgs() method
         // if (args.size() != pos_params.size())
         //     util::error(
         //         "Expected " + std::to_string(pos_params.size()) +
@@ -3695,19 +4097,27 @@ There are no mistakes with art.)";
             variadicCall(func, pos_params, expand_at, args, args_size, sg, args_env);
         }
         else {
-            regularCall(func, pos_params, expand_at, args, args_size,    args_env);
+            regularCall(func, pos_params, expand_at, args, args_size,    args_env, liftName(call));
         }
 
 
 
         if (
             std::ranges::find_if(
-                func.params, [&type = func.type.ret](const auto& param) {
-                    return type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.name)});
+                func.params, [&type = func.type.ret](const auto& p) {
+                    if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+                        const auto& param = get<expr::Closure::RegularParam>(p);
+
+                        if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
+                            return true;
+                    }
+                    return false;
+
+                    // old code
+                    // return type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})});
                 }
             ) != func.params.cend()
         ) {
-            // ScopeGuard sg{this, func.args_env, args_env};
             ScopeGuard sg{this, func.envs.env.env, args_env};
             func.type.ret = validateType(std::move(func.type.ret));
         }
@@ -3795,11 +4205,14 @@ There are no mistakes with art.)";
         for (const auto& [name, expr] : call->named_args) {
             type::TypePtr type;
             ssize_t id;
-            for (const auto& [n, t] : std::views::zip(func.params, func.type.params)) {
-                if (n.name == name) {
-                    type = t;
-                    id = n.ID;
-                    break;
+            for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
+                if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+                    auto& param = get<expr::Closure::RegularParam>(p);
+                    if (param.expr->stringify() == name) {
+                        type = t;
+                        id = param.ID;
+                        break;
+                    }
                 }
             }
 
@@ -3824,22 +4237,48 @@ There are no mistakes with art.)";
             pos_params.push_back({param, type});
 
         std::erase_if(pos_params, [&named_args = call->named_args] (const auto& p) {
-            return std::ranges::find_if(named_args, [&p] (const auto& n) { return n.first == p.first.name; }) != named_args.cend();
+            if (not std::holds_alternative<expr::Closure::RegularParam>(p.first)) return false;
+
+
+            return std::ranges::find_if(
+                named_args,
+                [&p = get<expr::Closure::RegularParam>(p.first)] (const auto& n) {
+                    return n.first == p.expr->stringify();
+                }
+            )
+            !=
+            named_args.cend();
         });
 
         std::vector<expr::Closure::Param> new_params;
-        for (const auto& [name, _] : pos_params | std::views::drop(args_size))
-            new_params.push_back(name);
+        for (const auto& [param_expr, _] : pos_params | std::views::drop(args_size))
+            new_params.push_back(param_expr);
 
         std::vector<type::TypePtr> new_types;
-        for (const auto& name : new_params) {
+        for (const auto& param : new_params) {
             type::TypePtr type;
-            for (const auto& [n, t] : std::views::zip(func.params, func.type.params)) {
-                if (n.name == name.name) {
-                    type = t;
-                    break;
+
+            if (std::holds_alternative<expr::Closure::RegularParam>(param)) {
+                auto& new_param = get<expr::Closure::RegularParam>(param);
+
+                for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
+                    // looking them by name is NOT sufficient anymore
+                    // since we got unpackmeters 
+
+                    if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+                        auto& func_param = get<expr::Closure::RegularParam>(p);
+
+                        if (func_param.expr->stringify() == new_param.expr->stringify()) {
+                            type = t;
+                            break;
+                        }
+                    }
                 }
             }
+            else {
+
+            }
+
             new_types.push_back(std::move(type));
         }
 
@@ -3859,20 +4298,28 @@ There are no mistakes with art.)";
                 normal = false;
 
                 // FIX: first add the empty pack
-                sg.addEnv({{
-                    pos_params[variadic_index].first.ID, 
-                    {
-                        {pos_params[variadic_index].first.name},
-                        std::make_shared<value::Value>(value::makePack()),
-                        pos_params[variadic_index].second
-                    }
-                }});
+                // sg.addEnv({{
+                //     pos_params[variadic_index].first.ID, 
+                //     {
+                //         {pos_params[variadic_index].first.expr->stringify()},
+                //         std::make_shared<value::Value>(value::makePack()),
+                //         pos_params[variadic_index].second
+                //     }
+                // }});
 
-                args_env[pos_params[variadic_index].first.ID] = {
-                    {pos_params[variadic_index].first.name},
-                    std::make_shared<value::Value>(value::makePack()),
-                    std::move(pos_params[variadic_index]).second
-                };
+                // args_env[pos_params[variadic_index].first.ID] = {
+                //     {pos_params[variadic_index].first.expr->stringify()},
+                //     std::make_shared<value::Value>(value::makePack()),
+                //     std::move(pos_params[variadic_index]).second
+                // };
+
+                {
+                    value::Environment sg_env;
+                    bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, sg_env);
+                    sg.addEnv(std::move(sg_env));
+                }
+
+                bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, args_env);
 
                 // only then should you remove the parameter
                 // previously, I only had the following. So the pack was left as undefined instead of empty
@@ -3888,8 +4335,14 @@ There are no mistakes with art.)";
                     if (curr < expand_at.size() and i == expand_at[curr].first) {
                         for (auto& val : expand_at[curr++].second) {
                             auto& [sid, type] = pos_params[p];
-                            const auto& [name, id, is_syntax] = sid;
+
+                            // const auto& [param_expr, id, is_syntax] = sid;
+                            if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue; 
+                            const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+
+                            auto name = param_expr->stringify();
                             // if (findType(p, type)) type = validateType(std::move(type));
+
                             ++p;
 
                             val = typeCheck(val, type,
@@ -3906,7 +4359,12 @@ There are no mistakes with art.)";
                     }
                     else {
                         auto& [sid, type] = pos_params[p];
-                        const auto& [name, id, is_syntax] = sid;
+
+                        // const auto& [param_expr, id, is_syntax] = sid;
+                        if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue; 
+                        const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+
+                        auto name = param_expr->stringify();
                         const auto& expr = args[i];
                         // if (findType(p, type)) type = validateType(std::move(type));
 
@@ -3931,14 +4389,20 @@ There are no mistakes with art.)";
                 // it doesn't matter if there are multiple arguments with this name
                 // `validateType` will choose the lastly-bounded one
                 // we just need to proof that A parameter exists in order to call `validateType`
-                for (size_t i{}; i <= p; ++i)
-                    if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(func.params[i].name)}))
-                        return true;
+                for (size_t i{}; i <= p; ++i) {
+                    if (std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) {
+                        const auto& param = get<expr::Closure::RegularParam>(func.params[i]);
+
+                        if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
+                            return true;
+                    }
+                    else; // handle unpackmeters
+                }
 
                 // // look in the arguments env (from a partially evaluated function that yielded this function)
                 for (const auto& [_, obj] : func.envs.env.env) {
                     const auto& [name, __, ___] = obj;
-                    if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name.name)}))
+                    if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name.name, util::SourceSpan{})}))
                         return true;
                 }
 
@@ -3951,7 +4415,12 @@ There are no mistakes with art.)";
                 if (curr < expand_at.size() and i == expand_at[curr].first) {
                     for (auto& val : expand_at[curr++].second) {
                         auto& [sid, type] = pos_params[p];
-                        const auto& [name, id, is_syntax] = sid;
+
+                        // const auto& [param_expr, id, is_syntax] = sid;
+                        if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue; 
+                        const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+
+                        auto name = param_expr->stringify();
 
                         if (findType(p, type)) {
                             // ScopeGuard sg{this, func.args_env, args_env};
@@ -3974,7 +4443,13 @@ There are no mistakes with art.)";
                 }
                 else {
                     auto& [sid, type] = pos_params[p];
-                    const auto& [name, id, is_syntax] = sid;
+
+                    // const auto& [param_expr, id, is_syntax] = sid;
+                    if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue; 
+                    const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+
+                    auto name = param_expr->stringify();
+
                     if (findType(p, type)) {
                         // ScopeGuard sg{this, func.args_env, args_env};
                         ScopeGuard sg{this, func.envs.env.env, args_env};
@@ -4165,14 +4640,19 @@ There are no mistakes with art.)";
 
             bool found{};
             for (size_t j{}; j < i; ++j) {
-                if (
-                    type->involvesT(
-                        type::ExprType{std::make_shared<expr::Name>(closure.params[j].name)}
-                    )
-                ) {
-                    found = true;
-                    break;
+                if (std::holds_alternative<expr::Closure::RegularParam>(closure.params[j])) {
+                    const auto& param = get<expr::Closure::RegularParam>(closure.params[j]);
+
+                    if (
+                        type->involvesT(
+                            type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}
+                        )
+                    ) {
+                        found = true;
+                        break;
+                    }
                 }
+                else; // check unpackmeters
             }
 
             if (not found) type = validateType(std::move(type));
@@ -4181,7 +4661,16 @@ There are no mistakes with art.)";
         if (
             std::ranges::find_if(
                 closure.params, [&type = closure.type.ret](const auto& p) {
-                    return type->involvesT(type::ExprType{std::make_shared<expr::Name>(p.name)});
+                    if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+                        const auto& param = get<expr::Closure::RegularParam>(p);
+
+                        if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
+                            return true;
+                    }
+                    return false;
+
+                    // old code
+                    // return type->involvesT(type::ExprType{std::make_shared<expr::Name>(p.expr->stringify(), util::SourceSpan{})});
                 }
             ) == closure.params.cend()
         )
@@ -4492,67 +4981,67 @@ There are no mistakes with art.)";
 
 
         if (name == "create_class") {
-            auto arguments = expandArgs(std::move(args), std::move(expand_at));
+            // auto arguments = expandArgs(std::move(args), std::move(expand_at));
 
-            std::vector<std::tuple<expr::Name, type::TypePtr, expr::ExprPtr>> fields;
-            value::Env vars;
+            // std::vector<std::tuple<expr::Name, type::TypePtr, expr::ExprPtr>> fields;
+            // value::Env vars;
 
-            for (ssize_t i{-10}; auto& arg : arguments) {
-                if (not std::holds_alternative<value::List>(arg))
-                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its arguments as lists. Got: " + stringify(arg));
+            // for (ssize_t i{-10}; auto& arg : arguments) {
+            //     if (not std::holds_alternative<value::List>(arg))
+            //         util::error<except::InvalidArgument>("`__builtin_create_class` expects its arguments as lists. Got: " + stringify(arg));
 
-                auto& list = get<value::List>(arg);
-                if (list.elts->values.size() > 3)
-                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its list to have at most size 3: " + stringify(arg));
+            //     auto& list = get<value::List>(arg);
+            //     if (list.elts->values.size() > 3)
+            //         util::error<except::InvalidArgument>("`__builtin_create_class` expects its list to have at most size 3: " + stringify(arg));
 
-                if (list.elts->values.size() < 2)
-                    util::error<except::InvalidArgument>("`__builtin_create_class` expects its list to have at least 2 elements {name, value}: " + stringify(arg));
+            //     if (list.elts->values.size() < 2)
+            //         util::error<except::InvalidArgument>("`__builtin_create_class` expects its list to have at least 2 elements {name, value}: " + stringify(arg));
 
-                value::Value name = list.elts->values.front();
-                type::TypePtr type;
-                if (list.elts->values.size() == 3) {
-                    if (not std::holds_alternative<type::TypePtr>(list.elts->values[1]))
-                        util::error<except::InvalidArgument>(
-                            "Second member `__builtin_create_class` list argument must be a type. Got: "
-                            + stringify(list.elts->values[1])
-                            + " which is: " + typeOf(list.elts->values[1])->text()
-                        );
+            //     value::Value name = list.elts->values.front();
+            //     type::TypePtr type;
+            //     if (list.elts->values.size() == 3) {
+            //         if (not std::holds_alternative<type::TypePtr>(list.elts->values[1]))
+            //             util::error<except::InvalidArgument>(
+            //                 "Second member `__builtin_create_class` list argument must be a type. Got: "
+            //                 + stringify(list.elts->values[1])
+            //                 + " which is: " + typeOf(list.elts->values[1])->text()
+            //             );
 
-                    type = get<type::TypePtr>(list.elts->values[1]);
-                }
-                else type = type::builtins::Any();
+            //         type = get<type::TypePtr>(list.elts->values[1]);
+            //     }
+            //     else type = type::builtins::Any();
 
-                value::Value value = list.elts->values.back();
+            //     value::Value value = list.elts->values.back();
 
-                if (not std::holds_alternative<std::string>(name))
-                    util::error<except::InvalidArgument>(
-                        "First member `__builtin_create_class` list argument must be a string. Got: "
-                        + stringify(name)
-                        + " which is: " + typeOf(name)->text()
-                    );
+            //     if (not std::holds_alternative<std::string>(name))
+            //         util::error<except::InvalidArgument>(
+            //             "First member `__builtin_create_class` list argument must be a string. Got: "
+            //             + stringify(name)
+            //             + " which is: " + typeOf(name)->text()
+            //         );
 
-                std::string mangled_name = "__" + get<std::string>(name) + "__";
-                vars.env.insert({
-                    --i,
-                    {
-                        value::SpaceRef{mangled_name},
-                        std::make_shared<value::Value>(value),
-                        type
-                    }}
-                );
-
-
-                auto expr = std::make_shared<expr::Name>(std::move(mangled_name));
-                expr->var_ID = std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::DYNAMIC);
-                fields.emplace_back(
-                    expr::Name{get<std::string>(std::move(name))},
-                    std::move(type),
-                    std::move(expr)
-                );
-            }
+            //     std::string mangled_name = "__" + get<std::string>(name) + "__";
+            //     vars.env.insert({
+            //         --i,
+            //         {
+            //             value::SpaceRef{mangled_name},
+            //             std::make_shared<value::Value>(value),
+            //             type
+            //         }}
+            //     );
 
 
-            return createClass(std::move(fields), std::move(vars)).value;
+            //     auto expr = std::make_shared<expr::Name>(std::move(mangled_name));
+            //     expr->var_ID = std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::DYNAMIC);
+            //     fields.emplace_back(
+            //         expr::Name{get<std::string>(std::move(name))},
+            //         std::move(type),
+            //         std::move(expr)
+            //     );
+            // }
+
+
+            // return createClass(std::move(fields), std::move(vars)).value;
         }
 
 
@@ -5805,3 +6294,6 @@ There are no mistakes with art.)";
 
 } // namespace interp
 } // namespace pie
+
+
+#undef LIFT

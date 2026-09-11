@@ -1,5 +1,6 @@
 #include "Type.hxx"
 #include "../Interp/Interpreter.hxx"
+#include "Value/Value.hxx"
 
 #include <ranges>
 #include <variant>
@@ -98,16 +99,23 @@ namespace type {
 
 
         // concepts are unary functions, meaning 1 parameter only!
-        sg.addEnv({
-        {f.params[0].ID,
 
-                {
-                    {f.params[0].name},
-                    std::make_shared<value::Value>(v),
-                    other
-                }
-            }
-        });
+        {
+            value::Environment env;
+            visitor->bindParam(f.params[0], {v, other}, env);
+            sg.addEnv(std::move(env));
+        }
+
+        // sg.addEnv({
+        // {f.params[0].ID,
+
+        //         {
+        //             {f.params[0].expr->stringify()},
+        //             std::make_shared<value::Value>(v),
+        //             other
+        //         }
+        //     }
+        // });
 
 
         auto ret = visitor->checkReturnType(std::visit(*visitor, f.body->variant()).value, f.type.ret);

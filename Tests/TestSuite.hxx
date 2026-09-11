@@ -76,6 +76,9 @@ struct Capture {
 
 [[nodiscard]] inline std::string run(const char* src) {
 
+    
+    // std::clog << "RUNNING:\n" << src << "\n------------------------" << std::endl;
+
     token::Tokens v = lex::lex(src);
 
     if (v.empty()) return "";

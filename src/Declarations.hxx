@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include "Lex/Token.hxx"
 #include "VM/ByteCode.hxx"
 
 
@@ -93,6 +94,7 @@ using Node = std::variant<
     struct Assignment        *,
     struct InferredAssignment*,
     struct Unpackment        *,
+    struct InferredUnpackment*,
     struct Class             *,
     struct Union             *,
     struct Match             *,
@@ -128,8 +130,14 @@ using Node = std::variant<
 using ExprPtr = std::shared_ptr<struct Expr>;
 
 struct Expr {
+    util::SourceSpan span;
+
+
     ssize_t var_ID{-1};
     ssize_t constant_ID{-1};
+
+
+    Expr(util::SourceSpan sp) noexcept : span{std::move(sp)} { }
 
     virtual ~Expr() = default;
     virtual std::string stringify(const size_t = 0) const = 0;

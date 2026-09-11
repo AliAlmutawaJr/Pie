@@ -26,6 +26,7 @@
 #include "../Parser/Precedence.hxx"
 #include "../Utils/utils.hxx"
 #include "../Analysis/ExprContains.hxx"
+#include "Type/Type.hxx"
 
 
 
@@ -180,15 +181,15 @@ public:
             using enum token::TokenKind;
 
             case FLOAT  :
-            case INT    : return std::make_shared<expr::Num   >(std::move(token).text);
-            case BOOL   : return std::make_shared<expr::Bool  >(token.text == "true" ? true : false);
-            case STRING : return std::make_shared<expr::String>(std::move(token).text);
+            case INT    : return std::make_shared<expr::Num   >(std::move(token).text, std::move(token).span);
+            case BOOL   : return std::make_shared<expr::Bool  >(token.text == "true" ? true : false, std::move(token).span);
+            case STRING : return std::make_shared<expr::String>(std::move(token).text, std::move(token).span);
             case FSTRING: return fstring(std::move(token));
 
             case NAME:
                 if (prefixOpsContain(token.text)) return parsePrefixOperator(std::move(token));
 
-                if constexpr (not PARSE_TYPE) return std::make_shared<expr::Name>(std::move(token).text);
+                if constexpr (not PARSE_TYPE) return std::make_shared<expr::Name>(std::move(token).text, std::move(token).span);
                 return name(std::move(token));
 
             case CLASS: return klass();
@@ -269,7 +270,7 @@ public:
             }
 
 
-            case CASCADE: return cascade(std::move(left));
+            case CASCADE: return cascade(std::move(left), std::move(token).span);
 
             case COLON: {
                 auto type = parseType();
@@ -502,7 +503,7 @@ public:
     }
 
 
-    expr::ExprPtr cascade(expr::ExprPtr expr) {
+    expr::ExprPtr cascade(expr::ExprPtr expr, util::SourceSpan sp) {
         using enum token::TokenKind;
 
         std::vector<expr::ExprPtr> cascaders;
@@ -521,7 +522,7 @@ public:
 
         } while (match(CASCADE));
 
-        auto name = std::make_shared<expr::Name>("__tmp");
+        auto name = std::make_shared<expr::Name>("__tmp", sp);
         std::vector<expr::ExprPtr> cas = {
             std::make_shared<expr::Assignment>(
                 name, type::builtins::Any(), std::move(expr)
@@ -580,7 +581,8 @@ public:
             has_name = true;
         }
         else if (check(NAME)) { // just a name
-            name = std::make_shared<expr::Name>(consume(NAME).text);
+            auto token = consume(NAME);
+            name = std::make_shared<expr::Name>(std::move(token).text, std::move(token).span);
             has_name = true;
             is_name_expr = true;
         }
@@ -705,7 +707,7 @@ public:
             // if (type::shouldReassign(ass->type))
             //     fields.push_back({expr::Name{ass->lhs->stringify()}, type::builtins::Any(), std::move(ass)->rhs});
             // else
-                fields.push_back({expr::Name{ass->lhs->stringify()}, std::move(ass)->type , std::move(ass)->rhs});
+                fields.push_back({expr::Name{ass->lhs->stringify(), ass->lhs->span}, std::move(ass)->type , std::move(ass)->rhs});
         }
 
         return std::make_shared<expr::Class>(std::move(fields));
@@ -792,7 +794,7 @@ public:
 
         fname += ".pie";
         // path.append(consume(NAME).text);
-        std::filesystem::path path = util::getPiePath(); // root;
+        std::filesystem::path path = util::getPiePath().parent_path(); // root;
         if (std::filesystem::exists(path / "std" / fname)) {
             path.append("std").append(std::move(fname));
         }
@@ -1150,7 +1152,7 @@ public:
     expr::ExprPtr loop() {
         using enum token::TokenKind;
 
-        expr::Unpackment::PatternPtr loop_var;
+        expr::unpack::PatternPtr loop_var;
 
         const bool has_var = [this] {
             using enum token::TokenKind;
@@ -1182,7 +1184,7 @@ public:
 
 
         // non-expr patterns MUST have loop kind to destructure!
-        if (loop_var and not dynamic_cast<expr::Unpackment::Expr*>(loop_var.get())) {
+        if (loop_var and not dynamic_cast<expr::unpack::Expr*>(loop_var.get())) {
             auto kind = parseExpr();
             auto body = parseExpr();
 
@@ -1266,14 +1268,24 @@ public:
         if (not match(R_PAREN)) {
             do {
                 constexpr auto DONT_PARSE_TYPE = false;
+
+                // check for unpackments first.
+                if (check(L_BRACE)) {
+                    params.emplace_back(parseUnpackmentPattern());
+                    params_types.push_back(match(COLON) ? parseType() : type::builtins::_());
+
+                    continue;
+                }
+                // if not an unpackment, do the usual thing
+
                 auto param = parseExpr<DONT_PARSE_TYPE>();
 
                 if (auto s = expr::is<expr::Syntax>(param.get())) {
-                    params.push_back({s->expr->stringify(), -1, true});
+                    params.push_back(expr::Closure::RegularParam{s->expr, -1, true});
                     params_types.push_back(type::builtins::_());
                 }
                 else {
-                    params.push_back({param->stringify()});
+                    params.push_back(expr::Closure::RegularParam{param});
 
                     if (match(COLON))
                         params_types.push_back(parseType());
@@ -1438,7 +1450,7 @@ public:
 
         consume(LOOP);
 
-        expr::Unpackment::PatternPtr loop_var;
+        expr::unpack::PatternPtr loop_var;
 
         const bool has_var = [this] {
             using enum token::TokenKind;
@@ -1470,7 +1482,7 @@ public:
 
 
         // non-expr patterns MUST have loop kind to destructure!
-        if (loop_var and not dynamic_cast<expr::Unpackment::Expr*>(loop_var.get())) {
+        if (loop_var and not dynamic_cast<expr::unpack::Expr*>(loop_var.get())) {
             auto kind = parseExpr();
 
             expr::ExprPtr guard = match(COMMA) ? parseExpr() : nullptr;
@@ -1635,15 +1647,14 @@ public:
 
 
     template <Context CTX = Context::NONE>
-    expr::Unpackment::PatternPtr parseUnpackmentPattern() {
+    expr::unpack::PatternPtr parseUnpackmentPattern() {
         using enum token::TokenKind;
-        using Expr = expr::Unpackment::Expr;
-        using List = expr::Unpackment::List;
-        using Pack = expr::Unpackment::Pack;
-        using Map  = expr::Unpackment::Map ;
+        using Expr = expr::unpack::Expr;
+        using List = expr::unpack::List;
+        using Pack = expr::unpack::Pack;
+        using Map  = expr::unpack::Map ;
 
-        // using PatternPtr = expr::Unpackment::PatternPtr;
-        using Patterns = expr::Unpackment::Patterns;
+        using Patterns = expr::unpack::Patterns;
 
         if (match(L_BRACE)) { // either list pattern or map pattern
             auto pattern = parseUnpackmentPattern();
@@ -1706,15 +1717,26 @@ public:
         auto pattern = parseUnpackmentPattern();
 
 
-        if (not check(ASSIGN) and not check(WALRUS))
+        if (not check(ASSIGN) and not check(WALRUS) and not check(COLON))
             util::error<except::SyntaxError>("Unpackment can only be used on the LHS of an assignment!");
 
-        const bool inferred = consume().kind == WALRUS;
-        return std::make_shared<expr::Unpackment>(
-            std::move(pattern),
-            parseExpr(),
-            inferred
-        );
+
+        if (match(WALRUS)) {
+            return std::make_shared<expr::InferredUnpackment>(
+                std::move(pattern),
+                parseExpr()
+            );
+        }
+        else {
+
+            auto type = match(COLON) ? parseType() : type::builtins::_();
+
+            return std::make_shared<expr::Unpackment>(
+                std::move(pattern),
+                std::move(type),
+                (consume(ASSIGN), parseExpr())
+            );
+        }
     }
 
 
@@ -1746,8 +1768,13 @@ public:
 
         for (size_t i{}; /* not atEnd() */ ; ++i) {
             if (check(R_BRACE, i)) {
-                if (check(ASSIGN, i+1) or check(WALRUS, i+1)) return true;
-                else return false;
+                if (
+                    check(ASSIGN, i+1) or
+                    check(WALRUS, i+1) or
+                    check(COLON , i+1) // type annotation
+                ) return true;
+
+                return false;
             }
 
 
@@ -1951,13 +1978,13 @@ public:
             consume(token::TokenKind::ASSIGN);
 
             return std::make_shared<expr::Assignment>(
-                std::make_shared<expr::Name>(std::move(token).text),
+                std::make_shared<expr::Name>(std::move(token).text, std::move(token).span),
                 std::move(type),
                 parseExpr()
             );
         }
 
-        return std::make_shared<expr::Name>(std::move(token).text);
+        return std::make_shared<expr::Name>(std::move(token).text, std::move(token).span);
     }
 
 
@@ -2024,7 +2051,7 @@ public:
             }
         }
 
-        return std::make_shared<expr::Name>(std::move(token).text);
+        return std::make_shared<expr::Name>(std::move(token).text, std::move(token).span);
     }
 
 

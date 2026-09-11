@@ -20,7 +20,7 @@ namespace interp {
         auto fields = std::make_shared<value::Fields>();
 
         for (const auto& [name, typ_e, __] : members) {
-            fields->fields.emplace_back(name, type::builtins::Any(), std::make_shared<expr::Num>("0"));
+            fields->fields.emplace_back(name, type::builtins::Any(), std::make_shared<expr::Num>("0", util::SourceSpan{}));
         }
 
         return std::make_shared<type::LiteralType>(std::make_shared<value::ClassValue>(std::move(fields)));
@@ -31,7 +31,7 @@ namespace interp {
         std::vector<std::tuple<expr::Name, type::TypePtr, value::ValuePtr>> actual_members;
         for (auto& [name, value] : members)
             actual_members.emplace_back(
-                std::move(name),
+                expr::Name{std::move(name), util::SourceSpan{}},
                 type::builtins::Any(),
                 std::make_shared<value::Value>(std::move(value))
             );

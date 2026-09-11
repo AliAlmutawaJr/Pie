@@ -1,3 +1,4 @@
+#include "Utils/Exceptions.hxx"
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"
 
@@ -17,6 +18,102 @@
 // std::print((makeC(1, 2, 3).pack + ...));
 
 
+
+
+
+TEST_CASE("Typed Unpackments", "[Unpack][Type]") {
+{
+    const auto src = R"(
+Cat = class {
+    name = "Cake";
+    age  =  3;
+};
+
+
+{a, b}: Cat = Cat();
+__builtin_print(b, a);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(3 Cake)");
+}
+{
+    const auto src = R"(
+Cat = class {
+    name = "Cake";
+    age  =  3;
+};
+
+
+
+{a, b}: Cat = {1, 2};
+__builtin_print(b, a);
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+}
+
+
+TEST_CASE("Unpackmeters", "[Unpack]") {
+{
+    const auto src = R"(
+Cat = class {
+    name = "Cake";
+    age  =  3;
+};
+
+func = ({meow, gurrr}) => {
+    __builtin_print("meow is", meow);
+};
+
+func(Cat());
+func({1, 2});
+)";
+
+    REQUIRE(pie::test::run(src) == R"(meow is Cake
+meow is 1)");
+}
+{
+    const auto src = R"(
+Cat = class {
+    name = "Cake";
+    age  =  3;
+};
+
+func = ({meow, gurrr}: Cat) => {
+    __builtin_print("meow is", meow);
+};
+
+func(Cat());
+)";
+
+    REQUIRE(pie::test::run(src) == R"(meow is Cake)");
+}
+{
+    const auto src = R"(
+Cat = class {
+    name = "Cake";
+    age  =  3;
+};
+
+func = ({meow, gurrr}: Cat) => {
+    __builtin_print("meow is", meow);
+};
+
+func({1, 2});
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"(
+func = ({first, second, ...mid, last}) => __builtin_print(second, last, mid, first);
+func({1, 2, 3, 4, 5, 6, 7, 8, 9});
+)";
+
+    REQUIRE(pie::test::run(src) == R"(2 9 3, 4, 5, 6, 7, 8 1)");
+}
+}
 
 
 

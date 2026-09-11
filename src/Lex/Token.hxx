@@ -9,7 +9,19 @@
 #include <string>
 #include <ranges>
 
+// #include "../Declarations.hxx"
+
 namespace pie {
+
+namespace util {
+
+    struct SourceLocation { size_t line, column; };
+    using SourceSpan = std::pair<SourceLocation, SourceLocation>;
+    // struct SourceSpan { std::pair<size_t, size_t> lines, columnsI ; };
+
+}
+
+
 namespace token {
 
 enum class TokenKind {
@@ -123,15 +135,11 @@ constexpr const char* stringify(const TokenKind token) noexcept {
 }
 
 
-struct SourceLocation { size_t line, column; };
-using SourceSpan = std::pair<SourceLocation, SourceLocation>;
-// struct SourceSpan { std::pair<size_t, size_t> lines, columnsI ; };
-
 struct Token {
     TokenKind kind;
     std::string text;
 
-    SourceSpan span;
+    util::SourceSpan span;
     std::vector<std::pair<size_t, std::vector<Token>>> fstring_tokens;
 
 
