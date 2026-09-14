@@ -382,6 +382,9 @@ void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern) {
     // regular assignment could re-assign an exisiting variable,
     // or create a new one if it doesn't already exisit
 
+    if (pattern->value) std::visit(*this, pattern->value->variant());
+    if (pattern->type ) visitType(pattern->type);
+
     if (auto expr = dynamic_cast<expr::unpack::Expr*>(pattern)) {
         if (
             dynamic_cast<expr::Access     *>(expr->expr.get()) or
@@ -402,12 +405,12 @@ void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern) {
         // std::ranges::for_each(list->patterns, [this](const auto& pat) { return checkPattern(pat.get()); });
         for (const auto& pat : list->patterns) checkPattern(pat.get());
     }
-    else if (auto map = dynamic_cast<expr::unpack::Map*>(pattern)) {
-        for (const auto& [key, val] : map->patterns) {
-            checkPattern(key.get());
-            checkPattern(val.get());
-        }
-    }
+    // else if (auto map = dynamic_cast<expr::unpack::Map*>(pattern)) {
+    //     for (const auto& [key, val] : map->patterns) {
+    //         checkPattern(key.get());
+    //         checkPattern(val.get());
+    //     }
+    // }
     else if (auto pack = dynamic_cast<expr::unpack::Pack*>(pattern)) {
         // nameless pack
         if (not pack->expr) return;
@@ -441,12 +444,12 @@ void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern, [[maybe_unuse
         // std::ranges::for_each(list->patterns, [this, inferred](const auto& pat) { return checkPattern(pat.get(), inferred); });
         for (const auto& pat : list->patterns) checkPattern(pat.get(), inferred);
     }
-    else if (auto map = dynamic_cast<expr::unpack::Map*>(pattern)) {
-        for (const auto& [key, val] : map->patterns) {
-            checkPattern(key.get(), inferred);
-            checkPattern(val.get(), inferred);
-        }
-    }
+    // else if (auto map = dynamic_cast<expr::unpack::Map*>(pattern)) {
+    //     for (const auto& [key, val] : map->patterns) {
+    //         checkPattern(key.get(), inferred);
+    //         checkPattern(val.get(), inferred);
+    //     }
+    // }
     else if (auto pack = dynamic_cast<expr::unpack::Pack*>(pattern)) {
         if (const auto id = findVariable(pack->expr->stringify()); id) {
             pack->expr->var_ID = *id;

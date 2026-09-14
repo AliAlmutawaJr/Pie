@@ -369,18 +369,29 @@ struct InferredAssignment : Expr{
 
 namespace unpack {
 
-struct Pattern { virtual ~Pattern() = default; };
+struct Pattern {
+    type::TypePtr type;
+    ExprPtr value;
+
+    Pattern() noexcept = default;
+    Pattern(type::TypePtr type, ExprPtr value) noexcept
+    : type{std::move(type)}, value{std::move(value)} { }
+
+    virtual ~Pattern() = default;
+};
 using PatternPtr = std::shared_ptr<Pattern>;
 using Patterns = std::vector<PatternPtr>;
 
 struct Expr : Pattern {
     ExprPtr expr;
-    Expr(ExprPtr e) noexcept : expr{std::move(e)} { }
+    Expr(ExprPtr e, type::TypePtr type = nullptr, ExprPtr value = nullptr) noexcept
+    : Pattern{std::move(type), std::move(value)}, expr{std::move(e)} { }
 };
 
 struct List : Pattern {
     Patterns patterns;
-    List(Patterns p) noexcept : patterns{std::move(p)} { }
+    List(Patterns p, type::TypePtr type = nullptr, ExprPtr value = nullptr) noexcept
+    : Pattern{std::move(type), std::move(value)}, patterns{std::move(p)} { }
 
     template <typename... Ts>
     requires (std::same_as<std::remove_cvref_t<Ts>, PatternPtr> and ...)
@@ -391,24 +402,26 @@ struct List : Pattern {
     }
 };
 
-struct Map : Pattern {
-    std::vector<std::pair<PatternPtr, PatternPtr>> patterns;
-    Map(std::vector<std::pair<PatternPtr, PatternPtr>> p) noexcept : patterns{std::move(p)} { }
+// struct Map : Pattern {
+//     std::vector<std::pair<PatternPtr, PatternPtr>> patterns;
+//     Map(std::vector<std::pair<PatternPtr, PatternPtr>> p, type::TypePtr type = nullptr, ExprPtr value = nullptr) noexcept
+//     : Pattern{std::move(type), std::move(value)}, patterns{std::move(p)} { }
 
 
-    template <typename... Ts>
-    requires (std::same_as<std::remove_cvref_t<Ts>, std::pair<PatternPtr, PatternPtr>> and ...)
-    static std::shared_ptr<Map> with(Ts&&... members) {
-        std::vector<std::pair<PatternPtr, PatternPtr>> patterns;
-        (..., patterns.push_back(std::forward<Ts>(members)));
-        return std::make_unique<Map>(std::move(patterns));
-    }
-};
+//     template <typename... Ts>
+//     requires (std::same_as<std::remove_cvref_t<Ts>, std::pair<PatternPtr, PatternPtr>> and ...)
+//     static std::shared_ptr<Map> with(Ts&&... members) {
+//         std::vector<std::pair<PatternPtr, PatternPtr>> patterns;
+//         (..., patterns.push_back(std::forward<Ts>(members)));
+//         return std::make_unique<Map>(std::move(patterns));
+//     }
+// };
 
 struct Pack : Pattern {
     ExprPtr expr;
     // Pack() = default;
-    Pack(ExprPtr e) noexcept : expr{std::move(e)} { }
+    Pack(ExprPtr e, type::TypePtr type = nullptr, ExprPtr value = nullptr) noexcept
+    : Pattern{std::move(type), std::move(value)}, expr{std::move(e)} { }
 };
 
 
@@ -431,28 +444,32 @@ inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t
 
         s += '}';
     }
-    else if (auto map = dynamic_cast<const unpack::Map*>(pattern)) {
-        s += '{';
-        for (const auto& [key, value] : map->patterns) {
-            s +=
-                stringifyPattern(key  .get(), indent + 4)
-                + ": " +
-                stringifyPattern(value.get(), indent + 4)
-                + ", ";
-        }
+    // else if (auto map = dynamic_cast<const unpack::Map*>(pattern)) {
+    //     s += '{';
+    //     for (const auto& [key, value] : map->patterns) {
+    //         s +=
+    //             stringifyPattern(key  .get(), indent + 4)
+    //             + ": " +
+    //             stringifyPattern(value.get(), indent + 4)
+    //             + ", ";
+    //     }
 
-        // removing the trailing comma
-        s.pop_back();
-        s.pop_back();
+    //     // removing the trailing comma
+    //     s.pop_back();
+    //     s.pop_back();
 
-        s += '}';
-    }
+    //     s += '}';
+    // }
     else if (auto pack = dynamic_cast<const unpack::Pack*>(pattern)) {
         s += "...";
 
         if (pack->expr) s+= pack->expr->stringify();
     }
     else util::error();
+
+
+    if (pattern->type ) s += ": " + pattern->type ->text      (indent + 4);
+    if (pattern->value) s += " `=` " + pattern->value->stringify(indent + 4);
 
     return s;
 }
@@ -468,12 +485,12 @@ inline bool patternInvolves(const unpack::Pattern *pattern, const std::string_vi
         for (const auto& pat : list->patterns)
             if (patternInvolves(pat.get(), sv)) return true;
     }
-    else if (auto map = dynamic_cast<const unpack::Map*>(pattern)) {
-        for (const auto& [key, value] : map->patterns) {
-            if (patternInvolves(key  .get(), sv)) return true;
-            if (patternInvolves(value.get(), sv)) return true;
-        }
-    }
+    // else if (auto map = dynamic_cast<const unpack::Map*>(pattern)) {
+    //     for (const auto& [key, value] : map->patterns) {
+    //         if (patternInvolves(key  .get(), sv)) return true;
+    //         if (patternInvolves(value.get(), sv)) return true;
+    //     }
+    // }
     else if (auto pack = dynamic_cast<const unpack::Pack*>(pattern)) {
         return pack->expr->involvesName(sv);
     }

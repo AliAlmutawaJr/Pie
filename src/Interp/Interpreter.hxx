@@ -1318,31 +1318,43 @@ public:
 
 
     template <bool INFERRED>
-    void bindExpr(const auto& expr_str, const expr::ExprPtr bound, ValueType valuetype) {
+    void bindExpr(const auto& expr_str, const expr::unpack::Expr* bound, ValueType valuetype) {
         auto& [value, type] = valuetype;
 
         if constexpr (INFERRED) {
             addVar(
-                bound->stringify(),
-                bound->var_ID,
+                bound->expr->stringify(),
+                bound->expr->var_ID,
                 std::make_shared<value::Value>(std::move(value)),
                 std::move(type)
             );
         }
-        else if (auto access = dynamic_cast<expr::Access*>(bound.get())) {
+        else if (auto access = dynamic_cast<expr::Access*>(bound->expr.get())) {
             accessUnpackment(expr_str, access, value);
         }
-        else if (auto access = dynamic_cast<expr::SpaceAccess*>(bound.get())) {
+        else if (auto access = dynamic_cast<expr::SpaceAccess*>(bound->expr.get())) {
             spaceAccessUnpackment(expr_str, access, value);
         }
-        else if (auto name = dynamic_cast<expr::Name*>(bound.get())) {
+        else if (auto name = dynamic_cast<expr::Name*>(bound->expr.get())) {
             nameUnpackment(expr_str, name, value);
         }
-        else addVar(
-            bound->stringify(),
-            bound->var_ID,
-            std::make_shared<value::Value>(value)
-        );
+        else {
+            if (bound->type) {
+                addVar(
+                    bound->expr->stringify(),
+                    bound->expr->var_ID,
+                    std::make_shared<value::Value>(value)
+                );
+            }
+            else {
+                addVar(
+                    bound->expr->stringify(),
+                    bound->expr->var_ID,
+                    std::make_shared<value::Value>(value),
+                    std::move(type)
+                );
+            }
+        }
     }
 
 
@@ -1355,12 +1367,36 @@ public:
         using Expr = expr::unpack::Expr;
         using List = expr::unpack::List;
         using Pack = expr::unpack::Pack;
-        using Map  = expr::unpack::Map;
+        // using Map  = expr::unpack::Map;
+
+
+        if (pattern->value) {
+            if (std::visit(*this, pattern->value->variant()).value != valuetype.value) {
+                util::error(
+                    "In Unpackment:\n" + expr_str() +
+                    "\nPattern: " + expr::unpack::stringifyPattern(pattern) +
+                    "\nValue: `" + pattern->value->stringify() +
+                    "` didn't match value: " + value::stringify(valuetype.value)
+                );
+            }
+        }
+
+        if (pattern->type) {
+            valuetype.type = validateType(pattern->type);
+            valuetype.value = typeCheck(
+                valuetype.value,
+                valuetype.type,
+                "Type mis-match in Unpackment:\n" + expr_str() +
+                "\nPattern: " + expr::unpack::stringifyPattern(pattern) +
+                "\nType: `" + pattern->type->text() +
+                "` didn't match value: " + value::stringify(valuetype.value)
+            );
+        }
 
         // supposedly I don't need to check if the expression is a name
         // since LexicalAnalysis should've done it..i think :)
         if (auto expr_ptr = dynamic_cast<const Expr*>(pattern)) {
-            bindExpr<INFERRED>(expr_str, expr_ptr->expr, valuetype);
+            bindExpr<INFERRED>(expr_str, expr_ptr, valuetype);
         }
         else if (auto list = dynamic_cast<const List*>(pattern)) {
             const auto pack_index = [list] -> std::optional<size_t> {
@@ -1424,15 +1460,15 @@ public:
                 }
             }
         }
-        else if (auto map = dynamic_cast<const Map*>(pattern)) {
-            std::vector<std::pair<ValueType, ValueType>> valuetype_pairs;
-            unpackIntoMap(expr_str, valuetype_pairs, valuetype.value, map->patterns.size());
+        // else if (auto map = dynamic_cast<const Map*>(pattern)) {
+        //     std::vector<std::pair<ValueType, ValueType>> valuetype_pairs;
+        //     unpackIntoMap(expr_str, valuetype_pairs, valuetype.value, map->patterns.size());
 
-            for (const auto& [pattern, pair] : std::views::zip(map->patterns, valuetype_pairs)) {
-                bindPattern<INFERRED>(expr_str, pattern.first .get(), pair.first );
-                bindPattern<INFERRED>(expr_str, pattern.second.get(), pair.second);
-            }
-        }
+        //     for (const auto& [pattern, pair] : std::views::zip(map->patterns, valuetype_pairs)) {
+        //         bindPattern<INFERRED>(expr_str, pattern.first .get(), pair.first );
+        //         bindPattern<INFERRED>(expr_str, pattern.second.get(), pair.second);
+        //     }
+        // }
     }
 
 

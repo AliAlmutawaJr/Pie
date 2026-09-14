@@ -26,6 +26,7 @@
 #include "../Parser/Precedence.hxx"
 #include "../Utils/utils.hxx"
 #include "../Analysis/ExprContains.hxx"
+#include "Declarations.hxx"
 #include "Type/Type.hxx"
 
 
@@ -73,6 +74,7 @@ class Parser {
         MAP,
         CALL,
         PACK,
+        LOOP_VAR,
     };
 
     enum class EnvTag {
@@ -164,6 +166,7 @@ public:
 
         while (precedence < getPrecedence()) {
             if constexpr (not PARSE_TYPE or CTX == Context::MAP) if (check(token::TokenKind::COLON)) break;
+            if constexpr (CTX == Context::MATCH) if (check(token::TokenKind::ASSIGN)) break;
             // // both context's need to parse comma separated lists
             // if constexpr (CTX == Context::CALL)
             //     if (check(token::TokenKind::COMMA)) break;
@@ -1180,7 +1183,7 @@ public:
 
         // indicates a loop variable
         if (has_var) {
-            loop_var = parseUnpackmentPattern();
+            loop_var = parseUnpackmentPattern<Context::LOOP_VAR>();
             consume(COLON);
         }
 
@@ -1654,47 +1657,74 @@ public:
         using Expr = expr::unpack::Expr;
         using List = expr::unpack::List;
         using Pack = expr::unpack::Pack;
-        using Map  = expr::unpack::Map ;
+        // using Map  = expr::unpack::Map ;
 
         using Patterns = expr::unpack::Patterns;
 
-        if (match(L_BRACE)) { // either list pattern or map pattern
-            auto pattern = parseUnpackmentPattern();
 
-            if (match(R_BRACE))
-                return List::with(std::move(pattern));
+        constexpr auto PARSE_TYPE = true;
+        if (match(L_BRACE)) { // either list pattern ~or map pattern~
 
-            if (match(COMMA)) { // list
-                Patterns patterns;
-                patterns.push_back(std::move(pattern));
+            Patterns patterns;
 
-                do patterns.push_back(parseUnpackmentPattern()); while(match(COMMA));
+            if (match(R_BRACE)) return std::make_unique<List>(std::move(patterns));
 
-                consume(R_BRACE);
+            // Context::NONE doesn't allow matching against values
+            //  since that's considered just an assignment
+            // so we lie and say we're inside a match (we're practically are)
+            //  just to allow for matching against values
+            do patterns.push_back(parseUnpackmentPattern<Context::MATCH>()); while(match(COMMA));
 
-                return std::make_unique<List>(std::move(patterns));
+            consume(R_BRACE);
+
+            type::TypePtr type  = nullptr;
+            expr::ExprPtr value = nullptr;
+
+            if constexpr (CTX != Context::LOOP_VAR) {
+                if (match(COLON )) type  = parseType();
+            }
+            if constexpr (CTX == Context::MATCH) {
+                if (match(ASSIGN)) value = parseExpr();
             }
 
+            return std::make_unique<List>(std::move(patterns), std::move(type), std::move(value));
 
-            if (match(COLON)) { // map
-                // need to test the first pattern since the we didn't know the context back there
-                if (dynamic_cast<Pack*>(pattern.get()))
-                    util::error<except::SyntaxError>("Cannot have pack patterns inside map unpackments!");
+            // auto pattern = parseUnpackmentPattern();
 
-                auto map = Map::with(std::pair{std::move(pattern), parseUnpackmentPattern<Context::MAP>()});
+            // if (match(R_BRACE))
+            //     return List::with(std::move(pattern));
 
-                while (match(COMMA)) {
-                    pattern = parseUnpackmentPattern<Context::MAP>();
-                    consume(COLON);
-                    map->patterns.emplace_back(std::move(pattern), parseUnpackmentPattern<Context::MAP>());
-                }
+            // if (match(COMMA)) { // list
+            //     Patterns patterns;
+            //     patterns.push_back(std::move(pattern));
 
-                consume(R_BRACE);
+            //     do patterns.push_back(parseUnpackmentPattern()); while(match(COMMA));
 
-                return map;
-            }
+            //     consume(R_BRACE);
 
-            util::error<except::SyntaxError>("Unrecognized Pattern!");
+            //     return std::make_unique<List>(std::move(patterns));
+            // }
+
+
+            // if (match(COLON)) { // map
+            //     // need to test the first pattern since the we didn't know the context back there
+            //     if (dynamic_cast<Pack*>(pattern.get()))
+            //         util::error<except::SyntaxError>("Cannot have pack patterns inside map unpackments!");
+
+            //     auto map = Map::with(std::pair{std::move(pattern), parseUnpackmentPattern<Context::MAP>()});
+
+            //     while (match(COMMA)) {
+            //         pattern = parseUnpackmentPattern<Context::MAP>();
+            //         consume(COLON);
+            //         map->patterns.emplace_back(std::move(pattern), parseUnpackmentPattern<Context::MAP>());
+            //     }
+
+            //     consume(R_BRACE);
+
+            //     return map;
+            // }
+
+            // util::error<except::SyntaxError>("Unrecognized Pattern!");
         }
         else if (match(ELLIPSIS)) { // pack
             if constexpr (CTX == Context::MAP) util::error<except::SyntaxError>("Cannot have pack patterns inside map unpackments!");
@@ -1704,10 +1734,32 @@ public:
                 return std::make_unique<Pack>(nullptr);
             }
 
-            return std::make_unique<Pack>(parseExpr());
+            auto expr = parseExpr<not PARSE_TYPE, CTX>();
+            type::TypePtr type  = nullptr;
+            expr::ExprPtr value = nullptr;
+
+            if constexpr (CTX != Context::LOOP_VAR) {
+                if (match(COLON )) type  = parseType();
+            }
+            if constexpr (CTX == Context::MATCH) {
+                if (match(ASSIGN)) value = parseExpr();
+            }
+
+            return std::make_unique<Pack>(std::move(expr), std::move(type), std::move(value));
         }
         else { // name pattern
-            return std::make_unique<Expr>(parseExpr<false, CTX>());
+            auto name = parseExpr<not PARSE_TYPE, CTX>();
+            type::TypePtr type  = nullptr;
+            expr::ExprPtr value = nullptr;
+
+            if constexpr (CTX != Context::LOOP_VAR) {
+                if (match(COLON )) type = parseType();
+            }
+            if constexpr (CTX == Context::MATCH) {
+                if (match(ASSIGN)) value = parseExpr();
+            }
+
+            return std::make_unique<Expr>(std::move(name), std::move(type), std::move(value));
         }
     }
 
@@ -1720,7 +1772,7 @@ public:
 
 
         if (not check(ASSIGN) and not check(WALRUS) and not check(COLON))
-            util::error<except::SyntaxError>("Unpackment can only be used on the LHS of an assignment!");
+            util::error<except::SyntaxError>("Unpackment can only be used on the LHS of an assignment: " + expr::unpack::stringifyPattern(pattern.get()));
 
 
         if (match(WALRUS)) {
