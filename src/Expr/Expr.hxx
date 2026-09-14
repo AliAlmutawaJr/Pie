@@ -111,7 +111,7 @@ struct FString : Expr {
 struct Name : Expr {
     std::string name;
 
-    explicit Name(std::string n, util::SourceSpan sp) noexcept : Expr{std::move(sp)}, name{std::move(n)} { }
+    explicit Name(std::string n, util::SourceSpan sp = {}) noexcept : Expr{std::move(sp)}, name{std::move(n)} { }
 
     std::string stringify(const size_t = 0) const override { return name; }
 
@@ -632,7 +632,7 @@ struct Match : Expr {
     struct Case {
         struct Pattern {
             struct Single {
-                StringID name;
+                unpack::PatternPtr structured_pattern;
                 type::TypePtr type;
                 ExprPtr value;
             };
@@ -650,11 +650,16 @@ struct Match : Expr {
                 Structure
             > pattern;
 
-            explicit Pattern(Single single) : pattern{std::move(single)} {}
+            explicit Pattern(Single single) : pattern{std::move(single)} { }
+            explicit Pattern(Structure structure) : pattern{std::move(structure)} { }
+
+            Pattern(unpack::PatternPtr pat, type::TypePtr type, ExprPtr value)
+            : pattern{Single{std::move(pat), std::move(type), std::move(value)}}
+            { }
 
             Pattern(ExprPtr name, Patterns structure)
-            : pattern{Structure{{std::move(name)}, std::move(structure)}}
-            {}
+            : pattern{Structure{std::move(name), std::move(structure)}}
+            { }
         };
 
         using PatternPtr = Pattern::PatternPtr;
@@ -708,11 +713,12 @@ private:
             std::string type = pat.type->text();
             if (type == "Any") type = ""; else type = ": " + type;
 
-            std::string def = "";
-            if (pat.value) def = " = " + pat.value->stringify(indent);
+            std::string val = "";
+            if (pat.value) val = " = " + pat.value->stringify(indent);
 
 
-            return pat.name.name + type + def;
+            // return pat.name.name + type + val;
+            return unpack::stringifyPattern(pat.structured_pattern.get()) + type + val;
         }
 
         const auto& [name, patterns] = get<Case::Pattern::Structure>(pattern.pattern);

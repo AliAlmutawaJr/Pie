@@ -1,6 +1,7 @@
 #include "LexicalAnalysis.hxx"
 
 #include <optional>
+#include <source_location>
 #include <utility>
 #include <variant>
 
@@ -424,6 +425,8 @@ void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern) {
 
 
 
+// bad naming, but the implication of `inferred` is to ALWAYS introduce a new name
+// as oppose to assigning to an existing one
 void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern, [[maybe_unused]] bool inferred) {
     // Inferred Assignment always declares a new variable
 
@@ -735,10 +738,13 @@ void LexicalAnalysis::checkPattern(expr::Match::Case::Pattern& pat) {
     if (std::holds_alternative<expr::Match::Case::Pattern::Single>(pat.pattern)) {
         auto& pattern = get<expr::Match::Case::Pattern::Single>(pat.pattern);
 
-        if (not pattern.name.name.empty()) {
-            pattern.name.ID = next();
-            addVar(pattern.name.name, pattern.name.ID);
-        }
+        // if (not pattern.name.name.empty()) {
+        //     pattern.name.ID = next();
+        //     addVar(pattern.name.name, pattern.name.ID);
+        // }
+
+        constexpr auto INFERRED = true; // match cases ALWAYS introduce a new name
+        checkPattern(pattern.structured_pattern.get(), INFERRED);
 
         if (pattern.type)
             std::visit(*this, expr::Type{pattern.type}.variant());
@@ -1217,7 +1223,7 @@ NameSpace* LexicalAnalysis::matchChain(const std::vector<std::string>& names, Na
 
 
 // ideally, should be called findSpaces!
-NameSpace* LexicalAnalysis::findSpace(const std::vector<std::string>& names, const bool global_search_only) {
+NameSpace* LexicalAnalysis::findSpace(const std::vector<std::string>& names, const bool global_search_only, const std::source_location& loc) {
     if (not global_search_only) {
         for (const auto space : std::views::reverse(current_space)) {
             if (const auto s = matchChain(names, space)) return s;
@@ -1235,7 +1241,7 @@ NameSpace* LexicalAnalysis::findSpace(const std::vector<std::string>& names, con
 
 
 
-    util::error<except::NameLookup>("Space `" + stringify(names) + "` not found!");
+    util::error<except::NameLookup>("Space `" + stringify(names) + "` not found!", loc);
 }
 
 

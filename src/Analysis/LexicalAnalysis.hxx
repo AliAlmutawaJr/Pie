@@ -2,6 +2,7 @@
 
 
 #include <optional>
+#include <source_location>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -185,7 +186,7 @@ public:
     NameSpace* matchChain(const std::vector<std::string>&, NameSpace*);
 
     // ideally, should be called findSpaces!
-    NameSpace* findSpace(const std::vector<std::string>&, const bool global_search_only = false);
+    NameSpace* findSpace(const std::vector<std::string>&, const bool global_search_only = false, const std::source_location& = std::source_location::current());
 
     void addVar(std::string name, const size_t);
 

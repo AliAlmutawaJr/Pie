@@ -2201,7 +2201,7 @@ There are no mistakes with art.)";
 
     bool match(const value::Value& value, const expr::Match::Case::Pattern& pattern) {
         if (std::holds_alternative<expr::Match::Case::Pattern::Single>(pattern.pattern)) {
-            const auto& [name, typ, val_expr] = get<expr::Match::Case::Pattern::Single>(pattern.pattern);
+            const auto& [pat, typ, val_expr] = get<expr::Match::Case::Pattern::Single>(pattern.pattern);
             const auto type = validateType(typ);
 
             // not gonna use typeCheck for now. Let's see how it goes
@@ -2212,9 +2212,11 @@ There are no mistakes with art.)";
                 if (value != val) return false;
             }
 
-            if (name.name.length() != 0) {
-                addVar(name.name, name.ID, std::make_shared<value::Value>(value), type);
-            }
+            constexpr auto INFERRED = true;
+            bindPattern<INFERRED>(LIFT(std::string{}), pat.get(), {std::move(value), std::move(type)});
+            // if (name.name.length() != 0) {
+            //     addVar(name.name, name.ID, std::make_shared<value::Value>(value), type);
+            // }
 
             return true;
         }

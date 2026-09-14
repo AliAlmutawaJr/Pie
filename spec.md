@@ -348,7 +348,7 @@ single :=
 
 
 structure :=
-      name "(" (single ("," single)*)? ")"
+      name "(" (pattern ("," pattern)*)? ")"
 
 
 pattern :=

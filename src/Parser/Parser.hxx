@@ -562,8 +562,8 @@ public:
         using Single    = expr::Match::Case::Pattern::Single;
         using Patterns  = expr::Match::Case::Pattern::Patterns;
 
-        bool has_name{}, has_type{}, has_valu{};
-        bool is_name_expr{};
+        bool has_name{}, has_type{}, has_valu{}, is_unpackment{};
+        bool is_qualified{};
 
         // std::string name;
         // if (check(NAME)) {
@@ -584,12 +584,15 @@ public:
             auto token = consume(NAME);
             name = std::make_shared<expr::Name>(std::move(token).text, std::move(token).span);
             has_name = true;
-            is_name_expr = true;
+            is_qualified = true;
         }
         else if (match(SCOPE_RESOLVE)) {
             constexpr auto GLOBAL_ACCESS = true;
             name = namespaceAccess<GLOBAL_ACCESS>(consume(NAME).text);
             has_name = true;
+        }
+        else if (match(L_BRACE)) {
+            is_unpackment = true;
         }
 
 
@@ -597,7 +600,7 @@ public:
         if (not match(L_PAREN)) {
             // trying to write code that avoids move
 
-            if (has_name and not is_name_expr)
+            if (has_name and not is_qualified)
                 util::error<except::SyntaxError>("Cannot introduce a qualified name in a pattern: " + name->stringify());
 
             auto type = type::builtins::_();
@@ -612,15 +615,14 @@ public:
                 has_valu = true;
             }
 
-            if (not (has_name or has_type or has_valu))
+            if (not (has_name or has_type or has_valu or is_unpackment))
                 util::error<except::SyntaxError>("Match expression case doesn't contain a pattern!");
 
+            // structure
             return std::make_unique<Pattern>(
-                Single{
-                    {name ? name->stringify() : ""},
-                    std::move(type),
-                    std::move(value),
-                }
+                std::make_shared<expr::unpack::Expr>(std::make_shared<expr::Name>(name ? name->stringify() : "")),
+                std::move(type),
+                std::move(value)
             );
         }
 
