@@ -559,86 +559,86 @@ public:
     }
 
 
-    expr::Match::Case::PatternPtr parseMatchPattern() {
-        using enum token::TokenKind;
-        using Pattern   = expr::Match::Case::Pattern;
-        using Single    = expr::Match::Case::Pattern::Single;
-        using Patterns  = expr::Match::Case::Pattern::Patterns;
+    // expr::Match::Case::PatternPtr parseMatchPattern() {
+    //     using enum token::TokenKind;
+    //     using Pattern   = expr::Match::Case::Pattern;
+    //     using Single    = expr::Match::Case::Pattern::Single;
+    //     using Patterns  = expr::Match::Case::Pattern::Patterns;
 
-        bool has_name{}, has_type{}, has_valu{}, is_unpackment{};
-        bool is_qualified{};
+    //     bool has_name{}, has_type{}, has_valu{}, is_unpackment{};
+    //     bool is_qualified{};
 
-        // std::string name;
-        // if (check(NAME)) {
-        //     name = consume(NAME).text;
-        //     has_name = true;
-        // }
-
-
-        expr::ExprPtr name;
-        if (check(NAME) and check(SCOPE_RESOLVE, 1)) {
-            constexpr auto NOT_GLOBAL_ACCESS = false;
-            auto text = consume(NAME).text;
-            consume(SCOPE_RESOLVE);
-            name = namespaceAccess<NOT_GLOBAL_ACCESS>(std::move(text));
-            has_name = true;
-        }
-        else if (check(NAME)) { // just a name
-            auto token = consume(NAME);
-            name = std::make_shared<expr::Name>(std::move(token).text, std::move(token).span);
-            has_name = true;
-            is_qualified = true;
-        }
-        else if (match(SCOPE_RESOLVE)) {
-            constexpr auto GLOBAL_ACCESS = true;
-            name = namespaceAccess<GLOBAL_ACCESS>(consume(NAME).text);
-            has_name = true;
-        }
-        else if (match(L_BRACE)) {
-            is_unpackment = true;
-        }
+    //     // std::string name;
+    //     // if (check(NAME)) {
+    //     //     name = consume(NAME).text;
+    //     //     has_name = true;
+    //     // }
 
 
-        // base case
-        if (not match(L_PAREN)) {
-            // trying to write code that avoids move
-
-            if (has_name and not is_qualified)
-                util::error<except::SyntaxError>("Cannot introduce a qualified name in a pattern: " + name->stringify());
-
-            auto type = type::builtins::_();
-            if (match(COLON)) {
-                type = parseType();
-                has_type = true;
-            }
-
-            expr::ExprPtr value;
-            if (match(ASSIGN)) {
-                value = parseExpr();
-                has_valu = true;
-            }
-
-            if (not (has_name or has_type or has_valu or is_unpackment))
-                util::error<except::SyntaxError>("Match expression case doesn't contain a pattern!");
-
-            // structure
-            return std::make_unique<Pattern>(
-                std::make_shared<expr::unpack::Expr>(std::make_shared<expr::Name>(name ? name->stringify() : "")),
-                std::move(type),
-                std::move(value)
-            );
-        }
+    //     expr::ExprPtr name;
+    //     if (check(NAME) and check(SCOPE_RESOLVE, 1)) {
+    //         constexpr auto NOT_GLOBAL_ACCESS = false;
+    //         auto text = consume(NAME).text;
+    //         consume(SCOPE_RESOLVE);
+    //         name = namespaceAccess<NOT_GLOBAL_ACCESS>(std::move(text));
+    //         has_name = true;
+    //     }
+    //     else if (check(NAME)) { // just a name
+    //         auto token = consume(NAME);
+    //         name = std::make_shared<expr::Name>(std::move(token).text, std::move(token).span);
+    //         has_name = true;
+    //         is_qualified = true;
+    //     }
+    //     else if (match(SCOPE_RESOLVE)) {
+    //         constexpr auto GLOBAL_ACCESS = true;
+    //         name = namespaceAccess<GLOBAL_ACCESS>(consume(NAME).text);
+    //         has_name = true;
+    //     }
+    //     else if (match(L_BRACE)) {
+    //         is_unpackment = true;
+    //     }
 
 
-        Patterns patterns{};
-        if (match(R_PAREN)) return std::make_unique<Pattern>(std::move(name), std::move(patterns));
+    //     // base case
+    //     if (not match(L_PAREN)) {
+    //         // trying to write code that avoids move
 
-        do patterns.push_back(parseMatchPattern()); while (match(COMMA));
+    //         if (has_name and not is_qualified)
+    //             util::error<except::SyntaxError>("Cannot introduce a qualified name in a pattern: " + name->stringify());
+
+    //         auto type = type::builtins::_();
+    //         if (match(COLON)) {
+    //             type = parseType();
+    //             has_type = true;
+    //         }
+
+    //         expr::ExprPtr value;
+    //         if (match(ASSIGN)) {
+    //             value = parseExpr();
+    //             has_valu = true;
+    //         }
+
+    //         if (not (has_name or has_type or has_valu or is_unpackment))
+    //             util::error<except::SyntaxError>("Match expression case doesn't contain a pattern!");
+
+    //         // structure
+    //         return std::make_unique<Pattern>(
+    //             std::make_shared<expr::unpack::Expr>(std::make_shared<expr::Name>(name ? name->stringify() : "")),
+    //             std::move(type),
+    //             std::move(value)
+    //         );
+    //     }
 
 
-        consume(R_PAREN);
-        return std::make_unique<Pattern>(std::move(name), std::move(patterns));
-    }
+    //     Patterns patterns{};
+    //     if (match(R_PAREN)) return std::make_unique<Pattern>(std::move(name), std::move(patterns));
+
+    //     do patterns.push_back(parseMatchPattern()); while (match(COMMA));
+
+
+    //     consume(R_PAREN);
+    //     return std::make_unique<Pattern>(std::move(name), std::move(patterns));
+    // }
 
 
     expr::ExprPtr match() {
@@ -652,22 +652,24 @@ public:
         size_t so_far{};
 
         do {
-            constexpr auto OR = "|";
-            constexpr auto IF = "&";
+            // constexpr auto OR = "|";
+            // constexpr auto IF = "&";
             constexpr auto EMPTY_COND = nullptr;
             constexpr auto EMPTY_BODY = nullptr;
 
-            std::vector<std::unique_ptr<expr::Match::Case::Pattern>> patterns;
+            // std::vector<std::unique_ptr<expr::Match::Case::Pattern>> patterns;
+            expr::unpack::Patterns patterns;
             std::vector<expr::ExprPtr> guards;
 
             do {
                 cases.push_back({
-                    parseMatchPattern(),
-                    match(IF) ? parseExpr() : EMPTY_COND,
+                    // parseMatchPattern(),
+                    parseUnpackmentPattern(),
+                    match(COMMA) ? parseExpr() : EMPTY_COND,
                     EMPTY_BODY
                 });
 
-            } while (match(OR));
+            } while (false /* match(OR) */); // will disallowing multiple cases for now
 
 
             consume(FAT_ARROW);
@@ -1481,7 +1483,7 @@ public:
 
         // indicates a loop variable
         if (has_var) {
-            loop_var = parseUnpackmentPattern();
+            loop_var = parseUnpackmentPattern<Context::LOOP_VAR>();
             consume(COLON);
         }
 
@@ -1748,16 +1750,24 @@ public:
             return std::make_unique<Pack>(std::move(expr), std::move(type), std::move(value));
         }
         else { // name pattern
-            auto name = parseExpr<not PARSE_TYPE, CTX>();
-            type::TypePtr type  = nullptr;
+            expr::ExprPtr name  = nullptr;
             expr::ExprPtr value = nullptr;
+            type::TypePtr type  = nullptr;
+
+            // if constexpr (CTX == Context::MATCH)
+            if (not check(COLON) and not check(ASSIGN))
+                name = parseExpr<not PARSE_TYPE, CTX>();
 
             if constexpr (CTX != Context::LOOP_VAR) {
                 if (match(COLON )) type = parseType();
             }
-            if constexpr (CTX == Context::MATCH) {
+
+            // if constexpr (CTX == Context::MATCH)
                 if (match(ASSIGN)) value = parseExpr();
-            }
+
+
+            // I _could_ check for if all parts are null
+            // _but_ it would make for an interesting way to discard members!
 
             return std::make_unique<Expr>(std::move(name), std::move(type), std::move(value));
         }
@@ -1934,6 +1944,7 @@ public:
 
 
         for (const auto& func : funcs) {
+            // puts("func!");
             auto snapshot = checkpoint();
             try {
                 return (this->*func)();

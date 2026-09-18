@@ -129,8 +129,6 @@ public:
     void operator()(expr::Union*);
 
 
-    void checkPattern(expr::Match::Case::Pattern&);
-
     void operator()(expr::Match*);
 
 

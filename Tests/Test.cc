@@ -1,11 +1,11 @@
-#include "Utils/Exceptions.hxx"
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"
 
 #include <stdexcept>
-#include "TestSuite.hxx"
 
 #include "../src/Type/Type.hxx"
+#include "Utils/Exceptions.hxx"
+#include "TestSuite.hxx"
 
 
 
@@ -19,6 +19,212 @@
 
 
 
+
+TEST_CASE("Global Variable Access", "[Space][Var]") {
+{
+    const auto src = R"(
+x = 5;
+
+match 1 {
+    x => {
+        ::x = 10;
+    };
+};
+
+__builtin_print(x);
+
+
+)";
+
+    REQUIRE(pie::test::run(src) == "10");
+}
+
+}
+
+
+TEST_CASE("Matching Against Primitives", "[Unpack][Match]") {
+{
+    const auto src = R"(
+list = {1, 2, 3, 4, 5, 6, 7};
+match list {
+    {a, ...b: ...Any, c: Int} => __builtin_print(b);
+};
+)";
+
+    REQUIRE(pie::test::run(src) == "2, 3, 4, 5, 6");
+}
+{
+    const auto src = R"(
+list = {1, 2, 3, 4, 5, 6, 7};
+match list {
+    {a: String, ...b: ...Any, c: Int} => __builtin_print(b);
+};
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+list = {"",1, 2, 3, 4, 5, 6, 7};
+match list {
+    {a: String, ...b: ...Any, c: Int} => __builtin_print(b);
+};
+)";
+
+    REQUIRE(pie::test::run(src) == "1, 2, 3, 4, 5, 6");
+}
+}
+
+
+TEST_CASE("Single Line Match (no name)", "[Unpack]") {
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+};
+
+{name, = 5} = Human("", 5);
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+};
+
+{name, = 4} = Human("", 5);
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
+
+TEST_CASE("Single Line Match 2", "[Unpack]") {
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+    child = 0;
+};
+
+getHuman = () => Human("Pie", 9, Human("cake", 1));
+
+
+
+lessThan10 = (n) => __builtin_lt(n, 10);
+{name: String, age: lessThan10}: Human = 5 = getHuman();
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+    child = 0;
+};
+
+getHuman = () => Human("Pie", 11, Human("cake", 1));
+
+
+
+lessThan10 = (n) => __builtin_lt(n, 10);
+{name: String, age: lessThan10}: Human = 5 = getHuman();
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+}
+
+
+TEST_CASE("Single Line Match 1", "[Unpack]") {
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+    child = 0;
+};
+
+getHuman = () => Human("Pie", 9, Human("cake", 1));
+
+
+match getHuman() {
+    {parent_name: String, : Int, {child_name = "cake", = 1}: Human}: Human => {
+        __builtin_print("{parent_name} is cake's parent!");
+    };
+};
+)";
+
+    REQUIRE(pie::test::run(src) == "Pie is cake's parent!");
+}
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+    child = 0;
+};
+
+getHuman = () => Human("Pie", 9, Human("cake", 1));
+
+
+match getHuman() {
+    {parent_name: Int, : Int, {child_name = "cake", = 1}: Human}: Human => {
+        __builtin_print("{parent_name} is cake's parent!");
+    };
+};
+)";
+
+    // Not a type error, but a match error (no case matched)
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+    child = 0;
+};
+
+getHuman = () => Human("Pie", 9, Human("cake", 1));
+
+
+match getHuman() {
+    {parent_name: String, : Int = 1, {child_name = "cake", = 1}: Human}: Human => {
+        __builtin_print("{parent_name} is cake's parent!");
+    };
+};
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
+
+TEST_CASE("Invalid Single Line Match 1", "[Unpack]") {
+{
+    const auto src = R"(
+{a, b, c, d, ...x = 5} = {1, 2, 3, 4, 5};
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+{a, b, c, d, ...x = 5} = {1, 2, 3, 4, 5, 6};
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
 
 
 TEST_CASE("Typed Unpackments", "[Unpack][Type]") {
@@ -1040,7 +1246,7 @@ a = 1.0;
 b = 2;
 
 match divide(a, b) {
-    std::Some(value) => __builtin_print(a, "/", b, " = ", value, sep = "");
+    {value}: std::Some => __builtin_print(a, "/", b, " = ", value, sep = "");
     = std::None      => __builtin_print("Cannot divide by zero!!");
 };
 
@@ -1128,27 +1334,63 @@ __builtin_print(x);
 
 
 
+// TEST_CASE("Chained Unpackment!", "[Unpack]") {
+//     const auto src1 = R"(
+// print = __builtin_print;
+
+
+// {...w: Int = 5, end}    = 
+// {x: a, y: {...b}, z: c} =
+// {1, 2.5, 3}             =
+// {"one", {"two", "two and a half"}, "three", "four", "five", "six"};
+
+
+// print((w: Int = 5));
+// print(end);
+
+// print(1);
+// print(2.5);
+// print(3);
+
+// print(x, a);
+// print(y, b);
+// print(z, c);
+
+// )";
+
+//     REQUIRE(pie::test::run(src1) == R"(one, {two, two and a half}, three, four, five
+// six
+// one
+// {two, two and a half}
+// three
+// 0 one
+// 1 two, two and a half
+// 2 three)");
+// }
+
+
+
 TEST_CASE("Chained Unpackment!", "[Unpack]") {
     const auto src1 = R"(
 print = __builtin_print;
 
 
-{...w: Int = 5, end}    = 
-{x: a, y: {...b}, z: c} =
+{...w, end}    = 
+{a, {...b}, c} =
 {1, 2.5, 3}             =
 {"one", {"two", "two and a half"}, "three", "four", "five", "six"};
 
 
-print((w: Int = 5));
+print(w);
 print(end);
 
 print(1);
 print(2.5);
 print(3);
 
-print(x, a);
-print(y, b);
-print(z, c);
+print(a);
+print(b);
+print(c);
 
 )";
 
@@ -1157,9 +1399,9 @@ six
 one
 {two, two and a half}
 three
-0 one
-1 two, two and a half
-2 three)");
+one
+two, two and a half
+three)");
 }
 
 
@@ -3065,9 +3307,9 @@ C = class {
 c = C(Bool, "meow");
 
 match c {
-    C(type, v: type) => print(type, v);
+    {type, v: type} => print(type, v);
 
-    C(type) => print("not matched:", v);
+    {type} => print("not matched:", v);
 };
 )";
 
@@ -3087,9 +3329,9 @@ C = class {
 c = C(Bool, "meow");
 
 match c {
-    C(type, v: type) => print(type, v);
+    {type, v: type} => print(type, v);
 
-    SomeNonexistantTypeName(type) => print("not matched");
+    {type}: SomeNonexistantTypeName => print("not matched");
 };
 )";
 
@@ -4180,13 +4422,13 @@ Node: Type = class {
 };
 
 printList = (l: Node) => match l {
-    Node(n, :Node) => {
+    {n, : Node}: Node => {
         print(n);
         printList(l.next);
     };
 
-    Node(n: Int, ="None") => print(n);
-    Node(_, ="None") => print("Empty List!");
+    {n: Int, = "None"}: Node => print(n);
+    {_, = "None"}: Node => print("Empty List!");
 };
 
 list = Node(1, Node(2, Node(3)));
@@ -4548,11 +4790,11 @@ Leaf = class { v = 0; };
 
 
 test = (x) => match x {
-    Leaf(k) & __builtin_geq(k, 0) => 1;
-    Leaf(k) & __builtin_leq(k, 0) => 2;
-    Leaf(k) & __builtin_eq (k, 0) => 3;
-    Node(k, Leaf(_), rChild) & __builtin_geq(k, 0) => 4;
-    Node(k, _, _) => 5;
+    {k}: Leaf, __builtin_geq(k, 0) => 1;
+    {k}: Leaf, __builtin_leq(k, 0) => 2;
+    {k}: Leaf, __builtin_eq (k, 0) => 3;
+    {k, {_}: Leaf, rChild}: Node, __builtin_geq(k, 0) => 4;
+    {k, _, _}: Node => 5;
 };
 
 

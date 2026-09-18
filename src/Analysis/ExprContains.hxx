@@ -6,7 +6,7 @@
 namespace pie {
 namespace analysis {
 
-template <typename EXPR> const EXPR *checkPattern(expr::Match::Case::Pattern &);
+template <typename EXPR> const EXPR *checkPattern(expr::unpack::Pattern &);
 
 template <typename EXPR> const EXPR *exprContains(expr::ExprPtr expr) {
     if (auto p = dynamic_cast<const EXPR *>(expr.get())) return p;
@@ -223,23 +223,24 @@ template <typename EXPR> const EXPR *exprContains(expr::ExprPtr expr) {
     }
 
     template <typename EXPR>
-    const EXPR *checkPattern(expr::Match::Case::Pattern &pat) {
-    if (std::holds_alternative<expr::Match::Case::Pattern::Single>(pat.pattern)) {
-        auto &pattern = get<expr::Match::Case::Pattern::Single>(pat.pattern);
+    const EXPR *checkPattern(expr::unpack::Pattern &) {
 
-        // todo: check this type as well!
-        // if (pattern.type)
-        // exprContains<Expr>(expr::Type{pattern.type})
+    // if (std::holds_alternative<expr::Match::Case::Pattern::Single>(pat.pattern)) {
+    //     auto &pattern = get<expr::Match::Case::Pattern::Single>(pat.pattern);
 
-        if (pattern.value)
-        return exprContains<EXPR>(pattern.value);
-    } else { // holds Match::Case::Pattern::Structure
-        for (const auto &pat :
-            get<expr::Match::Case::Pattern::Structure>(pat.pattern).patterns) {
-        if (auto p = checkPattern<EXPR>(*pat))
-            return p;
-        }
-    }
+    //     // todo: check this type as well!
+    //     // if (pattern.type)
+    //     // exprContains<Expr>(expr::Type{pattern.type})
+
+    //     if (pattern.value)
+    //     return exprContains<EXPR>(pattern.value);
+    // } else { // holds Match::Case::Pattern::Structure
+    //     for (const auto &pat :
+    //         get<expr::Match::Case::Pattern::Structure>(pat.pattern).patterns) {
+    //     if (auto p = checkPattern<EXPR>(*pat))
+    //         return p;
+    //     }
+    // }
 
     return nullptr;
 }

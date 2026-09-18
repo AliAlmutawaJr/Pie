@@ -281,11 +281,16 @@ void LexicalAnalysis::accessAssign(expr::Access *acc, expr::Assignment *ass) {
 
 void LexicalAnalysis::spaceAccessAssign(expr::SpaceAccess *acc, expr::Assignment *ass) {
     const auto space = findSpace(acc->spaces, acc->global);
-    if (not space) util::error("Namespace `" + stringify(acc->spaces) + "` is expression `" + ass->stringify() + "` was not found!");
-
-    // for (const auto& [var, id] : namespaces[fullName(space)])
-    for (const auto& [var, id] : space->members) {
-        if (var == acc->name.name) {
+    if (not space) { // global access `::x`
+        for (const auto& [name, id] : env.front().first.vars) {
+            if (name == acc->name.name) {
+                acc->name.ID = id;
+                break;
+            }
+        }
+    }
+    else for (const auto& [name, id] : space->members) {
+        if (name == acc->name.name) {
             acc->name.ID = id;
             break;
         }
@@ -393,13 +398,14 @@ void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern) {
             return std::visit(*this, expr->expr->variant());
 
 
-        if (const auto id = findVariable(expr->expr->stringify()); id) {
-            expr->expr->var_ID = *id;
-            if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
+        if (expr->expr) {
+            if (const auto id = findVariable(expr->expr->stringify()); id) {
+                expr->expr->var_ID = *id;
+                if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
+            }
+            expr->expr->var_ID = next();
+            addVar(expr->expr->stringify(), expr->expr->var_ID);
         }
-
-        expr->expr->var_ID = next();
-        addVar(expr->expr->stringify(), expr->expr->var_ID);
     }
     else if (auto list = dynamic_cast<expr::unpack::List*>(pattern)) {
         // std::ranges::for_each(list->patterns, [this](const auto& pat) { return checkPattern(pat.get()); });
@@ -434,15 +440,18 @@ void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern, [[maybe_unuse
     // Inferred Assignment always declares a new variable
 
     if (auto expr = dynamic_cast<expr::unpack::Expr*>(pattern)) {
-        if (not dynamic_cast<expr::Name*>(expr->expr.get()))
-            util::error("Only proper names may appear on the LHS of the walrus operator `:=`");
+        // relaxing that restriction
+        // if (not dynamic_cast<expr::Name*>(expr->expr.get()))
+        //     util::error("Only proper names may appear on the LHS of the walrus operator `:=`");
 
-        expr->expr->var_ID = next();
-        addVar(expr->expr->stringify(), expr->expr->var_ID);
+        if (expr->expr) {
+            expr->expr->var_ID = next();
+            addVar(expr->expr->stringify(), expr->expr->var_ID);
+        }
     }
     else if (auto list = dynamic_cast<expr::unpack::List*>(pattern)) {
         // std::ranges::for_each(list->patterns, [this, inferred](const auto& pat) { return checkPattern(pat.get(), inferred); });
-        for (const auto& pat : list->patterns) checkPattern(pat.get(), inferred);
+        for (const auto& pat : list->patterns) checkPattern(pat.get(), {});
     }
     // else if (auto map = dynamic_cast<expr::unpack::Map*>(pattern)) {
     //     for (const auto& [key, val] : map->patterns) {
@@ -460,6 +469,9 @@ void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern, [[maybe_unuse
         addVar(pack->expr->stringify(), pack->expr->var_ID);
     }
     else util::error();
+
+    if (pattern->type) visitType(pattern->type);
+    if (pattern->value) std::visit(*this, pattern->value->variant());
 }
 
 
@@ -737,38 +749,38 @@ void LexicalAnalysis::operator()(expr::Union *onion) {
 
 
 
-void LexicalAnalysis::checkPattern(expr::Match::Case::Pattern& pat) {
-    if (std::holds_alternative<expr::Match::Case::Pattern::Single>(pat.pattern)) {
-        auto& pattern = get<expr::Match::Case::Pattern::Single>(pat.pattern);
+// void LexicalAnalysis::checkPattern(expr::unpack::Pattern& pat) {
+//     if (std::holds_alternative<expr::Match::Case::Pattern::Single>(pat.pattern)) {
+//         auto& pattern = get<expr::Match::Case::Pattern::Single>(pat.pattern);
 
-        // if (not pattern.name.name.empty()) {
-        //     pattern.name.ID = next();
-        //     addVar(pattern.name.name, pattern.name.ID);
-        // }
+//         // if (not pattern.name.name.empty()) {
+//         //     pattern.name.ID = next();
+//         //     addVar(pattern.name.name, pattern.name.ID);
+//         // }
 
-        constexpr auto INFERRED = true; // match cases ALWAYS introduce a new name
-        checkPattern(pattern.structured_pattern.get(), INFERRED);
+//         constexpr auto INFERRED = true; // match cases ALWAYS introduce a new name
+//         checkPattern(pattern.structured_pattern.get(), INFERRED);
 
-        if (pattern.type)
-            std::visit(*this, expr::Type{pattern.type}.variant());
+//         if (pattern.type)
+//             std::visit(*this, expr::Type{pattern.type}.variant());
 
-        if (pattern.value)
-            std::visit(*this, pattern.value->variant());
+//         if (pattern.value)
+//             std::visit(*this, pattern.value->variant());
 
-        // if (not pattern.name.empty()) addVar(pattern.name);
-    }
-    else { // holds expr::Match::Case::Pattern::Structure
-        auto& [name, patterns] = get<expr::Match::Case::Pattern::Structure>(pat.pattern);
+//         // if (not pattern.name.empty()) addVar(pattern.name);
+//     }
+//     else { // holds expr::Match::Case::Pattern::Structure
+//         auto& [name, patterns] = get<expr::Match::Case::Pattern::Structure>(pat.pattern);
 
-        std::visit(*this, name->variant());
+//         std::visit(*this, name->variant());
 
-        // if (const auto id = findVariable(name.name); not id)
-        //     util::error<except::NameLookup>("Name `" + name.name + "` not found!");
-        // else name.ID = *id;
+//         // if (const auto id = findVariable(name.name); not id)
+//         //     util::error<except::NameLookup>("Name `" + name.name + "` not found!");
+//         // else name.ID = *id;
 
-        for (const auto& pat : patterns) checkPattern(*pat);
-    }
-}
+//         for (const auto& pat : patterns) checkPattern(*pat);
+//     }
+// }
 
 
 
@@ -786,7 +798,7 @@ void LexicalAnalysis::operator()(expr::Match *match) {
     for (const auto& kase : match->cases) {
         ScopeGuard sg{this};
 
-        checkPattern(*kase.pattern);
+        checkPattern(kase.pattern.get(), {});
 
         if (kase.guard) std::visit(*this, kase.guard->variant());
 
@@ -1227,6 +1239,8 @@ NameSpace* LexicalAnalysis::matchChain(const std::vector<std::string>& names, Na
 
 // ideally, should be called findSpaces!
 NameSpace* LexicalAnalysis::findSpace(const std::vector<std::string>& names, const bool global_search_only, const std::source_location& loc) {
+    if (names.empty()) return nullptr;
+
     if (not global_search_only) {
         for (const auto space : std::views::reverse(current_space)) {
             if (const auto s = matchChain(names, space)) return s;

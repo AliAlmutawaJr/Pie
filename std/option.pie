@@ -3,5 +3,18 @@ space std {
     Some = class { data = 0; };
     None = "Some Sentinal Value";
     Option = union { Some; None; };
+
+
+    .: Status = enum {
+    .:     OK{code = 0};
+    .:     NotFound{code = 0};
+    .:     None;
+    .:     Ali = "Meow";
+    .: };
+
+
+    .: OK       = class { code = 0; __ok = 0;       };
+    .: NotFound = class { code = 0; __notfound = 0; };
+    .: Status = union { OK; NotFound; };
 };
 

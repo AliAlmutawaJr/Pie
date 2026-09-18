@@ -429,7 +429,8 @@ struct Pack : Pattern {
 inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t indent = 0) {
     std::string s;
     if (auto expr = dynamic_cast<const unpack::Expr*>(pattern)) {
-        s = expr->expr->stringify();
+        if (expr->expr)
+            s = expr->expr->stringify();
     }
     else if (auto list = dynamic_cast<const unpack::List*>(pattern)) {
         s += '{';
@@ -468,7 +469,7 @@ inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t
     else util::error();
 
 
-    if (pattern->type ) s += ": " + pattern->type ->text      (indent + 4);
+    if (pattern->type ) s += "`:` "  + pattern->type ->text     (indent + 4);
     if (pattern->value) s += " `=` " + pattern->value->stringify(indent + 4);
 
     return s;
@@ -647,42 +648,7 @@ struct Union : Expr {
 
 struct Match : Expr {
     struct Case {
-        struct Pattern {
-            struct Single {
-                unpack::PatternPtr structured_pattern;
-                type::TypePtr type;
-                ExprPtr value;
-            };
-
-            using PatternPtr = std::unique_ptr<Pattern>;
-            using Patterns = std::vector<PatternPtr>;
-            struct Structure {
-                ExprPtr type_name;  // either a expr::Name or expr::SpaceAccess
-                Patterns patterns;
-            };
-
-
-            std::variant<
-                Single,
-                Structure
-            > pattern;
-
-            explicit Pattern(Single single) : pattern{std::move(single)} { }
-            explicit Pattern(Structure structure) : pattern{std::move(structure)} { }
-
-            Pattern(unpack::PatternPtr pat, type::TypePtr type, ExprPtr value)
-            : pattern{Single{std::move(pat), std::move(type), std::move(value)}}
-            { }
-
-            Pattern(ExprPtr name, Patterns structure)
-            : pattern{Structure{std::move(name), std::move(structure)}}
-            { }
-        };
-
-        using PatternPtr = Pattern::PatternPtr;
-
-        // Pattern pattern;
-        PatternPtr pattern;
+        unpack::PatternPtr pattern;
         ExprPtr guard;
         ExprPtr body;
     };
@@ -704,7 +670,7 @@ struct Match : Expr {
         for (const std::string space(indent + 4, ' '); const auto& kase : cases) {
             s += space;
 
-            s += stringifyPattern(*kase.pattern, indent + 4);
+            s += unpack::stringifyPattern(kase.pattern.get(), indent + 4);
 
             if (kase.guard) s += " & " + kase.guard->stringify(indent + 4);
             s += " => " + kase.body->stringify(indent + 4) + ";\n";
@@ -720,35 +686,6 @@ struct Match : Expr {
     }
 
     Node variant() override { return this; }
-
-
-private:
-    std::string stringifyPattern(const Case::Pattern& pattern, const size_t indent = 0) const {
-        if (std::holds_alternative<Case::Pattern::Single>(pattern.pattern)) {
-            const auto& pat = get<Case::Pattern::Single>(pattern.pattern);
-
-            std::string type = pat.type->text();
-            if (type == "Any") type = ""; else type = ": " + type;
-
-            std::string val = "";
-            if (pat.value) val = " = " + pat.value->stringify(indent);
-
-
-            // return pat.name.name + type + val;
-            return unpack::stringifyPattern(pat.structured_pattern.get()) + type + val;
-        }
-
-        const auto& [name, patterns] = get<Case::Pattern::Structure>(pattern.pattern);
-
-        std::string s = name->stringify() + '(';
-
-        for (std::string comma = ""; const auto& pat : patterns) {
-            s += comma + stringifyPattern(*pat, indent);
-            comma = ", ";
-        }
-
-        return s + ')';
-    }
 };
 
 
@@ -796,13 +733,13 @@ struct Loop : Expr {
     std::string stringify(const size_t indent = 0) const override {
         std::string s = "loop ";
 
-        if (var) s += "var" + unpack::stringifyPattern(var.get(), indent + 4) + (kind ? " : " : ": ");
+        if (var) s += unpack::stringifyPattern(var.get(), indent + 4) + (kind ? " : " : ": ");
 
-        if (kind) s += "kind" + kind->stringify(indent + 4) + ' ';
+        if (kind) s += kind->stringify(indent + 4) + ' ';
 
         // s += " {\n";
 
-        s += "body" + body->stringify(indent + 4);
+        s += body->stringify(indent + 4);
 
         // s += "\n" + std::string(indent, ' ') + "}";
 
