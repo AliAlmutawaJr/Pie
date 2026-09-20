@@ -137,6 +137,10 @@ std::string stringify(const Value& value, const size_t indent) {
 
         s += '}';
     }
+    else if (std::holds_alternative<value::Address>(value)) {
+        const auto& address = get<value::Address>(value);
+        s = std::format("{} at <{}>", address.name, address.pointer);
+    }
 
     else util::error("Type not found! Index: " + std::to_string(value.index()));
 

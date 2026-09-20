@@ -926,7 +926,7 @@ this isn't
 
 #### in order of priority
 
-- [ ] Make sure to expand args for EVERY builtin function (`ffi_call` and `defer` come to mind)
+- [ ] Better File IO
 - [ ] Make sure to expand args for EVERY builtin function (`ffi_call` and `defer` come to mind)
 - [ ] Add default values to function parameters
 - [ ] Breaking Out of Nested Loops
@@ -946,7 +946,9 @@ this isn't
 ---
 
 ### Done
-- [x] Added Experimental CMakeLists.txt
+- [x] Better Pattern Matching
+- [x] Unpackments
+- [x] Added CMakeLists.txt
 - [x] defer!!!
 - [x] f-strings
 - [x] Add recursive operators

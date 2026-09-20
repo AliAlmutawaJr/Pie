@@ -37,8 +37,11 @@ using Pack = std::shared_ptr<Elements>;
 struct Items;
 struct Map { std::shared_ptr<Items> items; };
 
-struct BuiltinFunction {
-    std::string func_name;
+struct BuiltinFunction { std::string func_name; };
+// represents any C pointer
+struct Address {
+    std::string name;
+    void *pointer;
 };
 
 using VariantType = std::variant<
@@ -54,7 +57,8 @@ using VariantType = std::variant<
     expr::Node,
     Pack,
     List,
-    Map
+    Map,
+    Address
 >;
 
 struct Value : VariantType {

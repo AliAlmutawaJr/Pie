@@ -94,6 +94,21 @@ namespace type {
     };
 
 
+    struct AddressType : Type {
+
+        explicit AddressType() noexcept { }
+
+        std::string text(const size_t = 0) const override { return "Address"; }
+        bool involvesT(const Type& T) const override { return T == *this; }
+        bool typeCheck(interp::Visitor*, const value::Value&, const TypePtr& other) const override { return *this >= *other; }
+
+        bool operator> (const Type& other) const override;
+        bool operator>=(const Type&) const override;
+
+        TypePtr clone() const override { return std::make_shared<AddressType>(*this); }
+    };
+
+
     struct ValueType : Type {
         std::shared_ptr<pie::value::Value> val;
 
@@ -286,6 +301,8 @@ namespace type {
         inline TypePtr Type   () { return std::make_shared<BuiltinType>("Type"  ); }
 
         inline TypePtr BuiltinFunction() { return std::make_shared<BuiltinFunctionType>(); }
+
+        inline TypePtr Address() { return std::make_shared<AddressType>(); }
 
         inline TypePtr _      () { return std::make_shared<TryReassign>(); };
     }

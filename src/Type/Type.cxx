@@ -70,6 +70,18 @@ namespace type {
     }
 
 
+    // * Address * //
+    bool AddressType::operator>(const Type& other) const {
+        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        return false;
+    }
+
+    bool AddressType::operator>=(const Type& other) const {
+        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        return dynamic_cast<const AddressType*>(&other);
+    }
+
+
 
     // * Value Type * //
     std::string ValueType::text(const size_t indent) const { return stringify(*val, indent); }

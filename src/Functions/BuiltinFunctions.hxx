@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <cstdio>
@@ -193,12 +194,13 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             decltype([](const auto& fname, const auto&) {
                 auto file = new std::fstream{
                     fname,
-                    std::ios::in | std::ios::out
+                    std::ios::in | std::ios::out | std::ios::app
                 };
 
                 // if (not file->is_open()) util::error("Couldn't open file: " + fname);
 
-                return reinterpret_cast<BigInt>(file);
+                // return reinterpret_cast<BigInt>(file);
+                return value::Address{std::format("file '{}'", std::filesystem::absolute(fname).string()), file};
             }),
             TypeList<std::string, std::string>
         >
@@ -209,11 +211,11 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"is_file_open">,
         Func<
             decltype([](const auto& stream, const auto&) {
-                auto file = reinterpret_cast<std::fstream*>(stream);
+                auto file = reinterpret_cast<std::fstream*>(stream.pointer);
 
                 return file->is_open();
             }),
-            TypeList<BigInt>
+            TypeList<value::Address>
         >
     >{},
 
@@ -221,13 +223,26 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"close_file">,
         Func<
             decltype([](const auto& stream, const auto&) {
-                auto file = reinterpret_cast<std::fstream*>(stream);
+                auto file = reinterpret_cast<std::fstream*>(stream.pointer);
                 file->close();
 
                 delete file;
                 return stream;
             }),
-            TypeList<BigInt>
+            TypeList<value::Address>
+        >
+    >{},
+
+    MapEntry<
+        S<"write_file">,
+        Func<
+            decltype([](const auto& stream, const auto& value, const auto&) -> value::Value {
+                auto file = reinterpret_cast<std::fstream*>(stream.pointer);
+                *file << value::stringify(value);
+                file->flush();
+                return stream;
+            }),
+            TypeList<value::Address, Any>
         >
     >{},
 
@@ -235,7 +250,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"read_file">,
         Func<
             decltype([](const auto& stream, const auto&) -> value::Value {
-                auto file = reinterpret_cast<std::fstream*>(stream);
+                auto file = reinterpret_cast<std::fstream*>(stream.pointer);
                 // std::stringstream ss;
                 // ss << file->rdbuf();
                 // return ss.str();
@@ -247,7 +262,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
                 return content;
             }),
-            TypeList<BigInt>
+            TypeList<value::Address>
         >
     >{},
 
@@ -255,14 +270,14 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"read_line">,
         Func<
             decltype([](const auto& stream, const auto&) -> value::Value {
-                auto file = reinterpret_cast<std::fstream*>(stream);
+                auto file = reinterpret_cast<std::fstream*>(stream.pointer);
 
                 std::string line;
                 std::getline(*file, line);
 
                 return line;
             }),
-            TypeList<BigInt>
+            TypeList<value::Address>
         >
     >{},
 
@@ -270,14 +285,14 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"read_word">,
         Func<
             decltype([](const auto& stream, const auto&) -> value::Value {
-                auto file = reinterpret_cast<std::fstream*>(stream);
+                auto file = reinterpret_cast<std::fstream*>(stream.pointer);
 
                 std::string word;
                 *file >> word;
 
                 return word;
             }),
-            TypeList<BigInt>
+            TypeList<value::Address>
         >
     >{},
 
@@ -285,14 +300,14 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"read_char">,
         Func<
             decltype([](const auto& stream, const auto&) -> value::Value {
-                auto file = reinterpret_cast<std::fstream*>(stream);
+                auto file = reinterpret_cast<std::fstream*>(stream.pointer);
 
                 char c;
                 if(not file->get(c)) util::error("Tried to read EOF");
 
                 return std::string{c};
             }),
-            TypeList<BigInt>
+            TypeList<value::Address>
         >
     >{},
 
@@ -715,7 +730,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 auto dll = dlopen(path.data(), RTLD_NOW);
                 if (not dll) util::error<except::OpeningDyLib>(dlerror());
 
-                return reinterpret_cast<BigInt>(dll);
+                // return reinterpret_cast<BigInt>(dll);
+                return value::Address{"dynamic library", dll};
             }),
             TypeList<std::string>
         >
@@ -725,14 +741,12 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"dlsym">,
         Func<
             decltype([](const auto& dll, const auto& func_name, const auto&) {
-                auto handle = reinterpret_cast<void*>(dll);
-
-                auto sym = dlsym(handle, func_name.data());
+                auto sym = dlsym(dll.pointer, func_name.data());
                 if (not sym) util::error<except::DyLibSymbolLookup>(dlerror());
 
-                return reinterpret_cast<BigInt>(sym);
+                return value::Address{"dynamic library symbol", sym};
             }),
-            TypeList<BigInt, std::string>
+            TypeList<value::Address, std::string>
         >
     >{},
 

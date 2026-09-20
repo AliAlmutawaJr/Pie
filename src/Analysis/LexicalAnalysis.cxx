@@ -112,6 +112,7 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
         "__builtin_open_file",
         "__builtin_is_file_open",
         "__builtin_close_file",
+        "__builtin_write_file",
         "__builtin_read_file",
         "__builtin_read_line",
         "__builtin_read_word",

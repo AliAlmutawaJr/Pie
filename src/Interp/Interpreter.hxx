@@ -5087,6 +5087,7 @@ There are no mistakes with art.)";
             "open_file",
             "close_file",
             "is_file_open",
+            "write_file",
             "read_file",
             "read_line",
             "read_word",
@@ -5448,6 +5449,7 @@ There are no mistakes with art.)";
         // all the rest of those funcs expect 2 arguments
 
         const auto eager = {
+            "write_file"sv,
             "get"sv,
             "push"sv,
             "remove_at"sv,
@@ -5476,6 +5478,8 @@ There are no mistakes with art.)";
             const value::Value value2 = std::visit(*this, args[1]->variant()).value;
 
             // this is disgusting..I know
+            if (name == "write_file") return execute<2>(stdx::get<S<"write_file">>(functions).value, {value1, value2}, this);
+
             if (name == "get"       ) return execute<2>(stdx::get<S<"get"       >>(functions).value, {value1, value2}, this);
             if (name == "push"      ) return execute<2>(stdx::get<S<"push"      >>(functions).value, {value1, value2}, this);
             if (name == "remove_at" ) return execute<2>(stdx::get<S<"remove_at" >>(functions).value, {value1, value2}, this);
@@ -6254,6 +6258,10 @@ There are no mistakes with art.)";
 
             return type::MapOf(type::builtins::Any(), type::builtins::Any());
             // return type::MapOf(type::UnionOf(std::move(keys)), type::UnionOf(std::move(values)));
+        }
+
+        if (std::holds_alternative<value::Address>(value)) {
+            return type::builtins::Address();
         }
 
 
