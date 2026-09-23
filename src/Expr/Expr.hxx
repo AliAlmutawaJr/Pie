@@ -343,7 +343,7 @@ struct Assignment : Expr {
 };
 
 
-struct InferredAssignment : Expr{
+struct InferredAssignment : Expr {
     StringID name; // only proper names are allowed to have a type, hence not using ExprPtr
     ExprPtr rhs;
 
