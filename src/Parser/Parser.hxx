@@ -1079,7 +1079,7 @@ public:
         constexpr auto l2r = true;
         constexpr auto r2l = false;
 
-        auto pack = parseExpr(prec::HIGH_VALUE);
+        auto pack = parseExpr(prec::AS_VALUE);
 
 
         std::string op = consume().text;

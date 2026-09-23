@@ -10,13 +10,46 @@
 
 
 
-// LOOK AT THIS AT SOME POINT
-// C = class {
-//     pack: ...Int = 0;
-// };
-// makeC = (x: ...Int) => C(x);
-// std::print((makeC(1, 2, 3).pack + ...));
 
+
+
+TEST_CASE("Complex Pack", "[Pack][Fold]") {
+{
+    const auto src = R"(
+C = class {
+    pack: ...Int = 0;
+};
+makeC = (x: ...Int) => C(x);
+std::print((makeC(5, 6, 7).pack + ...));
+)";
+
+    REQUIRE(pie::test::run(src) == R"(18)");
+}
+{
+    const auto src = R"(
+makePack = (args: ...) => args
+sum = (makePack(1, 2, 3) + ...);
+__builtin_print(sum);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(6)");
+}
+}
+
+
+TEST_CASE("Complex Pack", "[Pack][Fold]") {
+{
+    const auto src = R"(
+C = class {
+    pack: ...Int = 0;
+};
+makeC = (x: ...Int) => C(x);
+std::print((makeC(5, 6, 7).pack + ...));
+)";
+
+    REQUIRE(pie::test::run(src) == R"(18)");
+}
+}
 
 
 
