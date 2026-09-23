@@ -20,6 +20,57 @@
 
 
 
+TEST_CASE("insert_at", "[Builtin]") {
+{
+    const auto src = R"(
+l = {"hello", "world"};
+__builtin_insert_at(l,  1, {"middle", "text!"});
+__builtin_print(l);
+)";
+
+    REQUIRE(pie::test::run(src) == R"({hello, {middle, text!}, world})");
+}
+}
+
+
+
+TEST_CASE("Hidden Members with Print", "[Class]") {
+{
+    const auto src = R"(
+C = class {
+    name = "catsu";
+    __namerr = 1;
+    _nae = "wow";
+    a = 5;
+    _ = 10;
+    __ = 15;
+    __hidden = "woah";
+};
+
+__builtin_print(C());
+__builtin_print(C(), show_hidden = true);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(Object {
+    name = "catsu";
+    _nae = "wow";
+    a = 5;
+    _ = 10;
+}
+Object {
+    name = "catsu";
+    __namerr = 1;
+    _nae = "wow";
+    a = 5;
+    _ = 10;
+    __ = 15;
+    __hidden = "woah";
+})");
+}
+}
+
+
+
 TEST_CASE("Global Variable Access", "[Space][Var]") {
 {
     const auto src = R"(
@@ -38,7 +89,6 @@ __builtin_print(x);
 
     REQUIRE(pie::test::run(src) == "10");
 }
-
 }
 
 

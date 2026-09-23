@@ -12,7 +12,9 @@
 #include <ranges>
 #include <stdx/tuple.hpp>
 #include <ffi.h>
+#include <string>
 #include <type_traits>
+#include <variant>
 
 #include "../Utils/ConstexprLookup.hxx"
 #include "../Utils/Exceptions.hxx"
@@ -58,8 +60,6 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             void
         >
     >{},
-
-    //* UNARY FUNCTIONS
 
     MapEntry<
         S<"len">,
@@ -352,6 +352,55 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     >{},
 
     MapEntry<
+        S<"insert_at">,
+        Func<
+            decltype([](auto& cont, const auto& ind, const auto& value, const auto& that) -> value::Value {
+                using T = std::remove_cvref_t<decltype(cont)>;
+
+                if constexpr (std::is_same_v<T, value::List>) {
+                    if (size_t(ind) > cont.elts->values.size()) {
+                        util::error("Index out of range inside call to `insert_at`! If you wanna append a new element at the end, use `push`");
+                    }
+
+                    const auto type = that->typeOf(cont);
+                    const auto& list_type = dynamic_cast<const type::ListType&>(*type);
+
+                    cont.elts->values.insert(std::next(cont.elts->values.begin(), ind), value);
+                    // cont.elts->values.insert(std::next(cont.elts->values.begin(), ind), that->typeCheck(value, list_type.type));
+                }
+                // else if constexpr (std::is_same_v<T, value::Map>) {
+                //     if (not cont.items->map.contains(ind))
+                //         util::error("Tried to remove element that doesn't exist from map!");
+
+
+                //     const auto item = cont.items->map.at(ind);
+                //     cont.items->map.erase(ind);
+                //     return item;
+                // }
+                else { // has to be a std::string
+                    if (size_t(ind) >= cont.size()) {
+                        util::error("Index out of range inside call to `insert_at`! If you wanna append a new element at the end, use `push`");
+                    }
+
+                    // if (not std::holds_alternative<std::string>(value)) {
+                    //     util::error("Cannot call `insert_at` with a non-string value: " + value::stringify(value));
+                    // }
+
+                    cont.insert(ind, value);
+                }
+
+                return value;
+
+            }),
+            TypeList<value::List, BigInt, Any>,
+            // TypeList<value::Map , Any, Any>, // same ass "set" for maps
+            TypeList<std::string, BigInt, std::string>
+        >
+    >{},
+
+
+
+    MapEntry<
         S<"remove_at">,
         Func<
             decltype([](auto& cont, const auto& ind, const auto&) -> value::Value {
@@ -359,7 +408,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
                 if constexpr (std::is_same_v<T, value::List>) {
                     if (size_t(ind) >= cont.elts->values.size()) {
-                        if (cont.elts->values.empty()) util::error("Cannot `remove_at` from an empty list!");
+                        if (cont.elts->values.empty()) util::error("`remove_at` called on an empty list!");
                         else util::error("Index out of range inside call to `remove_at`!");
                     }
 
@@ -394,7 +443,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         >
     >{},
 
-    //* BINARY FUNCTIONS
+
+
     MapEntry<
         S<"object_has">,
         Func<
@@ -469,7 +519,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     const auto& list_type = dynamic_cast<const type::ListType&>(*type);
 
                     if (at < 0 or size_t(at) >= cont.elts->values.size())
-                        util::error("Accessing list '" + stringify(cont) + "' at index '" + std::to_string(at) + "' which is out of bounds!");
+                        util::error("`set` accessing list '" + stringify(cont) + "' at index '" + std::to_string(at) + "' which is out of bounds!");
 
                     return cont.elts->values[at] = that->typeCheck(elt, list_type.type);
                 }
