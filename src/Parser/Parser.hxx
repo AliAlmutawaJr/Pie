@@ -1271,6 +1271,7 @@ public:
 
         std::vector<expr::Closure::Param> params;
         std::vector<type::TypePtr> params_types;
+        std::vector<expr::ExprPtr> default_values;
 
         if (not match(R_PAREN)) {
             do {
@@ -1285,9 +1286,12 @@ public:
                 }
                 // if not an unpackment, do the usual thing
 
-                auto param = parseExpr<DONT_PARSE_TYPE>();
+                auto param = parseExpr<DONT_PARSE_TYPE>(prec::ASSIGNMENT_VALUE);
 
                 if (auto s = expr::is<expr::Syntax>(param.get())) {
+                    if (not default_values.empty())
+                        util::error("All default values must be at the end of the parameter list");
+
                     params.push_back(expr::Closure::RegularParam{s->expr, -1, true});
                     params_types.push_back(type::builtins::_());
                 }
@@ -1298,6 +1302,12 @@ public:
                         params_types.push_back(parseType());
                     else 
                         params_types.push_back(type::builtins::_()); // not `Any`, but `_` in case `Any` was assigned to
+
+
+                    if (match(ASSIGN))
+                        default_values.push_back(parseExpr());
+                    else if (not default_values.empty())
+                        util::error("All default values must be at the end of the parameter list");
                 }
             }
             while (match(COMMA));
@@ -1319,7 +1329,10 @@ public:
         consume(FAT_ARROW);
 
         return std::make_shared<expr::Closure>(
-            std::move(params), closureBody(), type::FuncType{std::move(params_types), std::move(return_type)}
+            std::move(params),
+            type::FuncType{std::move(params_types), std::move(return_type)},
+            std::move(default_values),
+            closureBody()
         );
     }
 
@@ -1975,7 +1988,12 @@ public:
 
             consume(FAT_ARROW);
             // It's a closure
-            return std::make_shared<expr::Closure>(std::vector<expr::Closure::Param>{}, closureBody(), type::FuncType{{}, std::move(return_type)});
+            return std::make_shared<expr::Closure>(
+                std::vector<expr::Closure::Param>{},
+                type::FuncType{{}, std::move(return_type)},
+                std::vector<expr::ExprPtr>{},
+                closureBody()
+            );
         }
 
         // todo: fix this algorithm

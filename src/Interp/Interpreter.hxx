@@ -1424,7 +1424,7 @@ public:
                 valuetype.type,
                 "Type mis-match in Unpackment:\n" + expr_str() +
                 "\nPattern: " + expr::unpack::stringifyPattern(pattern) +
-                "\nType: `" + pattern->type->text() +
+                "\nType: `" + valuetype.type->text() +
                 "` didn't match value: " + value::stringify(valuetype.value)
             );
         }
@@ -4184,12 +4184,79 @@ There are no mistakes with art.)";
                 }
             }
         }
+
+
+        // processing default values
+        const auto defaults_size = func.defaults.size();
+        const auto params_size = pos_params.size();
+        const auto overlap = args_size + defaults_size - params_size;
+        for (size_t i = args_size; i < params_size; ++i) {
+            auto& [sid, type] = pos_params[i];
+
+            if (findType(i, type)) {
+                // ScopeGuard sg{this, func.args_env, args_env};
+                ScopeGuard sg{this, func.envs.env.env, args_env};
+                type = validateType(std::move(type));
+            }
+
+            const auto& expr = func.defaults[overlap + (i - args_size)];
+
+            // const auto& [param_expr, id, is_syntax] = sid;
+            if (std::holds_alternative<expr::Closure::RegularParam>(sid)) {
+                const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+
+                auto name = param_expr->stringify();
+
+                value::Value value;
+                if (is_syntax) {
+                    value = expr->variant();
+                }
+                else {
+                    value = std::visit(*this, expr->variant()).value;
+
+                    value = typeCheck(value, type,
+                        "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+                    );
+
+                    if (std::holds_alternative<expr::Closure>(value))
+                        captureEnvForPassedClosure(get<expr::Closure>(value));
+                }
+
+                args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
+            }
+            else {
+                constexpr auto INFERRED = true;
+                const auto& pattern = get<expr::unpack::PatternPtr>(sid);
+
+                auto value = std::visit(*this, expr->variant()).value;
+                value = typeCheck(value, type,
+                    "Type mis-match! Unpackmeter `" + expr::unpack::stringifyPattern(pattern.get()) +
+                    "` expected type: " + type->text() +
+                    "\nGot expression: " + expr->stringify() +
+                    " which evaluated to: " + value::stringify(value) +
+                    ", which is of type: " + typeOf(value)->text()
+                );
+
+                if (std::holds_alternative<expr::Closure>(value))
+                    captureEnvForPassedClosure(get<expr::Closure>(value));
+
+
+                ScopeGuard sg{this}; // to store the vars bindPattern will add
+                bindPattern<INFERRED>(expr_str, pattern.get(), {std::move(value), std::move(type)});
+
+                for (auto& [id, space_ref] : env.back()->env) {
+                    auto& [ref, value, type] = space_ref;
+
+                    args_env[id] = {{std::move(ref).name}, std::move(value), std::move(type)};
+                }
+            }
+        }
     }
 
 
     static size_t argsSize(
         const std::vector<pie::expr::ExprPtr>& args,
-        std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at
+        const std::vector<std::pair<size_t, std::vector<value::Value>>>& expand_at
     ) {
         return args.size()
         + std::ranges::fold_left( // plus the expansions
@@ -4242,8 +4309,10 @@ There are no mistakes with art.)";
 
         if (not is_variadic and args_size + call->named_args.size() > func.params.size()) util::error("Too many arguments passed to function: " + call->stringify());
 
-        // curry! 
-        if (args_size + call->named_args.size() < func.params.size() - is_variadic) {
+
+        // even if arguments go into params with default values, this check should be correct..i think
+        if (args_size + call->named_args.size() < func.params.size() - is_variadic - func.defaults.size()) {
+            // curry!
             return partialApplication(call, func, args_size, std::move(expand_at), args, is_variadic);
         }
 
@@ -4259,7 +4328,6 @@ There are no mistakes with art.)";
             ssize_t id;
 
             for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
-
                 if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
                     auto& param = get<expr::Closure::RegularParam>(p);
                     if (param.expr->stringify() == name) {
@@ -4268,14 +4336,8 @@ There are no mistakes with art.)";
                         break;
                     }
                 }
-
-                // old code
-                // if (p.expr->stringify() == name) {
-                //     type = t;
-                //     id = p.ID;
-                //     break;
-                // }
             }
+
 
             if (not type) util::error(); // should never happen anyway
 
@@ -4307,12 +4369,10 @@ There are no mistakes with art.)";
         });
 
 
-        // todo: this is needed but it doesn't work well rn bc of expansions
-        // todo: fix using the new expandArgs() method
-        // if (args.size() != pos_params.size())
+        // if (args_size != pos_params.size())
         //     util::error(
         //         "Expected " + std::to_string(pos_params.size()) +
-        //         " postional arguments. Got " + std::to_string(args.size()) +
+        //         " postional arguments. Got " + std::to_string(args_size) +
         //         ": " + call->stringify()
         //     );
 
@@ -4321,9 +4381,8 @@ There are no mistakes with art.)";
             variadicCall(func, pos_params, expand_at, args, args_size, sg, args_env);
         }
         else {
-            regularCall(func, pos_params, expand_at, args, args_size,    args_env, liftName(call));
+            regularCall(func, pos_params, expand_at, args, args_size, args_env, liftName(call));
         }
-
 
 
         if (
@@ -4460,18 +4519,26 @@ There are no mistakes with art.)";
         for (const auto& [param, type] : std::views::zip(func.params, func.type.params))
             pos_params.push_back({param, type});
 
-        std::erase_if(pos_params, [&named_args = call->named_args] (const auto& p) {
+        std::erase_if(pos_params, [named_args = call->named_args] (const auto& p) mutable {
             if (not std::holds_alternative<expr::Closure::RegularParam>(p.first)) return false;
 
+            auto name = get<expr::Closure::RegularParam>(p.first).expr->stringify();
 
-            return std::ranges::find_if(
-                named_args,
-                [&p = get<expr::Closure::RegularParam>(p.first)] (const auto& n) {
-                    return n.first == p.expr->stringify();
-                }
-            )
-            !=
-            named_args.cend();
+            if (
+                std::ranges::find_if(
+                    named_args,
+                    [&name] (const auto& n) {
+                        return n.first == name;
+                    }
+                )
+                !=
+                named_args.cend()
+            ) {
+                named_args.erase(name);
+                return true;
+            }
+
+            return false;
         });
 
         std::vector<expr::Closure::Param> new_params;
@@ -4506,8 +4573,33 @@ There are no mistakes with art.)";
             new_types.push_back(std::move(type));
         }
 
+        auto new_defaults = func.defaults;
+        std::erase_if(
+            new_defaults,
+            [named_args = call->named_args] (const auto& param) mutable {
+                auto name = param->stringify();
+                if (named_args.contains(name)) {
+                    named_args.erase(name);
+                    return true;
+                }
+                return false;
+            }
+        );
+
+        // this is never true...otherwise it wouldn't have been a partial application
+        // if (args_size + func.defaults.size() >= pos_params.size())
+        //     new_defaults
+        //         = new_defaults
+        //         | std::views::drop(args_size + func.defaults.size() - pos_params.size())
+        //         | std::ranges::to<std::vector<expr::ExprPtr>>();
+
         type::FuncType func_type{std::move(new_types), func.type.ret};
-        expr::Closure closure{std::move(new_params), func.body, std::move(func_type)};
+        expr::Closure closure{
+            std::move(new_params),
+            std::move(func_type),
+            std::move(new_defaults),
+            func.body
+        };
 
 
         bool normal = true;
@@ -4516,27 +4608,10 @@ There are no mistakes with art.)";
             const auto iter = std::ranges::find_if(pos_params, [] (const auto& e) { return type::isVariadic(e.second); });
             const size_t variadic_index = std::distance(pos_params.begin(), iter);
 
-            // call->args.erase(std::next(call->args.begin(), variadic_index));
-
             if (args_size > variadic_index) {
                 normal = false;
 
                 // FIX: first add the empty pack
-                // sg.addEnv({{
-                //     pos_params[variadic_index].first.ID, 
-                //     {
-                //         {pos_params[variadic_index].first.expr->stringify()},
-                //         std::make_shared<value::Value>(value::makePack()),
-                //         pos_params[variadic_index].second
-                //     }
-                // }});
-
-                // args_env[pos_params[variadic_index].first.ID] = {
-                //     {pos_params[variadic_index].first.expr->stringify()},
-                //     std::make_shared<value::Value>(value::makePack()),
-                //     std::move(pos_params[variadic_index]).second
-                // };
-
                 {
                     value::Environment sg_env;
                     bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, sg_env);
@@ -5065,7 +5140,7 @@ There are no mistakes with art.)";
             "to_int", "to_double", "to_string",
 
             //* binary
-            "get", "push", "pop", "pop_front", "remove_at", "object_has",
+            "get", "push", "pop", "pop_front", "insert_at", "remove_at", "object_has",
             "add", "sub", "mul", "div", "mod",
             "pow",
             "gt", "geq", "eq", "leq", "lt",
@@ -5196,7 +5271,8 @@ There are no mistakes with art.)";
 
 
         if (name == "defer") {
-            // TODO: expand args here
+            if (not expand_at.empty()) util::error("Cannot expand arguments inside call to `__builtin_defer`: " + call->stringify());
+
             return defer(call, std::move(args));
         }
 
@@ -5545,10 +5621,18 @@ There are no mistakes with art.)";
 
         if (name == "set") {
             arity_check(3);
-            const value::Value value2 = std::visit(*this, args[1]->variant()).value;
-            const value::Value value3 = std::visit(*this, args[2]->variant()).value;
+            const auto value2 = std::visit(*this, args[1]->variant()).value;
+            const auto value3 = std::visit(*this, args[2]->variant()).value;
 
             return execute<3>(stdx::get<S<"set">>(functions).value, {value1, value2, value3}, this);
+        }
+
+        if (name == "insert_at") {
+            arity_check(3);
+            const auto value2 = std::visit(*this, args[1]->variant()).value;
+            const auto value3 = std::visit(*this, args[2]->variant()).value;
+
+            return execute<3>(stdx::get<S<"insert_at">>(functions).value, {value1, value2, value3}, this);
         }
 
         if (name == "str_slice") {
@@ -5596,16 +5680,26 @@ There are no mistakes with art.)";
         // if (args.empty()) util::error("'print' requires at least 1 positional argument passed!");
 
         using std::operator""sv;
-        const auto allowed_params = {"sep"sv, "end"sv};
+        const auto allowed_named_params = {"sep"sv, "end"sv, "show_hidden"sv};
 
         for (const auto& [name, _] : named_args)
-            if (std::ranges::find(allowed_params, name) == allowed_params.end())
-                util::error("Can only have the named argument 'end'/'sep' in call to '__builtin_print': found '" + name + "'!");
+            if (std::ranges::find(allowed_named_params, name) == allowed_named_params.end())
+                util::error("Can only have the named argument `end`, `sep`, or `show_hidden` in call to '__builtin_print': found '" + name + "'!");
 
 
-        const value::Value& sep =
+        const auto sep =
             named_args.contains("sep") ?
                 std::visit(*this, named_args.at("sep")->variant()).value : " ";
+
+        const auto show_hidden = [&] {
+            if (not named_args.contains("show_hidden")) return false;
+
+            auto flag = std::visit(*this, named_args.at("show_hidden")->variant()).value;
+            if (not std::holds_alternative<bool>(flag))
+                util::error("`__builtin_print` requires named argument `show_hidden` to be a boolean. Got: " + value::stringify(flag));
+
+            return get<bool>(flag);
+        }();
 
         constexpr bool no_newline = false;
 
@@ -5616,16 +5710,16 @@ There are no mistakes with art.)";
                 for (const auto& e : expand_at[curr++].second) {
                     if (separator) print(*separator, no_newline);
 
-                    print(e, no_newline);
+                    print(e, no_newline, show_hidden);
 
                     if (not separator) separator = sep;
                 }
             }
             else {
-                if (separator) print(*separator, no_newline);
+                if (separator) print(*separator, no_newline, show_hidden);
 
                 ret = std::visit(*this, arg->variant()).value;
-                print(ret, no_newline);
+                print(ret, no_newline, show_hidden);
 
                 if (not separator) separator = sep;
             }
@@ -5711,13 +5805,19 @@ There are no mistakes with art.)";
         std::vector<expr::ExprPtr> args,
         std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at
     ) {
-        const auto args_size = argsSize(args, expand_at);
-        if (args_size < 2) util::error("`__builtin_call` requires the symbol name and the CIF!");
+        // const auto args_size = argsSize(args, expand_at);
+        const auto expanded_args = expandArgs(std::move(args), std::move(expand_at));
+        if (expanded_args.size() < 2) util::error("`__builtin_call` requires the symbol name and the CIF!");
 
-        const auto sym = reinterpret_cast<void*>(get<BigInt>(std::visit(*this, args[0]->variant()).value));
-        const auto pie_cif = get<value::Object>(std::visit(*this, args[1]->variant()).value);
+        if (not std::holds_alternative<value::Address>(expanded_args[0]))
+            util::error("`__builtin_call` requires the first argument to be the dl symbol. Got: " + value::stringify(expanded_args[0]));
+        if (not std::holds_alternative<value::Object>(expanded_args[1]))
+            util::error("`__builtin_call` requires the second argument to be the a CIF object. Got: " + value::stringify(expanded_args[1]));
 
-        const auto reserve_size = args_size - 2;
+        const auto sym = get<value::Address>(expanded_args[0]);
+        const auto pie_cif = get<value::Object>(expanded_args[1]);
+
+        const auto reserve_size = expanded_args.size() - 2;
 
         std::vector<ffi_type*> param_types;
         param_types.reserve(reserve_size);
@@ -5768,34 +5868,35 @@ There are no mistakes with art.)";
 
 
                 for (
-                    size_t i{}, p{2}, curr{}, val_idx{}; // skip the first 2 arguments
-                    p < args_size;
-                    ++i
+                    size_t i{};
+                    // skip the first 2 arguments
+                    const auto& value : expanded_args | std::views::drop(2)
+                    // size_t i{}, p{2}, curr{}, val_idx{}; 
+                    // p < expanded_args.size();
+                    // ++i
                 ) {
-                    const auto& type = list.elts->values[i];
-                    const auto& arg  = args[p];
+                    const auto& type = list.elts->values[i++];
 
-                    value::Value value;
-                    if (curr < expand_at.size()) {
-                        if (p == expand_at[curr].first) {
-                            if (val_idx < expand_at[curr].second.size()) {
-                                value = expand_at[curr].second[val_idx++];
-                            }
-                            else {
-                                p += val_idx;
-                                val_idx = {};
-                                ++curr;
-                                continue;
-                            }
-                        }
-                        else {
-                            value = std::visit(*this, arg->variant()).value;
-                        }
-                    }
-                    else {
-                        value = std::visit(*this, arg->variant()).value;
-                        ++p;
-                    }
+                    // if (curr < expand_at.size()) {
+                    //     if (p == expand_at[curr].first) {
+                    //         if (val_idx < expand_at[curr].second.size()) {
+                    //             value = expand_at[curr].second[val_idx++];
+                    //         }
+                    //         else {
+                    //             p += val_idx;
+                    //             val_idx = {};
+                    //             ++curr;
+                    //             continue;
+                    //         }
+                    //     }
+                    //     else {
+                    //         value = std::visit(*this, arg->variant()).value;
+                    //     }
+                    // }
+                    // else {
+                    //     value = std::visit(*this, arg->variant()).value;
+                    //     ++p;
+                    // }
 
 
                     if (not std::holds_alternative<BigInt>(type))
@@ -5932,7 +6033,7 @@ There are no mistakes with art.)";
         };
 
         if (return_shape->type->type == FFI_TYPE_VOID) {
-            ffi_call(&cif, reinterpret_cast<void(*)()>(sym), nullptr, values_pointers.data());
+            ffi_call(&cif, reinterpret_cast<void(*)()>(sym.pointer), nullptr, values_pointers.data());
             applyWritebacks();
             return BigInt{0};
         }
@@ -5943,7 +6044,7 @@ There are no mistakes with art.)";
         // unaffected by the requirement but sizing generously is harmless.
         std::vector<std::byte> ret_buffer(std::max(return_shape->type->size, sizeof(ffi_arg)), std::byte{0});
 
-        ffi_call(&cif, reinterpret_cast<void(*)()>(sym), ret_buffer.data(), values_pointers.data());
+        ffi_call(&cif, reinterpret_cast<void(*)()>(sym.pointer), ret_buffer.data(), values_pointers.data());
         applyWritebacks();
 
         // `STR` is declared distinctly from `PTR` specifically so this can happen automatically
@@ -5979,7 +6080,7 @@ There are no mistakes with art.)";
     }
 
 
-    std::string stringify(const value::Value& value, const size_t indent = {}) {
+    std::string stringify(const value::Value& value, const size_t indent = {}, const bool show_hidden = false) {
         if (std::holds_alternative<value::Object>(value)) {
             const auto& object = get<value::Object>(value);
 
@@ -6002,12 +6103,12 @@ There are no mistakes with art.)";
             }
         }
 
-        return value::stringify(value, indent);
+        return value::stringify(value, indent, show_hidden);
     }
 
-    void print(const value::Value& value, const bool new_line = true) {
+    void print(const value::Value& value, const bool new_line = true, const bool show_hidden = false) {
         // fall back
-        std::print("{}{}", stringify(value), new_line? '\n' : '\0');
+        std::print("{}{}", stringify(value, {}, show_hidden), new_line? '\n' : '\0');
     }
 
 

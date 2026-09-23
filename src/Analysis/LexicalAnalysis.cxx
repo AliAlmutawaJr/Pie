@@ -59,12 +59,12 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
         "__builtin_rand_int",
 
         "__builtin_print",
-        "__builtin_concat", 
+        "__builtin_concat",
 
-        "__builtin_create_class", 
-        "__builtin_parse", 
+        "__builtin_create_class",
+        "__builtin_parse",
 
-        "__builtin_defer", 
+        "__builtin_defer",
 
         "__builtin_print_env",
         "__builtin_panic",
@@ -88,6 +88,7 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
         "__builtin_reverse",
         "__builtin_pop",
         "__builtin_pop_front",
+        "__builtin_insert_at",
         "__builtin_remove_at",
         "__builtin_object_has",
         "__builtin_into_pack",
@@ -118,29 +119,28 @@ LexicalAnalysis::LexicalAnalysis(const size_t v_index, const size_t c_index) :
         "__builtin_read_word",
 
         //* FFI shit
-        "__builtin_dlopen"          ,
-        "__builtin_dlsym"           ,
-        "__builtin_ffi_call"        ,
-        "__builtin_ffi_type_void"   ,
-        "__builtin_ffi_type_int"    ,
-        "__builtin_ffi_type_float"  ,
-        "__builtin_ffi_type_double" ,
-        "__builtin_ffi_type_uint8"  ,
-        "__builtin_ffi_type_sint8"  ,
-        "__builtin_ffi_type_uint16" ,
-        "__builtin_ffi_type_sint16" ,
-        "__builtin_ffi_type_uint32" ,
-        "__builtin_ffi_type_sint32" ,
-        "__builtin_ffi_type_uint64" ,
-        "__builtin_ffi_type_sint64" ,
-        "__builtin_ffi_type_struct" ,
+        "__builtin_dlopen",
+        "__builtin_dlsym",
+        "__builtin_ffi_call",
+        "__builtin_ffi_type_void",
+        "__builtin_ffi_type_int",
+        "__builtin_ffi_type_float",
+        "__builtin_ffi_type_double",
+        "__builtin_ffi_type_uint8",
+        "__builtin_ffi_type_sint8",
+        "__builtin_ffi_type_uint16",
+        "__builtin_ffi_type_sint16",
+        "__builtin_ffi_type_uint32",
+        "__builtin_ffi_type_sint32",
+        "__builtin_ffi_type_uint64",
+        "__builtin_ffi_type_sint64",
+        "__builtin_ffi_type_struct",
         "__builtin_ffi_type_pointer",
         "__builtin_ffi_type_cstring",
         "__builtin_ffi_type_complex",
 
         "__builtin_ptr_to_string",
     };
-
 
     for (const auto builtin : builtins)
         env[0].first.vars[builtin] = next();

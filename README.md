@@ -227,7 +227,7 @@ Unions also work with user-defined types.
 
 
 ## Cascade
-The cascade operator allows accessing a data member on an object while also yielding the original object bacl:
+The cascade operator allows accessing a data member on an object while also yielding the original object back:
 ```pie
 Human = class {
     name = "";
@@ -514,7 +514,7 @@ The following line will error: -->
 
 **Note:**
 
-The following line is not an emtpy scope, but rather, and empty list!!
+The following line is not an empty scope, but rather, and empty list!!
 ```pie
 x = { };
 ```
@@ -694,7 +694,7 @@ Pie reserves the names starting with `__builtin_`.
 - `__builtin_input_str`
 - `__builtin_print` (variadic - returns the last argument)
 
-#### Arithmatic
+#### Arithmetic
 - `__builtin_add`
 - `__builtin_div`
 - `__builtin_mod`
@@ -926,26 +926,28 @@ this isn't
 
 #### in order of priority
 
-- [ ] Better File IO
-- [ ] Make sure to expand args for EVERY builtin function (`ffi_call` and `defer` come to mind)
 - [ ] Add default values to function parameters
+- [ ] Improve error messages (add line and column numbers)
+- [ ] Better File IO
 - [ ] Breaking Out of Nested Loops
 - [ ] Use Big Int instead of `int64_t`
 - [ ] Simplify Pack Expansion (internal)
 - [ ] Simplify Closure Captures without performance penalty (internal)
 - [ ] Clean up builtin functions code (internal)
-- [ ] `Expr::involveName()` seems to be not exhastive, espacially with Closure. Check it.
+- [ ] `Expr::involveName()` seems to be not exhastive, especially with Closure. Check it.
 - [ ] World domination
 - [ ] Make `=` and `=>` overloadable
 - [ ] Fix builtin reset (value-reset, reset/name-reset) 
 - [ ] Move from Make to Bake
-- [ ] Improve error messages (add line and column numbers)
 - [ ] Add LLVM backend
 
 
 ---
 
 ### Done
+- [x] Make sure to expand args for EVERY builtin function (`ffi_call` and `defer` come to mind)
+- [x] Hidden Class Members
+- [x] toString methods
 - [x] Better Pattern Matching
 - [x] Unpackments
 - [x] Added CMakeLists.txt
@@ -961,7 +963,7 @@ this isn't
 - [x] Add `Syntax` literals instead of relying on receiver's type
 - [x] Lexically Scoped Operators
 - [x] Capture variables by reference in lambdas
-- [x] Using delcarations introduce "references"
+- [x] Using declarations introduce "references"
 - [x] fix `use x` and `use space ns`;
 - [x] Pie's internal environment system now uses unique IDs per unique variable, which helps wit shadowing
 - [x] Made namespaces parse-time things instead of runtime
@@ -1038,7 +1040,7 @@ this isn't
 - "can't have your ~~cake~~ Pie and eat it too!"
 - "is this like forth?"
 - "kinda like smalltalk"
-- "Elixer does this better"
+- "Elixir does this better"
 - "Lisp can do this better"
 - "is this C++?"
 - "the syntax is similar to Rust"

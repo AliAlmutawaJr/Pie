@@ -69,7 +69,7 @@ struct Value : VariantType {
 using ValuePtr = std::shared_ptr<Value>;
 
 
-std::string stringify(const Value& value, const size_t indent = {});
+std::string stringify(const Value& value, const size_t indent = {}, const bool show_hidden = false);
 [[nodiscard]] bool operator==(const Value& lhs, const Value& rhs) noexcept;
 
 

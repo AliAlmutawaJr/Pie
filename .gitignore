@@ -10,4 +10,5 @@ testing/
 Tests/dylib
 build
 remote_includes
+includes/
 .DS_Store

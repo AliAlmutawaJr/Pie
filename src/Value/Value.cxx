@@ -16,7 +16,7 @@ using Object = std::pair<type::TypePtr, std::shared_ptr<Members>>;
 
 
 
-std::string stringify(const Value& value, const size_t indent) {
+std::string stringify(const Value& value, const size_t indent, const bool show_hidden) {
     static size_t depth = 0;
     static std::unordered_set<Object*> seen{};
 
@@ -66,7 +66,9 @@ std::string stringify(const Value& value, const size_t indent) {
 
             const std::string space(indent + 4, ' ');
             for (const auto& [name, _, value_ptr] : v.second->members) {
-                s += space + name.stringify() + " = ";
+                if (not show_hidden and name.name.length() >= 2 and name.name[0] == '_' and name.name[1] == '_') continue;
+
+                s += space + name.name + " = ";
 
                 const bool is_string = std::holds_alternative<std::string>(*value_ptr);
                 if (is_string) s += '\"';
@@ -78,11 +80,11 @@ std::string stringify(const Value& value, const size_t indent) {
                     }
                     else {
                         seen.insert(&get<Object>(*value_ptr));
-                        s += stringify(*value_ptr, indent + 4);
+                        s += stringify(*value_ptr, indent + 4, show_hidden);
                     }
                 }
                 else {
-                    s += stringify(*value_ptr, indent + 4);
+                    s += stringify(*value_ptr, indent + 4, show_hidden);
                 }
 
 

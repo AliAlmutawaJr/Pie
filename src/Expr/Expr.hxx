@@ -469,8 +469,8 @@ inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t
     else util::error();
 
 
-    if (pattern->type ) s += "`:` "  + pattern->type ->text     (indent + 4);
-    if (pattern->value) s += " `=` " + pattern->value->stringify(indent + 4);
+    if (pattern->type ) s += ": "  + pattern->type ->text     (indent + 4);
+    if (pattern->value) s += " = " + pattern->value->stringify(indent + 4);
 
     return s;
 }
@@ -1385,8 +1385,9 @@ struct Closure : Expr {
     using Param = std::variant<RegularParam, unpack::PatternPtr>;
 
     std::vector<Param> params;
-    ExprPtr body;
     type::FuncType type;
+    std::vector<ExprPtr> defaults;
+    ExprPtr body;
 
     // vm::Chunk compiled_body;
 
@@ -1402,12 +1403,13 @@ struct Closure : Expr {
 
     std::vector<interp::NameSpace*> spaces;
 
-    Closure(std::vector<Param> ps, ExprPtr b, type::FuncType t, util::SourceSpan sp = {}) noexcept
+    Closure(std::vector<Param> ps, type::FuncType t, std::vector<ExprPtr> default_values, ExprPtr b, util::SourceSpan sp = {}) noexcept
     :
     Expr{std::move(sp)},
     params{std::move(ps)},
-    body{std::move(b)},
-    type{std::move(t)}
+    type{std::move(t)},
+    defaults{std::move(default_values)},
+    body{std::move(b)}
     { }
 
 
@@ -1470,31 +1472,40 @@ struct Closure : Expr {
         std::string s = "(";
 
         if (not params.empty()) {
-            if (std::holds_alternative<RegularParam>(params[0])) {
-                s += get<RegularParam>(params[0]).expr->stringify();
-            }
-            else {
-                s += unpack::stringifyPattern(get<unpack::PatternPtr>(params[0]).get());
-            }
+            if (std::holds_alternative<RegularParam>(params.front()))
+                s += get<RegularParam>(params.front()).expr->stringify();
+            else
+                s += unpack::stringifyPattern(get<unpack::PatternPtr>(params.front()).get());
 
-            if (not type::shouldReassign(type.params[0]))
-                s+= ": " + type.params[0]->text(indent);
+
+            if (not type::shouldReassign(type.params.front()))
+                s += ": " + type.params.front()->text(indent);
+
+
+            if (params.size() == defaults.size())
+                s += " `=` " + defaults.front()->stringify();
         }
 
 
 
-        for(const auto& [param, type] : std::views::zip(params, type.params) | std::views::drop(1)) {
-            if (std::holds_alternative<RegularParam>(param)) {
+        for(size_t i{params.size() - 1}; const auto& [param, type] : std::views::zip(params, type.params) | std::views::drop(1)) {
+            s += ", ";
+
+            if (std::holds_alternative<RegularParam>(param))
                 s += get<RegularParam>(param).expr->stringify();
-            }
-            else {
+            else
                 s += unpack::stringifyPattern(get<unpack::PatternPtr>(param).get());
-            }
+
 
             if (not type::shouldReassign(type))
                 s+= ": " + type->text(indent);
 
             // s += ", " + name.expr->stringify() + (type::shouldReassign(type) ? "" : ": " + type->text());
+            if (i <= defaults.size()) {
+                s += " `=` " + defaults[defaults.size() - i]->stringify();
+            }
+
+            --i; // will underflow during the last iteration, but that's fine
         }
 
         return s + ")" + (type::shouldReassign(type.ret)? + "" : ": " + type.ret->text()) + " => " + body->stringify(indent);
