@@ -924,6 +924,18 @@ public:
         } while (pull_ops and check(NAME));
 
 
+        if (pull_ops) {
+            const auto space = findSpace(spaces, global_access);
+
+            for (const auto& [op_name, op] : space->ops) {
+                env.back().first.op_env[op_name] = op->clone();
+            }
+            for (const auto& [op_name, op] : space->prefix_ops) {
+                env.back().first.prefix_op_env[op_name] = op->clone();
+            }
+        }
+
+
         return std::make_shared<expr::UseSpace>(global_access, std::move(spaces), pull_ops);
     }
 

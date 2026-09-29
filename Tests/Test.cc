@@ -13,6 +13,251 @@
 
 
 
+TEST_CASE("Packs Type Checking", "[Pack][Type][Param]") {
+{
+    const auto src = R"(
+makePack = (args: ...) => args;
+f = (xs: ...Int = makePack("a")) => xs;
+f();
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"(
+makePack = (args: ...) => args;
+f = (xs: ...Int = makePack("a")) => xs;
+f(1);
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+}
+
+
+TEST_CASE("No Double Evaluation For Unpackmeters", "[Param]") {
+{
+    const auto src = R"(
+getName = () => __builtin_print("Ali");
+func = ({name = getName()}) => 0;
+func({"Ali", "meow"});
+)";
+
+    REQUIRE(pie::test::run(src) == "Ali");
+}
+}
+
+
+TEST_CASE("Slicing for Packs!", "[Param]") {
+{
+    const auto src = R"(
+Named = class { name = ""; };
+Person = class { name = ""; age = 0; };
+
+func = (nameds: ...Named) => __builtin_print(__builtin_get(nameds, 1).name);
+
+func(Named("ali"), Person("Pie", 3));
+)";
+
+    REQUIRE(pie::test::run(src) == "Pie");
+}
+{
+    const auto src = R"(
+Named = class { name = ""; };
+Person = class { name = ""; age = 0; };
+
+func = (nameds: ...Named) => __builtin_get(nameds, 1).age;
+
+func(Named("ali"), Person("Pie", 3));
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
+
+
+TEST_CASE("Eager Parameters for Default Values", "[Param]") {
+{
+    const auto src = R"(
+f = (a, b = a) => __builtin_print(a, b);
+f(1);
+f(1, 2);
+)";
+
+    REQUIRE(pie::test::run(src) == "1 1\n1 2");
+}
+}
+
+
+
+TEST_CASE("Use Space Pulling Operators!", "[Space]") {
+{
+    const auto src = R"(
+
+space N {
+    infix + = (a, b) => "PLUS";
+};
+
+use space N::;
+__builtin_print(1 + 2);
+)";
+
+    REQUIRE(pie::test::run(src) == "PLUS");
+}
+}
+
+
+TEST_CASE("Leaky Overloaded Operator with Namespaces", "[Operator]") {
+{
+    const auto src = R"(
+space N {
+    infix(+) <> = (a: Int, b: Int) => "int";
+};
+
+{
+    use N::;
+    infix(+) <> = (a: String, b: String) => "string";
+};
+use N::;
+
+__builtin_print("x" <> "y");
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+}
+
+
+
+TEST_CASE("Leaky Overloaded Operator 2", "[Operator]") {
+{
+    const auto src = R"(
+infix(+) <> = (a: Int, b: Int) => "int";
+
+{
+    infix(+) <> = (a: String, b: String) => "string";
+};
+
+__builtin_print("p" <> "q");
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"(
+f = () => {
+    infix(+) <> = (a: String, b: String) => "string";
+    "a" <> "b";
+};
+
+infix(+) <> = (a: Int, b: Int) => "int";
+
+__builtin_print("a" <> "b");
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"(
+f = () => {
+    infix(+) <> = (a: String, b: String) => "string";
+    "a" <> "b";
+};
+
+infix(+) <> = (a: Int, b: Int) => "int";
+
+__builtin_print(f());
+__builtin_print(f());
+)";
+
+    REQUIRE(pie::test::run(src) == "string\nstring");
+}
+}
+
+
+
+TEST_CASE("Leaky Overloaded Operator", "[Operator]") {
+{
+    const auto src = R"(
+
+infix(+) <> = (a: Int, b: Int) => "int";
+
+f = () => {
+    infix(+) <> = (a: String, b: String) => "string";
+    "x" <> "y";
+};
+__builtin_print(f());
+)";
+
+    REQUIRE(pie::test::run(src) == "string");
+}
+{
+    const auto src = R"(
+
+infix(+) <> = (a: Int, b: Int) => "int";
+
+f = () => {
+    infix(+) <> = (a: String, b: String) => "string";
+    "x" <> "y";
+};
+__builtin_print(f());
+__builtin_print("p" <> "q");
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+}
+
+
+TEST_CASE("Operator Templates (type invalidation)", "[Type]") {
+{
+    const auto src = R"(
+first = (T: Type, x: T, y: T) => {
+    infix(+) <+> = (a: T, b: T) => a;
+    x <+> y;
+};
+__builtin_print(first(Int, 1, 2));
+__builtin_print(first(String, "a", "b"));
+)";
+
+    REQUIRE(pie::test::run(src) == "1\na");
+}
+}
+
+
+TEST_CASE("Moving out of Packs by accident", "[Pack]") {
+{
+    const auto src = R"(
+    infix + = (a, b) => 0;
+    makePack = (args: ...) => args;
+    pack = makePack("a", "b", "c");
+    (pack + ...);
+    __builtin_print(pack);
+    l = {pack...};
+    __builtin_print(pack);
+)";
+
+    REQUIRE(pie::test::run(src) == "a, b, c\na, b, c");
+}
+}
+
+
+TEST_CASE("Type Substitution", "[Type]") {
+{
+    const auto src = R"(
+   f = (T: Type) => { xs: {T} = {T(), T(), T()}; };
+   a = f(Int);
+   __builtin_print(a);
+   b = f(String);
+   __builtin_print(b);
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+}
+
+
 TEST_CASE("Default Arguments 1", "[Param]") {
 {
     const auto src = R"(
@@ -102,6 +347,7 @@ f4(a = 3, c = 10, 400);
 3 400 10)");
 }
 }
+
 
 
 TEST_CASE("Complex Pack", "[Pack][Fold]") {
@@ -2267,24 +2513,26 @@ print(x);
 
 
 
-TEST_CASE("Dynamic...Operators", "[Operator][Overload]") {
-    const auto src1 = R"(
-print = __builtin_print;
+// using static operators
+// until further notice
+// TEST_CASE("Dynamic...Operators", "[Operator][Overload]") {
+//     const auto src1 = R"(
+// print = __builtin_print;
 
 
-infix + = (a, b) => print("Any + Any");
+// infix + = (a, b) => print("Any + Any");
 
-func = () => "" + "";
-func();
+// func = () => "" + "";
+// func();
 
-infix + = (a: String, b: String) => print("String + String");
+// infix + = (a: String, b: String) => print("String + String");
 
-func();
-)";
+// func();
+// )";
 
-    REQUIRE(pie::test::run(src1) == R"(Any + Any
-String + String)");
-}
+//     REQUIRE(pie::test::run(src1) == R"(Any + Any
+// String + String)");
+// }
 
 
 

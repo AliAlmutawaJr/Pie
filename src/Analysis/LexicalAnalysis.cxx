@@ -532,7 +532,9 @@ void LexicalAnalysis::operator()(expr::Closure *c) {
 
     ScopeGuard sg{this};
 
-    for (const auto& [param, type] : std::views::zip(c->params, c->type.params)) {
+
+    const size_t diff = c->params.size() - c->defaults.size();
+    for (size_t i{}; const auto& [param, type] : std::views::zip(c->params, c->type.params)) {
         std::visit(*this, expr::Type{type}.variant());
 
         if (auto expr_type = type::isExpr(type)) {
@@ -550,6 +552,11 @@ void LexicalAnalysis::operator()(expr::Closure *c) {
             regular_param.ID = next();
             addVar(regular_param.expr->stringify(), regular_param.ID);
         }
+
+        if (i >= diff) std::visit(*this, c->defaults[i - diff]->variant());
+
+
+        ++i;
     }
 
     std::visit(*this, expr::Type{c->type.ret}.variant());

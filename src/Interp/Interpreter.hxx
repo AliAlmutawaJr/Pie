@@ -365,7 +365,7 @@ public:
 
 
 
-                for (auto& v : get<value::Pack>(pack)->values) values.push_back(std::move(v));
+                for (const auto& v : get<value::Pack>(pack)->values) values.push_back(v);
             }
             else values.push_back(std::visit(*this, std::move(elt)->variant()).value);
         }
@@ -434,7 +434,7 @@ public:
     }
 
 
-    std::string stringifyParam(const expr::Closure::Param& param) {
+    static std::string stringifyParam(const expr::Closure::Param& param) {
         if (std::holds_alternative<expr::Closure::RegularParam>(param)) {
             return get<expr::Closure::RegularParam>(param).expr->stringify();
         }
@@ -492,8 +492,8 @@ public:
 
         value::Value ret = fold->left_to_right ? packlist->values.front() : packlist->values.back(); // [packlist->values.size() - 2];
         const auto values = fold->left_to_right?
-            packlist->values |                       std::views::drop(1) | std::views::as_rvalue | std::ranges::to<std::vector<value::Value>>():
-            packlist->values | std::views::reverse | std::views::drop(1) | std::views::as_rvalue | std::ranges::to<std::vector<value::Value>>();
+            packlist->values |                       std::views::drop(1) | /* std::views::as_rvalue | */ std::ranges::to<std::vector<value::Value>>():
+            packlist->values | std::views::reverse | std::views::drop(1) | /* std::views::as_rvalue | */ std::ranges::to<std::vector<value::Value>>();
 
         const auto& op = findOp(fold->op);
 
@@ -628,9 +628,9 @@ public:
         if (l2r) {
             ret = std::move(packlist)->values[0];
 
-            for (auto& value : packlist->values | std::views::drop(1)) {
+            for (const auto& value : packlist->values | std::views::drop(1)) {
                 values.push_back(sep);
-                values.push_back(std::move(value));
+                values.push_back(value);
             }
         }
         else {
@@ -641,9 +641,9 @@ public:
             values.push_back(std::move(packlist)->values[len - 1]);
             values.push_back(std::move(packlist)->values[len - 2]);
 
-            for (auto& value : packlist->values | std::views::reverse | std::views::drop(2)) {
+            for (const auto& value : packlist->values | std::views::reverse | std::views::drop(2)) {
                 values.push_back(sep);
-                values.push_back(std::move(value));
+                values.push_back(value);
             }
         }
 
@@ -758,6 +758,9 @@ public:
 
 
         value::Value pack = std::visit(*this, fold->pack->variant()).value;
+
+        if (not std::holds_alternative<value::Pack>(pack)) util::error("Folding over a non-pack: " + stringify(pack));
+
         auto& packlist = get<value::Pack>(pack);
 
 
@@ -770,23 +773,23 @@ public:
             if (fold->sep) {
                 const value::Value sep = std::visit(*this, fold->sep->variant()).value;
 
-                for (auto& value : packlist->values) {
+                for (const auto& value : packlist->values) {
                     values.push_back(sep);
-                    values.push_back(std::move(value));
+                    values.push_back(value);
                 }
             }
-            else for (auto& value : packlist->values) values.push_back(std::move(value));
+            else for (const auto& value : packlist->values) values.push_back(value);
         }
         else {
             if (fold->sep) {
                 const value::Value sep = std::visit(*this, fold->sep->variant()).value;
 
-                for (auto& value : packlist->values) {
-                    values.push_back(std::move(value));
+                for (const auto& value : packlist->values) {
+                    values.push_back(value);
                     values.push_back(sep);
                 }
             }
-            else for (auto& value : packlist->values) values.push_back(std::move(value));
+            else for (const auto& value : packlist->values) values.push_back(value);
 
             std::ranges::reverse(values);
         }
@@ -818,9 +821,9 @@ public:
             };
 
 
-            for (value::Environment args_env; const auto& value : values) {
+            for (value::Environment args_env; auto& value : values) {
 
-                typeCheck(ret, func->type.params[first_idx],
+                ret = typeCheck(ret, func->type.params[first_idx],
                     "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
                     "', parameter '" + params_strs[0] +
                     "' expected: " + func->type.params[0]->text() +
@@ -828,11 +831,11 @@ public:
                 );
 
 
-                typeCheck(ret, func->type.params[second_idx],
+                value = typeCheck(value, func->type.params[second_idx],
                         "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
                         "', parameter '" + params_strs[1] +
                         "' expected: " + func->type.params[1]->text() +
-                        ", got: " + stringify(ret) + " which is " + typeOf(ret)->text()
+                        ", got: " + stringify(value) + " which is " + typeOf(value)->text()
                 );
 
 
@@ -928,7 +931,8 @@ public:
             );
 
             // was this a bug??
-            *get<value::ValuePtr>(space->members[sa->name.ID]) = std::move(value);
+            // *get<value::ValuePtr>(space->members[sa->name.ID]) = std::move(value);
+
             return {*get<value::ValuePtr>(space->members[sa->name.ID]), type};
         }
 
@@ -1494,12 +1498,13 @@ public:
 
                     if (pack_pattern->type) {
                         // pack =  // might be unecessary
+                        auto packtype = validateType(pack_pattern->type);
                         typeCheck(
                             pack,
-                            type,
+                            packtype,
                             "Type mis-match in Unpackment:\n" + expr_str() +
                             "\nPattern: " + expr::unpack::stringifyPattern(pack_pattern) +
-                            "\nType: `" + pack_pattern->type->text() +
+                            "\nType: `" + packtype->text() +
                             "` didn't match value: " + value::stringify(pack) +
                             "\nwhich is of type: " + type->text()
                         );
@@ -4161,7 +4166,7 @@ There are no mistakes with art.)";
         const size_t args_size,
         ScopeGuard& sg,
         value::Environment& args_env,
-        const auto& expr_str
+        [[maybe_unused]] const auto& expr_str
     ) {
         const size_t P = pos_params.size();
         const size_t F = P - defaults.size();
@@ -4199,24 +4204,6 @@ There are no mistakes with art.)";
             }
 
             return false;
-        };
-
-
-        const auto bindArg = [&] (const expr::Closure::Param& sid, value::Value val, type::TypePtr type) {
-            if (std::holds_alternative<expr::Closure::RegularParam>(sid)) {
-                const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
-                args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(val)), std::move(type)};
-                return;
-            }
-
-            constexpr auto INFERRED = true;
-            ScopeGuard pattern_sg{this}; // to store the vars bindPattern will add
-            bindPattern<INFERRED>(expr_str, get<expr::unpack::PatternPtr>(sid).get(), {std::move(val), std::move(type)});
-
-            for (auto& [id, space_ref] : env.back()->env) {
-                auto& [ref, value, t] = space_ref;
-                args_env[id] = {{std::move(ref).name}, std::move(value), std::move(t)};
-            }
         };
 
 
@@ -4279,7 +4266,8 @@ There are no mistakes with art.)";
                     sg.addEnv(std::move(sg_env));
                 }
 
-                bindArg(param, std::move(pack), std::move(type));
+                // bindArg(param, std::move(pack), std::move(type));
+                bindParam(param, {std::move(pack), std::move(type)}, args_env);
                 continue;
             }
 
@@ -4289,7 +4277,8 @@ There are no mistakes with art.)";
             value::Value val = rank < k ? nextArg(syntax) : evalDefault(i, syntax);
             if (not syntax) val = checkArg(std::move(val), type, param);
 
-            bindArg(param, std::move(val), std::move(type));
+            // bindArg(param, std::move(val), std::move(type));
+            bindParam(param, {std::move(val), std::move(type)}, args_env);
         }
     }
 
@@ -4546,11 +4535,6 @@ There are no mistakes with art.)";
            and get<expr::Closure::RegularParam>(sid).is_syntax;
     }
 
-    static std::string paramName(const expr::Closure::Param& sid) {
-        if (std::holds_alternative<expr::Closure::RegularParam>(sid))
-            return get<expr::Closure::RegularParam>(sid).expr->stringify();
-        return expr::unpack::stringifyPattern(get<expr::unpack::PatternPtr>(sid).get());
-    }
 
     // when currying: does parameter `i` get bound now, or is it left for the curried closure?
     // args only ever land on required params when currying, so:
@@ -4615,9 +4599,9 @@ There are no mistakes with art.)";
 
 
 
-    value::Value checkArg(value::Value val, const type::TypePtr& type, const expr::Closure::Param& sid) {
+    value::Value checkArg(value::Value val, const type::TypePtr& type, const expr::Closure::Param& param) {
         val = typeCheck(val, type,
-            "Type mis-match! Parameter '" + paramName(sid) + "' expected type: " + type->text() +
+            "Type mis-match! Parameter '" + stringifyParam(param) + "' expected type: " + type->text() +
             ", got: " + typeOf(val)->text()
         );
 
@@ -4625,30 +4609,6 @@ There are no mistakes with art.)";
             captureEnvForPassedClosure(get<expr::Closure>(val));
 
         return val;
-    }
-
-
-    void bindArg(
-        const expr::Closure::Param& sid,
-        value::Value val,
-        type::TypePtr type,
-        value::Environment& args_env,
-        const auto& expr_str
-    ) {
-        if (std::holds_alternative<expr::Closure::RegularParam>(sid)) {
-            const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
-            args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(val)), std::move(type)};
-            return;
-        }
-
-        constexpr auto INFERRED = true;
-        ScopeGuard pattern_sg{this}; // to store the vars bindPattern will add
-        bindPattern<INFERRED>(expr_str, get<expr::unpack::PatternPtr>(sid).get(), {std::move(val), std::move(type)});
-
-        for (auto& [id, space_ref] : env.back()->env) {
-            auto& [ref, value, t] = space_ref;
-            args_env[id] = {{std::move(ref).name}, std::move(value), std::move(t)};
-        }
     }
 
 
@@ -4740,7 +4700,7 @@ There are no mistakes with art.)";
         const size_t args_size,
         ScopeGuard& sg,
         value::Environment& args_env,
-        const auto& expr_str,
+        [[maybe_unused]] const auto& expr_str,
         const bool currying = false
     ) {
         const size_t P = pos_params.size();
@@ -4773,50 +4733,72 @@ There are no mistakes with art.)";
         };
 
 
+        const auto bindAndAbide = [&] (const expr::Closure::Param& param, value::Value value, type::TypePtr type) {
+            value::Environment param_env;
+            bindParam(param, {std::move(value), std::move(type)}, param_env);
+
+            sg.addEnv(param_env);
+
+            // copy into args env
+            for (auto& [id, entry] : param_env) args_env[id] = std::move(entry);
+        };
+
         for (size_t i{}; i < P; ++i) {
             if (currying and not curryBinds(i, v, args_size)) continue; // left for the curried closure
 
-            auto& [sid, type] = pos_params[i];
+            auto& [param, type] = pos_params[i];
             type = type->clone();
             resolveParamType(func, i, type, args_env);
 
-            if (i == v) {
-                auto pack = value::makePack();
+            if (i == v) { // variadic call
 
-                if (variadic_uses_default)
-                    pack->values.push_back(checkArg(std::visit(*this, defaults[i - F]->variant()).value, type, sid));
-                else
-                    for (size_t j{}; j < variadic_size; ++j)
-                        pack->values.push_back(checkArg(next(), type, sid));
+                const auto variadic_type = type::isVariadic(type);
+                if (not variadic_type) util::error(); // should never happen anyways!
 
-                if (pack->values.empty()) {
-                    value::Environment sg_env;
-                    bindParam(sid, {value::makePack(), type}, sg_env);
-                    sg.addEnv(std::move(sg_env));
+                value::Value value;
+
+                if (variadic_uses_default) {
+                    value = checkArg(std::visit(*this, defaults[i - F]->variant()).value, type, param);
+
+
+                    if (not std::holds_alternative<value::Pack>(value))
+                        util::error(
+                            "Default value of variadic parameter `" + stringifyParam(param) +
+                            "` must be a pack, got: " + stringify(value)
+                        );
+                }
+                else {
+                    auto pack = value::makePack();
+
+                    for (size_t j{}; j < variadic_size; ++j) {
+                        pack->values.push_back(checkArg(next(), variadic_type->type, param));
+                    }
+
+
+                    value = std::move(pack);
                 }
 
-                bindArg(sid, std::move(pack), std::move(type), args_env, expr_str);
+
+                bindAndAbide(param, std::move(value), std::move(type));
                 continue;
             }
 
-            const size_t rank   = i - (i > v); // position among non-variadic params
-            const bool   syntax = isSyntaxParam(sid);
 
-            value::Value val;
-            if (rank < k) {
-                val = next(syntax);
-            }
+            const size_t rank   = i - (i > v); // position among non-variadic params
+            const bool   syntax = isSyntaxParam(param);
+
+            value::Value value;
+            if (rank < k) value = next(syntax);
             else {
                 // assert(i >= F && "not enough arguments; currying check should have caught this");
-
                 const auto& expr = defaults[i - F];
-                if (syntax) val = expr->variant();
-                else        val = std::visit(*this, expr->variant()).value;
+                if (syntax) value = expr->variant();
+                else        value = std::visit(*this, expr->variant()).value;
             }
 
-            if (not syntax) val = checkArg(std::move(val), type, sid);
+            if (not syntax) value = checkArg(std::move(value), type, param);
 
-            bindArg(sid, std::move(val), std::move(type), args_env, expr_str);
+            bindAndAbide(param, std::move(value), std::move(type));
         }
     }
 
@@ -5914,83 +5896,135 @@ There are no mistakes with art.)";
         if (const auto& var = getVar(fix->funcs[0]->var_ID, liftName(fix->funcs[0].get())); var)
             util::error("Can only assign operators to closure literals: " + fix->stringify());
 
-        auto func = dynamic_cast<expr::Closure*>(fix->funcs[0].get());
+
+        // auto func = dynamic_cast<expr::Closure*>(fix->funcs[0].get());
+        auto func_copy = std::make_shared<expr::Closure>(*dynamic_cast<const expr::Closure*>(fix->funcs[0].get()));
+        auto func = func_copy.get();
         // this is needed in the case the operator is applied in another namespace (most likely)
         func->inSpace(current_space);
 
         for (auto& t : func->type.params) t = validateType(std::move(t));
-
         func->type.ret = validateType(std::move(func)->type.ret);
+
+        const auto with = [&func_copy] (const auto& f) {
+            auto copy = f->clone();
+            copy->funcs[0] = func_copy;
+            return copy;
+        };
+
+
+        const auto addOp = [&] (const std::string& name, const auto& fresh) {
+            auto& ops = env.back()->op_env;
+
+            if (ops.contains(name)) { // same scope: extend it
+                ops[name] = ops[name]->clone(); // may be shared, e.g. imported from a namespace
+                ops[name]->funcs.push_back(func_copy);
+            }
+            else if (opsContain(name)) { // outer scope: shadow it
+                auto shadow = findOp(name)->clone();
+                shadow->funcs.push_back(func_copy);
+                ops[name] = std::move(shadow);
+            }
+            else // new operator
+                ops[name] = with(fresh);
+        };
+
+        const auto addPrefixOp = [&] (const std::string& name, const auto& fresh) {
+            auto& ops = env.back()->prefix_op_env;
+
+            if (ops.contains(name)) { // same scope: extend it
+                ops[name] = ops[name]->clone(); // may be shared, e.g. imported from a namespace
+                ops[name]->funcs.push_back(func_copy);
+            }
+            else if (prefixOpsContain(name)) { // outer scope: shadow it
+                auto shadow = findPrefixOp(name)->clone();
+                shadow->funcs.push_back(func_copy);
+                ops[name] = std::move(shadow);
+            }
+            else // new operator
+                ops[name] = with(fresh);
+        };
 
 
         switch (fix->type()) {
             using enum token::TokenKind;
 
             case PREFIX:
-                if (prefixOpsContain(fix->name))
-                    findPrefixOp(fix->name)->funcs.push_back(fix->funcs[0]); // assuming each fix expression has a single func in it
-                else
-                    env.back()->prefix_op_env[fix->name] = fix->clone();
+                addPrefixOp(fix->name, fix);
+                // if (prefixOpsContain(fix->name))
+                //     findPrefixOp(fix->name)->funcs.push_back(func_copy); // assuming each fix expression has a single func in it
+                // else
+                //     env.back()->prefix_op_env[fix->name] = with(fix);
                 break;
 
             case EXFIX : {
                 auto exfix = dynamic_cast<const expr::Exfix*>(fix);
-                if (prefixOpsContain(fix->name)) {
-                    findPrefixOp(exfix->name )->funcs.push_back(fix->funcs[0]);
-                    findPrefixOp(exfix->name2)->funcs.push_back(fix->funcs[0]);
-                }
-                else {
-                    env.back()->prefix_op_env[exfix->name ] = fix->clone();
-                    env.back()->prefix_op_env[exfix->name2] = fix->clone();
-                }
+                addPrefixOp(exfix->name , fix);
+                addOp(exfix->name2, fix);
+                // addPrefixOp(exfix->name2, fix);
+                // auto exfix = dynamic_cast<const expr::Exfix*>(fix);
+                // if (prefixOpsContain(fix->name)) {
+                //     findPrefixOp(exfix->name )->funcs.push_back(func_copy);
+                //     findPrefixOp(exfix->name2)->funcs.push_back(func_copy);
+                // }
+                // else {
+                //     env.back()->prefix_op_env[exfix->name ] = with(fix);
+                //     env.back()->prefix_op_env[exfix->name2] = with(fix);
+                // }
 
             }
             break;
 
             case INFIX :
             case SUFFIX:
-                if (opsContain(fix->name))
-                    findOp(fix->name)->funcs.push_back(fix->funcs[0]);
-                else env.back()->op_env[fix->name] = fix->clone();
+                addOp(fix->name, fix);
+                // if (opsContain(fix->name))
+                //     findOp(fix->name)->funcs.push_back(func_copy);
+                // else env.back()->op_env[fix->name] = with(fix);
                 break;
 
             case MIXFIX: {
                 auto mixfix = dynamic_cast<const expr::Operator*>(fix);
-                if (mixfix->isPrefix()) {
-                    if (prefixOpsContain(mixfix->name)) {
-                        findPrefixOp(mixfix->name)->funcs.push_back(mixfix->funcs[0]);
-                        for (const auto& sub_name : mixfix->rest) {
-                            findOp(sub_name)->funcs.push_back(mixfix->funcs[0]);
-                        }
-                    }
-                    else {
-                        env.back()->prefix_op_env[mixfix->name] = mixfix->clone();
 
-                        for (const auto& sub_name : mixfix->rest)
-                            env.back()->op_env[sub_name] = mixfix->clone();
-                    }
-                }
-                else {
-                    if (opsContain(fix->name)) {
-                        findOp(fix->name)->funcs.push_back(fix->funcs[0]);
-                        for (const auto& sub_name : mixfix->rest) {
-                            findOp(sub_name)->funcs.push_back(mixfix->funcs[0]);
-                        }
-                    }
-                    else {
-                        env.back()->op_env[mixfix->name] = mixfix->clone();
+                if (mixfix->isPrefix()) addPrefixOp(mixfix->name, mixfix);
+                else                    addOp      (mixfix->name, mixfix);
 
-                        for (const auto& sub_name : mixfix->rest)
-                            env.back()->op_env[sub_name] = mixfix->clone();
-                    }
-                }
+                for (const auto& sub_name : mixfix->rest) addOp(sub_name, mixfix);
+                // auto mixfix = dynamic_cast<const expr::Operator*>(fix);
+                // if (mixfix->isPrefix()) {
+                //     if (prefixOpsContain(mixfix->name)) {
+                //         findPrefixOp(mixfix->name)->funcs.push_back(func_copy);
+                //         for (const auto& sub_name : mixfix->rest) {
+                //             findOp(sub_name)->funcs.push_back(func_copy);
+                //         }
+                //     }
+                //     else {
+                //         env.back()->prefix_op_env[mixfix->name] = with(mixfix);
+
+                //         for (const auto& sub_name : mixfix->rest)
+                //             env.back()->op_env[sub_name] = with(mixfix);
+                //     }
+                // }
+                // else {
+                //     if (opsContain(fix->name)) {
+                //         findOp(fix->name)->funcs.push_back(func_copy);
+                //         for (const auto& sub_name : mixfix->rest) {
+                //             findOp(sub_name)->funcs.push_back(func_copy);
+                //         }
+                //     }
+                //     else {
+                //         env.back()->op_env[mixfix->name] = with(mixfix);
+
+                //         for (const auto& sub_name : mixfix->rest)
+                //             env.back()->op_env[sub_name] = with(mixfix);
+                //     }
+                // }
             }
 
             default:;
         }
 
         return {*func, std::make_shared<type::FuncType>(func->type)};
-        // return std::visit(*this, fix->funcs[0]->variant());
     }
 
 
@@ -7032,12 +7066,15 @@ There are no mistakes with art.)";
         else if (type::isFunction(type)) {
             const auto func_type = dynamic_cast<type::FuncType*>(type.get());
 
-            for (auto& t : func_type->params) t = validateType(std::move(t));
+            std::vector<type::TypePtr> params;
+            for (auto& param : func_type->params) {
+                params.push_back(validateType(param));
+            }
 
             // all param types are valid. Only thing left to check is return type
-            func_type->ret = validateType(std::move(func_type)->ret);
+            // auto ret = validateType(func_type->ret);
 
-            return type;
+            return std::make_shared<type::FuncType>(std::move(params), validateType(func_type->ret));
         }
         else if (type::isVariadic(type)) {
             const auto variadic_type = dynamic_cast<type::VariadicType*>(type.get());
@@ -7045,9 +7082,7 @@ There are no mistakes with art.)";
             // // todo: allow this in the future
             // if (variadic_type->type->text() == "Syntax") util::error("Variadics of 'Syntax' is not allowed!");
 
-            variadic_type->type = validateType(std::move(variadic_type)->type);
-
-            return type;
+            return std::make_shared<type::VariadicType>(validateType(std::move(variadic_type)->type));
         }
         else if (type::isList(type)) {
             const auto list_type = dynamic_cast<type::ListType*>(type.get());
@@ -7056,12 +7091,13 @@ There are no mistakes with art.)";
             // if (list_type->type->text() == "Syntax") util::error("List of 'Syntax' is not allowed!");
 
 
-            if (type::isVariadic(list_type->type)) util::error("Lists of variadics types are not allowed!");
+            // if (type::isVariadic(list_type->type)) util::error("Lists of variadics types are not allowed!");
 
 
-            list_type->type = validateType(std::move(list_type)->type);
+            // list_type->type = validateType(std::move(list_type)->type);
+            // return type;
 
-            return type;
+            return std::make_shared<type::ListType>(validateType(list_type->type));
         }
         else if (type::isMap(type)) {
             const auto map_type = dynamic_cast<type::MapType*>(type.get());
@@ -7071,14 +7107,16 @@ There are no mistakes with art.)";
             // if (map_type->val_type->text() == "Syntax") util::error("Map of 'Syntax' is not allowed!");
 
 
-            if (type::isVariadic(map_type->key_type)) util::error("Map of variadics types are not allowed!");
-            if (type::isVariadic(map_type->val_type)) util::error("Map of variadics types are not allowed!");
+            // if (type::isVariadic(map_type->key_type)) util::error("Map of variadics types are not allowed!");
+            // if (type::isVariadic(map_type->val_type)) util::error("Map of variadics types are not allowed!");
 
 
-            map_type->key_type = validateType(std::move(map_type)->key_type);
-            map_type->val_type = validateType(std::move(map_type)->val_type);
+            // map_type->key_type = validateType(std::move(map_type)->key_type);
+            // map_type->val_type = validateType(std::move(map_type)->val_type);
 
-            return type;
+            // return type;
+
+            return std::make_shared<type::MapType>(validateType(map_type->key_type), validateType(map_type->val_type));
         }
 
 
@@ -7267,14 +7305,14 @@ There are no mistakes with art.)";
 
 
         template <std::same_as<value::Environment>... E>
-        ScopeGuard(Visitor* t, const E&... es) noexcept : v{t} {
+        ScopeGuard(Visitor* t, const E&... es) : v{t} {
             v->scope();
 
             (addEnv(es), ...);
         }
 
         template <std::same_as<value::Environment>... E>
-        ScopeGuard(Visitor* t, value::EnvTag tag, const E&... es) noexcept : v{t} {
+        ScopeGuard(Visitor* t, value::EnvTag tag, const E&... es) : v{t} {
             v->scope(tag);
 
             (addEnv(es), ...);
