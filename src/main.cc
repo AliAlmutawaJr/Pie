@@ -88,6 +88,10 @@ static int pieMain(int argc, char *argv[]) {
         std::println(std::cerr, "{}", e.what());
         return 1;
     }
+    catch (...) {
+        std::println(std::cerr, "Unknown Exception!");
+        return 2;
+    }
 
     return 0;
 }

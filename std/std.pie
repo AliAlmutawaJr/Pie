@@ -15,14 +15,12 @@ space std {
     decltype = __builtin_decltype;
 
     input = (args: ...) => {
-        __builtin_conditional(
-            __builtin_gt(__builtin_len(args), 0),
-            __builtin_print(args..., end = ""),
-            ""
-        );
-
+        __builtin_print(args..., end = "");
         __builtin_input_str();
     };
+
+    Pack = (args: ...) => args;
+    PackOf = (T: Type, args: ...T): ...T => args;
 
 
     infix + = (a: String, b: String) => __builtin_concat(a, b);

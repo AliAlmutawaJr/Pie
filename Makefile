@@ -60,10 +60,10 @@ $$($(1)_OBJ_DIR)/%.o: src/%.cxx
 
 endef
 
-$(eval $(call BUILD_CONFIG,release,$(OPT) -DNO_ERR_LOC))
-$(eval $(call BUILD_CONFIG,debug,-O0 $(SAN)))
-$(eval $(call BUILD_CONFIG,test,-O0 $(SAN)))
-$(eval $(call BUILD_CONFIG,gh-actions,-O0))
+$(eval $(call BUILD_CONFIG,release,$(OPT)))
+$(eval $(call BUILD_CONFIG,debug,-O0 $(SAN) -DPIE_DEBUG))
+$(eval $(call BUILD_CONFIG,test ,-O0 $(SAN) -DPIE_DEBUG))
+$(eval $(call BUILD_CONFIG,gh-actions,-O0 -DPIE_DEBUG))
 $(eval $(call BUILD_CONFIG,web,$(OPT) -DWEB_PIE))
 
 
@@ -71,7 +71,7 @@ $(eval $(call BUILD_CONFIG,web,$(OPT) -DWEB_PIE))
 
 $(release_OBJ_DIR)/main.o: src/main.cc
 	@mkdir -p $(dir $@)
-	$(CC) $(ARGS) $(VER) $(INCLUDE) $(OPT) -DNO_ERR_LOC -MMD -MP -c $< -o $@
+	$(CC) $(ARGS) $(VER) $(INCLUDE) $(OPT) -MMD -MP -c $< -o $@
 
 -include $(release_OBJ_DIR)/main.d
 

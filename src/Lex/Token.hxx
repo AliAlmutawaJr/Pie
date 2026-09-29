@@ -170,7 +170,7 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
         os << '"' << token.text << '"';
     }
 
-    #if !NO_ERR_LOC
+    #ifdef PIE_DEBUG
         os << ", <" << token.span.first .line << ":" << token.span.first .column
            << ", "  << token.span.second.line << ":" << token.span.second.column << ">";
     #endif
@@ -195,9 +195,7 @@ struct std::formatter<pie::token::Token> : std::formatter<std::string> {
             return std::format_to(ctx.out(), "{}", ss.str());
         }
         else {
-            #if NO_ERR_LOC
-                return std::format_to(ctx.out(), "Token{{{}, '{}'}}", stringify(token.kind), token.text);
-            #else
+            #if PIE_DEBUG
                 return std::format_to(
                     ctx.out(),
                     "Token{{{}, '{}', <{}:{}, {}:{}>}}",
@@ -206,6 +204,8 @@ struct std::formatter<pie::token::Token> : std::formatter<std::string> {
                     token.span.first .line, token.span.first .column,
                     token.span.second.line, token.span.second.column
                 );
+            #else
+                return std::format_to(ctx.out(), "Token{{{}, '{}'}}", stringify(token.kind), token.text);
             #endif
         }
     }

@@ -225,7 +225,7 @@ add_executable(Pie
 )
 
 configure_pie_target(Pie)
-target_compile_definitions(Pie PRIVATE NO_ERR_LOC)
+# target_compile_definitions(Pie PRIVATE NO_ERR_LOC)
 target_compile_options(Pie PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2>
 )
@@ -238,11 +238,12 @@ add_custom_target(main DEPENDS Pie)
 # ============================================================================
 
 add_executable(Pie_debug EXCLUDE_FROM_ALL
-    src/main.cc
-    ${PIE_SOURCES}
+src/main.cc
+${PIE_SOURCES}
 )
 
 configure_pie_target(Pie_debug)
+target_compile_definitions(Pie_debug PRIVATE PIE_DEBUG)
 target_compile_options(Pie_debug PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O0>
 )

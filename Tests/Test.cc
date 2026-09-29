@@ -13,21 +13,117 @@
 
 
 
+TEST_CASE("Default Arguments 1", "[Param]") {
+{
+    const auto src = R"(
+f1 = (a = 3) => __builtin_print(a);
+f1();
+f1(1);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(3
+1)");
+}
+{
+    const auto src = R"(
+
+f2 = (a = 3, b = 1) => __builtin_print(a, b);
+f2();
+f2(10);
+f2(10, 20);
+f2(a = 10);
+f2(b = 10);
+f2(a = 10, 100);
+f2(b = 10, 100);
+f2(a = 10, b = 20);
+f2(b = 10, a = 20);
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(3 1
+10 1
+10 20
+10 1
+3 10
+10 100
+100 10
+10 20
+20 10)");
+}
+{
+    const auto src = R"(
+
+f3 = (a, b = 1) => __builtin_print(a, b);
+f = f3();
+f(10);
+f3(10);
+f3(10, 20);
+f3(a = 10);
+ff = f3(b = 10);
+fff = f();
+fff(3);
+f3(a = 100, 200);
+f3(100, a = 200);
+f3(a = 100, b = 200);
+f3(b = 100, a = 200);
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(10 1
+10 1
+10 20
+10 1
+3 1
+100 200
+200 100
+100 200
+200 100)");
+}
+{
+    const auto src = R"(
+
+f3 = (a, b = 1) => __builtin_print(a, b);
+
+f4 = (a, b = 1, c = 4) => __builtin_print(a, b, c);
+f4();
+f4(3);
+f4(3, 10, 400);
+f4(b = 3, 10);
+ff = f4(c = 3, b = 10);
+ff(3);
+f4(a = 3, c = 10, 400);
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(3 1 4
+3 10 400
+10 3 4
+3 10 3
+3 400 10)");
+}
+}
+
+
 TEST_CASE("Complex Pack", "[Pack][Fold]") {
 {
     const auto src = R"(
+infix + = (a, b) => __builtin_add(a, b);
+
 C = class {
     pack: ...Int = 0;
 };
 makeC = (x: ...Int) => C(x);
-std::print((makeC(5, 6, 7).pack + ...));
+__builtin_print((makeC(5, 6, 7).pack + ...));
+
 )";
 
     REQUIRE(pie::test::run(src) == R"(18)");
 }
 {
     const auto src = R"(
-makePack = (args: ...) => args
+infix + = (a, b) => __builtin_add(a, b);
+
+makePack = (args: ...) => args;
 sum = (makePack(1, 2, 3) + ...);
 __builtin_print(sum);
 )";
@@ -35,22 +131,6 @@ __builtin_print(sum);
     REQUIRE(pie::test::run(src) == R"(6)");
 }
 }
-
-
-TEST_CASE("Complex Pack", "[Pack][Fold]") {
-{
-    const auto src = R"(
-C = class {
-    pack: ...Int = 0;
-};
-makeC = (x: ...Int) => C(x);
-std::print((makeC(5, 6, 7).pack + ...));
-)";
-
-    REQUIRE(pie::test::run(src) == R"(18)");
-}
-}
-
 
 
 TEST_CASE("insert_at", "[Builtin]") {

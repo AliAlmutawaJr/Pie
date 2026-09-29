@@ -40,7 +40,7 @@ template <typename Except = std::runtime_error, bool print_loc = true>
     }
 
 
-    #if not NO_ERR_LOC
+    #if PIE_DEBUG
     if constexpr (print_loc) {
         std::string err_loc = std::format("\033[1m{}:{}:{}: \033[31merror:\033[0m ", location.file_name(), location.line(), location.column());
         throw Except{err_loc + std::string{msg}};

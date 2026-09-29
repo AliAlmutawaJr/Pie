@@ -45,6 +45,7 @@
 
 
 #define LIFT(expr) [&] { return expr; }
+// #define LAMBDA(func) [] (auto&& ...v) { return func(std::forward<decltype(v)>(v...)); }
 
 
 namespace pie {
@@ -331,7 +332,11 @@ public:
 
 
         // printEnv(env);
-        util::error("Name `" + n->name + "`, with ID [" + std::to_string(n->var_ID) + "] is not defined!");
+        #ifdef PIE_DEBUG
+            util::error("Name `" + n->name + "`, with ID [" + std::to_string(n->var_ID) + "] is not defined!");
+        #else
+            util::error("Name `" + n->name + "` is not defined!");
+        #endif
     }
 
 
@@ -3837,25 +3842,337 @@ There are no mistakes with art.)";
 
     struct ScopeGuard; // forward declaring so the below function knows about it
 
+    // void variadicCall(
+    //     const expr::Closure& func,
+    //     std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params,
+    //     std::vector<expr::ExprPtr> defaults,
+    //     std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at,
+    //     std::vector<pie::expr::ExprPtr> args,
+    //     const size_t args_size,
+    //     ScopeGuard& sg,
+    //     value::Environment& args_env,
+    //     const auto& expr_str
+    // ) {
+    //     const auto it = std::ranges::find_if(pos_params, [] (const auto& e) { return type::isVariadic(e.second); });
+    //     const size_t variadic_index = std::distance(pos_params.begin(), it);
+
+    //     const auto pre_variadic = std::ranges::subrange(pos_params.begin(), it);
+    //     const auto post_variadic  = std::ranges::subrange(it + 1, pos_params.end());
+
+    //     const size_t  pre_variadic_size = std::ranges::size(pre_variadic);
+    //     const size_t post_variadic_size = std::ranges::size(post_variadic);
+    //     const size_t      variadic_size =
+    //         args_size > pre_variadic_size + post_variadic_size ?
+    //               args_size - pre_variadic_size - post_variadic_size
+    //             : 0;
+    //     // [args_size, pre_variadic_size, post_variadic_size] {
+    //     //     if (args_size > pre_variadic_size + post_variadic_size)
+    //     //         return args_size - pre_variadic_size - post_variadic_size;
+    //     //     return size_t{};
+    //     // }();
+
+    //     std::clog << "pre_variadic_size: " << pre_variadic_size << std::endl;
+    //     std::clog << "variadic_size: " << variadic_size << std::endl;
+    //     std::clog << "post_variadic_size: " << post_variadic_size << std::endl;
+
+
+
+    //     const auto findType = [&func] (const size_t p, const type::TypePtr& type) {
+    //         // it doesn't matter if there are multiple arguments with this name
+    //         // `validateType` will choose the lastly-bounded one
+    //         // we just need to proof that A parameter exists in order to call `validateType`
+    //         for (size_t i{}; i <= p; ++i) {
+    //             if (std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) {
+    //                 const auto& param = get<expr::Closure::RegularParam>(func.params[i]);
+
+    //                 if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
+    //                     return true;
+    //             }
+    //             // else; // todo: handle unpackmeters
+    //         }
+
+    //         // // look in the arguments env (from a partially evaluated function that yielded this function)
+    //         // for (const auto& [key, _] : func.args_env)
+    //         for (const auto& [_, obj] : func.envs.env.env) {
+    //             const auto& [name, __, ___] = obj;
+    //             if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name.name, util::SourceSpan{})})) {
+    //                 return true;
+    //             }
+    //         }
+
+    //         return false;
+    //     };
+
+
+    //     auto pack = value::makePack();
+    //     for (
+    //         size_t arg_index{}, param_index{}, pack_index{}, curr_expansion{};
+    //         arg_index < args.size(); // can't be args_size since arg_index is only used to index into args
+    //     ) {
+    //         auto [sid, type] = pos_params[param_index];
+    //         // const auto& [param_expr, id, is_syntax] = sid;
+
+    //         if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue;
+
+    //         const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+    //         type = type->clone();
+
+    //         value::Value value;
+
+    //         if (param_index == variadic_index) {
+    //             if (findType(param_index, type)) {
+    //                 // ScopeGuard sg{this, func.args_env, args_env};
+    //                 ScopeGuard sg{this, func.envs.env.env, args_env};
+    //                 type = validateType(std::move(type));
+    //             }
+
+
+    //             for (size_t i{}; i < variadic_size; ++i) {
+    //                 if (curr_expansion < expand_at.size() and arg_index == expand_at[curr_expansion].first) {
+    //                     value = std::move(expand_at[curr_expansion].second[pack_index++]);
+
+    //                     value = typeCheck(value, type,
+    //                         "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+    //                     );
+
+    //                     if (std::holds_alternative<expr::Closure>(value))
+    //                         captureEnvForPassedClosure(get<expr::Closure>(value));
+
+
+    //                     if (pack_index >= expand_at[curr_expansion].second.size()) {
+    //                         ++arg_index;
+    //                         ++curr_expansion;
+    //                         pack_index = 0;
+    //                     }
+    //                 }
+    //                 else {
+    //                     // const auto& expr = args[arg_index];
+
+    //                     // if (type->text() == "Syntax") util::error(); //* allow this the future
+
+    //                     value = std::visit(*this, args[arg_index]->variant()).value;
+
+    //                     value = typeCheck(value, type,
+    //                         "Type mis-match! Parameter `" + param_expr->stringify() + "` expected type: " + type->text() + ", got: " + typeOf(value)->text()
+    //                     );
+
+    //                     if (std::holds_alternative<expr::Closure>(value))
+    //                         captureEnvForPassedClosure(get<expr::Closure>(value));
+
+    //                     ++arg_index;
+    //                 }
+
+    //                 pack->values.push_back(std::move(value));
+    //             }
+
+    //             ++param_index;
+
+    //             // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
+    //             args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(pack)), std::move(type)};
+    //         }
+    //         else {
+    //             if (findType(param_index, type)) {
+    //                 // ScopeGuard sg{this, func.args_env, args_env};
+    //                 ScopeGuard sg{this, func.envs.env.env, args_env};
+    //                 type = validateType(std::move(type));
+    //             }
+
+
+    //             if (curr_expansion < expand_at.size() and arg_index == expand_at[curr_expansion].first) {
+    //                 value = expand_at[curr_expansion].second[pack_index++];
+
+    //                 value = typeCheck(value, type,
+    //                     "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+    //                 );
+
+    //                 if (std::holds_alternative<expr::Closure>(value))
+    //                     captureEnvForPassedClosure(get<expr::Closure>(value));
+
+
+    //                 if (pack_index >= expand_at[curr_expansion].second.size()) {
+    //                     ++arg_index;
+    //                     ++curr_expansion;
+    //                     pack_index = 0;
+    //                 }
+    //             }
+    //             else {
+    //                 const auto& expr = args[arg_index];
+
+    //                 value = std::visit(*this, expr->variant()).value;
+
+    //                 value = typeCheck(value, type,
+    //                     "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+    //                 );
+
+    //                 if (std::holds_alternative<expr::Closure>(value))
+    //                     captureEnvForPassedClosure(get<expr::Closure>(value));
+
+    //                 ++arg_index;
+    //             }
+
+    //             ++param_index;
+    //             // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
+    //             args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
+    //         }
+    //     }
+
+
+    //     if (variadic_size == 0) {
+    //         // sg.addEnv({{
+    //         //     pos_params[variadic_index].first.ID,
+    //         //     {
+    //         //         {pos_params[variadic_index].first.expr->stringify()},
+    //         //         std::make_shared<value::Value>(value::makePack()),
+    //         //         pos_params[variadic_index].second
+    //         //     }
+    //         // }});
+
+    //         // args_env[pos_params[variadic_index].first.ID] = {
+    //         //     {pos_params[variadic_index].first.expr->stringify()},
+    //         //     std::make_shared<value::Value>(value::makePack()),
+    //         //     std::move(pos_params)[variadic_index].second
+    //         // };
+
+    //         {
+    //             value::Environment sg_env;
+    //             bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, sg_env);
+    //             sg.addEnv(std::move(sg_env));
+    //         }
+
+    //         bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, args_env);
+    //     }
+
+
+
+
+    //     // processing default values
+    //     // const auto defaults_size = func.defaults.size();
+    //     const auto defaults_size = defaults.size();
+    //     const auto params_size = pos_params.size(); // minus one for variadic
+    //     const auto overlap = [args_size, defaults_size, params_size] {
+    //         if (args_size + defaults_size > params_size)
+    //             return args_size + defaults_size - params_size;
+
+    //         return size_t{};
+    //     }();
+    //     // a, b, c = 1, d = 1, e = 1
+    //     const auto defaults_index = pos_params.size() - defaults.size();
+
+
+    //     std::clog << "args size: " << args_size << std::endl;
+    //     std::clog << "params_size : " << params_size << std::endl;
+    //     std::clog << "default size: " << defaults_size << std::endl;
+    //     std::clog << "overlap     : " << overlap << std::endl;
+
+
+    //     if (args_size == variadic_index) {
+
+    //     }
+
+
+    //     for (size_t
+    //         i           = overlap,
+    //         param_index = args_size + (args_size >= variadic_index);
+
+    //         param_index < params_size;
+    //         ++param_index) {
+    //         std::clog << "param_index: " << param_index << std::endl;
+
+
+    //         // auto& [sid, type] = pos_params[i + (i >= variadic_index)];
+    //         auto& [sid, type] = pos_params[param_index];
+
+    //         if (findType(param_index, type)) {
+    //             // ScopeGuard sg{this, func.args_env, args_env};
+    //             ScopeGuard sg{this, func.envs.env.env, args_env};
+    //             type = validateType(std::move(type));
+    //         }
+
+    //         // const auto& expr = func.defaults[overlap + (i - args_size)];
+    //         std::clog << "default_index : " << overlap + param_index - args_size << std::endl;
+    //         std::clog << "defaults_index: " << defaults_index << std::endl;
+    //         // size_t default_index = overlap + param_index - args_size;
+    //         const auto& expr = defaults[i];
+    //         std::clog << "expr: " << expr->stringify() << std::endl;
+
+    //         // const auto& [param_expr, id, is_syntax] = sid;
+    //         if (std::holds_alternative<expr::Closure::RegularParam>(sid)) {
+    //             const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+    //             std::clog << "param: " << param_expr->stringify() << std::endl;
+
+    //             auto name = param_expr->stringify();
+
+    //             value::Value value;
+    //             if (is_syntax) {
+    //                 value = expr->variant();
+    //             }
+    //             else {
+    //                 value = std::visit(*this, expr->variant()).value;
+
+    //                 value = typeCheck(value, type,
+    //                     "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+    //                 );
+
+    //                 if (std::holds_alternative<expr::Closure>(value))
+    //                     captureEnvForPassedClosure(get<expr::Closure>(value));
+    //             }
+
+    //             args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
+    //         }
+    //         else {
+    //             constexpr auto INFERRED = true;
+    //             const auto& pattern = get<expr::unpack::PatternPtr>(sid);
+
+    //             auto value = std::visit(*this, expr->variant()).value;
+    //             value = typeCheck(value, type,
+    //                 "Type mis-match! Unpackmeter `" + expr::unpack::stringifyPattern(pattern.get()) +
+    //                 "` expected type: " + type->text() +
+    //                 "\nGot expression: " + expr->stringify() +
+    //                 " which evaluated to: " + value::stringify(value) +
+    //                 ", which is of type: " + typeOf(value)->text()
+    //             );
+
+    //             if (std::holds_alternative<expr::Closure>(value))
+    //                 captureEnvForPassedClosure(get<expr::Closure>(value));
+
+
+    //             ScopeGuard sg{this}; // to store the vars bindPattern will add
+    //             bindPattern<INFERRED>(expr_str, pattern.get(), {std::move(value), std::move(type)});
+
+    //             for (auto& [id, space_ref] : env.back()->env) {
+    //                 auto& [ref, value, type] = space_ref;
+
+    //                 args_env[id] = {{std::move(ref).name}, std::move(value), std::move(type)};
+    //             }
+    //         }
+
+    //         ++i;
+    //     }
+    // }
+
+
+
     void variadicCall(
         const expr::Closure& func,
-        std::vector<std::pair<expr::Closure::Param, type::TypePtr>>& pos_params,
-        const std::vector<std::pair<size_t, std::vector<value::Value>>>& expand_at,
-        const std::vector<pie::expr::ExprPtr>& args,
+        std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params,
+        std::vector<expr::ExprPtr> defaults,
+        std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at,
+        std::vector<pie::expr::ExprPtr> args,
         const size_t args_size,
         ScopeGuard& sg,
-        value::Environment& args_env
+        value::Environment& args_env,
+        const auto& expr_str
     ) {
-        const auto it = std::ranges::find_if(pos_params, [] (const auto& e) { return type::isVariadic(e.second); });
-        const size_t variadic_index = std::distance(pos_params.begin(), it);
+        const size_t P = pos_params.size();
+        const size_t F = P - defaults.size();
+        const size_t v = std::distance(
+            pos_params.begin(),
+            std::ranges::find_if(pos_params, [] (const auto& e) { return type::isVariadic(e.second); })
+        );
 
-        const auto pre_variadic = std::ranges::subrange(pos_params.begin(), it);
-        const auto post_variadic  = std::ranges::subrange(it + 1, pos_params.end());
-
-        const size_t pre_variadic_size = std::ranges::size(pre_variadic);
-        const size_t post_variadic_size = std::ranges::size(post_variadic);
-        const size_t variadic_size = args_size - pre_variadic_size - post_variadic_size;
-
+        const size_t variadic_size = args_size > P - 1 ? args_size - (P - 1) : 0;
+        const size_t k = args_size - variadic_size;
+        const bool variadic_uses_default = v >= F and variadic_size == 0 and k <= v;
 
 
         const auto findType = [&func] (const size_t p, const type::TypePtr& type) {
@@ -3869,7 +4186,7 @@ There are no mistakes with art.)";
                     if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
                         return true;
                 }
-                else; // handle unpackmeters
+                // else; // todo: handle unpackmeters
             }
 
             // // look in the arguments env (from a partially evaluated function that yielded this function)
@@ -3885,151 +4202,105 @@ There are no mistakes with art.)";
         };
 
 
-        auto pack = value::makePack();
-        for (
-            size_t arg_index{}, param_index{}, pack_index{}, curr_expansion{};
-            arg_index < args.size(); // can't be args_size since arg_index is only used to index into args
-        ) {
-            auto [sid, type] = pos_params[param_index];
-            // const auto& [param_expr, id, is_syntax] = sid;
+        const auto bindArg = [&] (const expr::Closure::Param& sid, value::Value val, type::TypePtr type) {
+            if (std::holds_alternative<expr::Closure::RegularParam>(sid)) {
+                const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+                args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(val)), std::move(type)};
+                return;
+            }
 
-            if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue;
+            constexpr auto INFERRED = true;
+            ScopeGuard pattern_sg{this}; // to store the vars bindPattern will add
+            bindPattern<INFERRED>(expr_str, get<expr::unpack::PatternPtr>(sid).get(), {std::move(val), std::move(type)});
 
-            const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+            for (auto& [id, space_ref] : env.back()->env) {
+                auto& [ref, value, t] = space_ref;
+                args_env[id] = {{std::move(ref).name}, std::move(value), std::move(t)};
+            }
+        };
+
+
+        // argument cursor: yields the next positional value, flattening expansions
+        size_t arg_index{}, curr_expansion{}, pack_index{};
+        const auto nextArg = [&] (const bool syntax = false) -> value::Value {
+            const auto at_expansion = [&] {
+                return curr_expansion < expand_at.size() and arg_index == expand_at[curr_expansion].first;
+            };
+
+            while (at_expansion() and expand_at[curr_expansion].second.empty()) {
+                ++arg_index;
+                ++curr_expansion;
+            }
+
+            if (at_expansion()) {
+                auto& vals = expand_at[curr_expansion].second;
+                value::Value val = std::move(vals[pack_index++]);
+                if (pack_index == vals.size()) { ++arg_index; ++curr_expansion; pack_index = 0; }
+                return val;
+            }
+
+            const auto& expr = args[arg_index++];
+            value::Value val;
+            if (syntax) val = expr->variant();
+            else        val = std::visit(*this, expr->variant()).value;
+            return val;
+        };
+
+        const auto evalDefault = [this, &defaults, F] (const size_t i, const bool syntax) {
+            const auto& expr = defaults[i - F];
+            value::Value val;
+            if (syntax) val = expr->variant();
+            else        val = std::visit(*this, expr->variant()).value;
+            return val;
+        };
+
+
+        for (size_t i{}; i < P; ++i) {
+            auto& [param, type] = pos_params[i];
             type = type->clone();
 
-            value::Value value;
-
-            if (param_index == variadic_index) {
-                if (findType(param_index, type)) {
-                    // ScopeGuard sg{this, func.args_env, args_env};
-                    ScopeGuard sg{this, func.envs.env.env, args_env};
-                    type = validateType(std::move(type));
-                }
-
-
-                for (size_t i{}; i < variadic_size; ++i) {
-                    if (curr_expansion < expand_at.size() and arg_index == expand_at[curr_expansion].first) {
-                        value = std::move(expand_at[curr_expansion].second[pack_index++]);
-
-                        value = typeCheck(value, type,
-                            "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
-                        );
-
-                        if (std::holds_alternative<expr::Closure>(value))
-                            captureEnvForPassedClosure(get<expr::Closure>(value));
-
-
-                        if (pack_index >= expand_at[curr_expansion].second.size()) {
-                            ++arg_index;
-                            ++curr_expansion;
-                            pack_index = 0;
-                        }
-                    }
-                    else {
-                        // const auto& expr = args[arg_index];
-
-                        // if (type->text() == "Syntax") util::error(); //* allow this the future
-
-                        value = std::visit(*this, args[arg_index]->variant()).value;
-
-                        value = typeCheck(value, type,
-                            "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
-                        );
-
-                        if (std::holds_alternative<expr::Closure>(value))
-                            captureEnvForPassedClosure(get<expr::Closure>(value));
-
-                        ++arg_index;
-                    }
-
-                    pack->values.push_back(std::move(value));
-                }
-
-                ++param_index;
-
-                // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
-                args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(pack)), std::move(type)};
-            }
-            else {
-                if (findType(param_index, type)) {
-                    // ScopeGuard sg{this, func.args_env, args_env};
-                    ScopeGuard sg{this, func.envs.env.env, args_env};
-                    type = validateType(std::move(type));
-                }
-
-
-                if (curr_expansion < expand_at.size() and arg_index == expand_at[curr_expansion].first) {
-                    value = expand_at[curr_expansion].second[pack_index++];
-
-                    value = typeCheck(value, type,
-                        "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
-                    );
-
-                    if (std::holds_alternative<expr::Closure>(value))
-                        captureEnvForPassedClosure(get<expr::Closure>(value));
-
-
-                    if (pack_index >= expand_at[curr_expansion].second.size()) {
-                        ++arg_index;
-                        ++curr_expansion;
-                        pack_index = 0;
-                    }
-                }
-                else {
-                    const auto& expr = args[arg_index];
-
-                    value = std::visit(*this, expr->variant()).value;
-
-                    value = typeCheck(value, type,
-                        "Type mis-match! Parameter '" + param_expr->stringify() + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
-                    );
-
-                    if (std::holds_alternative<expr::Closure>(value))
-                        captureEnvForPassedClosure(get<expr::Closure>(value));
-
-                    ++arg_index;
-                }
-
-                ++param_index;
-                // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
-                args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
-            }
-        }
-
-
-        if (variadic_size == 0) {
-            // sg.addEnv({{
-            //     pos_params[variadic_index].first.ID,
-            //     {
-            //         {pos_params[variadic_index].first.expr->stringify()},
-            //         std::make_shared<value::Value>(value::makePack()),
-            //         pos_params[variadic_index].second
-            //     }
-            // }});
-
-            // args_env[pos_params[variadic_index].first.ID] = {
-            //     {pos_params[variadic_index].first.expr->stringify()},
-            //     std::make_shared<value::Value>(value::makePack()),
-            //     std::move(pos_params)[variadic_index].second
-            // };
-
-            {
-                value::Environment sg_env;
-                bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, sg_env);
-                sg.addEnv(std::move(sg_env));
+            if (findType(i, type)) {
+                ScopeGuard type_sg{this, func.envs.env.env, args_env};
+                type = validateType(std::move(type));
             }
 
-            bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, args_env);
+            if (i == v) {
+                auto pack = value::makePack();
+
+                if (variadic_uses_default)
+                    pack->values.push_back(checkArg(evalDefault(i, false), type, param));
+                else
+                    for (size_t j{}; j < variadic_size; ++j)
+                        pack->values.push_back(checkArg(nextArg(), type, param));
+
+                if (pack->values.empty()) { // kept from your original empty-pack handling
+                    value::Environment sg_env;
+                    bindParam(param, {value::makePack(), type}, sg_env);
+                    sg.addEnv(std::move(sg_env));
+                }
+
+                bindArg(param, std::move(pack), std::move(type));
+                continue;
+            }
+
+            const size_t rank = i - (i > v); // position among non-variadic params
+            const bool syntax = isSyntaxParam(param);
+
+            value::Value val = rank < k ? nextArg(syntax) : evalDefault(i, syntax);
+            if (not syntax) val = checkArg(std::move(val), type, param);
+
+            bindArg(param, std::move(val), std::move(type));
         }
     }
 
 
     // sets up the arguments
-    void regularCall(
+    void 
+    regularCall(
         const expr::Closure& func,
-        std::vector<std::pair<expr::Closure::Param, type::TypePtr>>& pos_params,
-        std::vector<std::pair<size_t, std::vector<value::Value>>>& expand_at,
+        std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params,
+        std::vector<expr::ExprPtr> defaults,
+        std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at,
         const std::vector<pie::expr::ExprPtr>& args,
         const size_t args_size,
         value::Environment& args_env,
@@ -4187,7 +4458,8 @@ There are no mistakes with art.)";
 
 
         // processing default values
-        const auto defaults_size = func.defaults.size();
+        // const auto defaults_size = func.defaults.size();
+        const auto defaults_size = defaults.size();
         const auto params_size = pos_params.size();
         const auto overlap = args_size + defaults_size - params_size;
         for (size_t i = args_size; i < params_size; ++i) {
@@ -4199,7 +4471,8 @@ There are no mistakes with art.)";
                 type = validateType(std::move(type));
             }
 
-            const auto& expr = func.defaults[overlap + (i - args_size)];
+            // const auto& expr = func.defaults[overlap + (i - args_size)];
+            const auto& expr = defaults[overlap + (i - args_size)];
 
             // const auto& [param_expr, id, is_syntax] = sid;
             if (std::holds_alternative<expr::Closure::RegularParam>(sid)) {
@@ -4254,6 +4527,7 @@ There are no mistakes with art.)";
     }
 
 
+
     static size_t argsSize(
         const std::vector<pie::expr::ExprPtr>& args,
         const std::vector<std::pair<size_t, std::vector<value::Value>>>& expand_at
@@ -4267,14 +4541,358 @@ There are no mistakes with art.)";
         - expand_at.size(); // minus redundant packs (already expanded)
     }
 
+    static bool isSyntaxParam(const expr::Closure::Param& sid) {
+        return std::holds_alternative<expr::Closure::RegularParam>(sid)
+           and get<expr::Closure::RegularParam>(sid).is_syntax;
+    }
+
+    static std::string paramName(const expr::Closure::Param& sid) {
+        if (std::holds_alternative<expr::Closure::RegularParam>(sid))
+            return get<expr::Closure::RegularParam>(sid).expr->stringify();
+        return expr::unpack::stringifyPattern(get<expr::unpack::PatternPtr>(sid).get());
+    }
+
+    // when currying: does parameter `i` get bound now, or is it left for the curried closure?
+    // args only ever land on required params when currying, so:
+    //   - a non-variadic param is bound if it's among the first `args_size` non-variadic params
+    //   - the variadic is bound (to an empty pack) if an argument landed past it
+    // with no positional variadic, v == pos_params.size(), so `i == v` and `i > v` are never true
+    static bool curryBinds(const size_t i, const size_t v, const size_t args_size) {
+        if (i == v) return args_size > v;
+        return i - (i > v) < args_size;
+    }
+
+
+    // params that weren't passed by name, in declaration order
+    static auto positionalParams(
+        // const expr::Closure& func,
+        const std::vector<expr::Closure::Param>& params,
+        const std::vector<type::TypePtr>& params_types,
+        auto named_args // copy: we erase from it
+    ) {
+        std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params;
+
+        for (const auto& [param, type] : std::views::zip(params, params_types)) {
+            // patterns are always positional
+            if (std::holds_alternative<expr::Closure::RegularParam>(param)) {
+                const auto name = get<expr::Closure::RegularParam>(param).expr->stringify();
+                if (named_args.contains(name)) {
+                    named_args.erase(name); // only the first param with this name is taken
+                    continue;
+                }
+            }
+            pos_params.emplace_back(param, type);
+        }
+
+        return pos_params;
+    }
+
+
+    // formerly the `findType` lambda
+    static bool findType(const expr::Closure& func, const size_t p, const type::TypePtr& type) {
+        // it doesn't matter if there are multiple arguments with this name
+        // `validateType` will choose the lastly-bounded one
+        // we just need to proof that A parameter exists in order to call `validateType`
+        for (size_t i{}; i <= p; ++i) {
+            if (std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) {
+                const auto& param = get<expr::Closure::RegularParam>(func.params[i]);
+
+                if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
+                    return true;
+            }
+            // else; // todo: handle unpackmeters
+        }
+
+        // look in the arguments env (from a partially evaluated function that yielded this function)
+        for (const auto& [_, obj] : func.envs.env.env) {
+            const auto& [name, __, ___] = obj;
+            if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name.name, util::SourceSpan{})}))
+                return true;
+        }
+
+        return false;
+    }
+
+
+
+    value::Value checkArg(value::Value val, const type::TypePtr& type, const expr::Closure::Param& sid) {
+        val = typeCheck(val, type,
+            "Type mis-match! Parameter '" + paramName(sid) + "' expected type: " + type->text() +
+            ", got: " + typeOf(val)->text()
+        );
+
+        if (std::holds_alternative<expr::Closure>(val))
+            captureEnvForPassedClosure(get<expr::Closure>(val));
+
+        return val;
+    }
+
+
+    void bindArg(
+        const expr::Closure::Param& sid,
+        value::Value val,
+        type::TypePtr type,
+        value::Environment& args_env,
+        const auto& expr_str
+    ) {
+        if (std::holds_alternative<expr::Closure::RegularParam>(sid)) {
+            const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+            args_env[id] = {{param_expr->stringify()}, std::make_shared<value::Value>(std::move(val)), std::move(type)};
+            return;
+        }
+
+        constexpr auto INFERRED = true;
+        ScopeGuard pattern_sg{this}; // to store the vars bindPattern will add
+        bindPattern<INFERRED>(expr_str, get<expr::unpack::PatternPtr>(sid).get(), {std::move(val), std::move(type)});
+
+        for (auto& [id, space_ref] : env.back()->env) {
+            auto& [ref, value, t] = space_ref;
+            args_env[id] = {{std::move(ref).name}, std::move(value), std::move(t)};
+        }
+    }
+
+
+    void bindNamedArgs(const expr::Call* call, const expr::Closure& func, value::Environment& args_env) {
+        for (const auto& [name, expr] : call->named_args) {
+            type::TypePtr type;
+            ssize_t id{};
+
+            for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
+                if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+                    const auto& param = get<expr::Closure::RegularParam>(p);
+                    if (param.expr->stringify() == name) {
+                        type = t;
+                        id = param.ID;
+                        break;
+                    }
+                }
+            }
+
+            if (not type) util::error(); // should never happen anyway
+
+            auto value = std::visit(*this, expr->variant()).value;
+
+            value = typeCheck(value, type,
+                "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+            );
+
+            // if (std::holds_alternative<expr::Closure>(value))
+            //     captureEnvForPassedClosure(get<expr::Closure>(value));
+
+            args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
+        }
+    }
+
+
+    // yields positional argument values one at a time, flattening `...` expansions
+    auto makeArgCursor(
+        const std::vector<pie::expr::ExprPtr>& args,
+        std::vector<std::pair<size_t, std::vector<value::Value>>>& expand_at
+    ) {
+        return [
+            this,
+            &args,
+            &expand_at,
+            arg_index  = size_t{},
+            curr       = size_t{},
+            pack_index = size_t{}
+        ]
+        (const bool syntax = false) mutable -> value::Value {
+            const auto at_expansion = [&] {
+                return curr < expand_at.size() and arg_index == expand_at[curr].first;
+            };
+
+
+            // skip empty pack expansions
+            for (; at_expansion() and expand_at[curr].second.empty(); ++arg_index, ++curr);
+
+
+            // at a non-empty expansion
+            if (at_expansion()) {
+                auto& vals = expand_at[curr].second;
+                value::Value val = std::move(vals[pack_index++]);
+                if (pack_index == vals.size()) {
+                    ++arg_index;
+                    ++curr;
+                    pack_index = 0;
+                }
+
+                return val;
+            }
+            // no expansion, just yield the value
+
+            const auto& expr = args[arg_index++];
+            return syntax ? expr->variant() : std::visit(*this, expr->variant()).value;
+            // if (syntax) val = ;
+            // else        val = ;
+            // return val;
+        };
+    }
+
+
+
+    void positionalCall(
+        const expr::Closure& func,
+        std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params,
+        std::vector<expr::ExprPtr> defaults,
+        std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at,
+        const std::vector<pie::expr::ExprPtr>& args,
+        const size_t args_size,
+        ScopeGuard& sg,
+        value::Environment& args_env,
+        const auto& expr_str,
+        const bool currying = false
+    ) {
+        const size_t P = pos_params.size();
+        const size_t F = P - defaults.size();  // first defaulted param
+        // const size_t v = variadicIndex(pos_params);
+        const size_t v = std::distance(
+            pos_params.begin(),
+            std::ranges::find_if(pos_params, [] (const auto& e) { return type::isVariadic(e.second); })
+        );
+        const bool has_variadic = v < P;
+
+        const size_t slots         = P - has_variadic; // non-variadic params
+        const size_t variadic_size = has_variadic and args_size > slots ? args_size - slots : 0;
+        const size_t k             = args_size - variadic_size; // non-variadic params that get an arg
+        const bool   variadic_uses_default =
+            not currying and has_variadic and v >= F and variadic_size == 0 and k <= v;
+
+        // assert(k <= slots && "too many arguments; closureCall should have caught this");
+        // assert((not currying or variadic_size == 0) && "currying never reaches the variadic's pack");
+
+
+        auto next = makeArgCursor(args, expand_at);
+
+
+        auto resolveParamType = [this](const expr::Closure& func, const size_t p, type::TypePtr& type, value::Environment& args_env) {
+            if (findType(func, p, type)) {
+                ScopeGuard type_sg{this, func.envs.env.env, args_env};
+                type = validateType(std::move(type));
+            }
+        };
+
+
+        for (size_t i{}; i < P; ++i) {
+            if (currying and not curryBinds(i, v, args_size)) continue; // left for the curried closure
+
+            auto& [sid, type] = pos_params[i];
+            type = type->clone();
+            resolveParamType(func, i, type, args_env);
+
+            if (i == v) {
+                auto pack = value::makePack();
+
+                if (variadic_uses_default)
+                    pack->values.push_back(checkArg(std::visit(*this, defaults[i - F]->variant()).value, type, sid));
+                else
+                    for (size_t j{}; j < variadic_size; ++j)
+                        pack->values.push_back(checkArg(next(), type, sid));
+
+                if (pack->values.empty()) {
+                    value::Environment sg_env;
+                    bindParam(sid, {value::makePack(), type}, sg_env);
+                    sg.addEnv(std::move(sg_env));
+                }
+
+                bindArg(sid, std::move(pack), std::move(type), args_env, expr_str);
+                continue;
+            }
+
+            const size_t rank   = i - (i > v); // position among non-variadic params
+            const bool   syntax = isSyntaxParam(sid);
+
+            value::Value val;
+            if (rank < k) {
+                val = next(syntax);
+            }
+            else {
+                // assert(i >= F && "not enough arguments; currying check should have caught this");
+
+                const auto& expr = defaults[i - F];
+                if (syntax) val = expr->variant();
+                else        val = std::visit(*this, expr->variant()).value;
+            }
+
+            if (not syntax) val = checkArg(std::move(val), type, sid);
+
+            bindArg(sid, std::move(val), std::move(type), args_env, expr_str);
+        }
+    }
+
+
+
+    ValueType partialApplication(
+        const expr::Call *call,
+        const expr::Closure& func,
+        std::vector<expr::ExprPtr> defaults,
+        std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at,
+        std::vector<expr::ExprPtr> args,
+        const size_t args_size
+        //, const bool is_variadic
+    ) {
+        ScopeGuard sg{this, value::EnvTag::FUNC, func.envs.env.env};
+        value::Environment args_env = func.envs.env.env;
+
+        bindNamedArgs(call, func, args_env);
+        auto pos_params = positionalParams(func.params, func.type.params, call->named_args);
+
+        const size_t P = pos_params.size();
+        // const size_t v = variadicIndex(pos_params);
+        const size_t v = std::distance(
+            pos_params.begin(),
+            std::ranges::find_if(pos_params, [] (const auto& e) { return type::isVariadic(e.second); })
+        );
+
+        // assert(is_variadic == (v < P));
+
+        // params that won't be bound now go into the curried closure.
+        // every defaulted param is among them, so `defaults` carries over as is.
+        std::vector<expr::Closure::Param> new_params;
+        std::vector<type::TypePtr> new_types;
+        for (size_t i{}; i < P; ++i) {
+            if (not curryBinds(i, v, args_size)) {
+                const auto& [param, type] = pos_params[i];
+                new_params.push_back(param);
+                new_types .push_back(type );
+            }
+        }
+
+        type::FuncType func_type{std::move(new_types), func.type.ret};
+        expr::Closure closure{
+            std::move(new_params),
+            std::move(func_type),
+            defaults, // copy: positionalCall needs its own
+            func.body
+        };
+
+        positionalCall(
+            func,
+            std::move(pos_params),
+            std::move(defaults),
+            std::move(expand_at),
+            args,
+            args_size,
+            sg,
+            args_env,
+            liftName(call),
+            /* currying = */ true
+        );
+
+        closure.capture(args_env);
+
+        return {closure, std::make_shared<type::FuncType>(closure.type)};
+    }
+
+
+
 
     ValueType closureCall(
         const expr::Call *call,
         expr::Closure func,
-        const std::vector<pie::expr::ExprPtr>& args,
+        std::vector<pie::expr::ExprPtr> args,
         std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at
     ) {
-
         // // types are validate in operator()(const expr::Closure* c) for now
         // for (auto& type : func.type.params) type = validateType(std::move(type));
         // func.type.ret = validateType(std::move(func.type.ret));
@@ -4300,89 +4918,86 @@ There are no mistakes with art.)";
             );
 
             if (result == func.params.end())
-                util::error("Named argument '" + name + "' does not name a parameter name!");
+                util::error("Named argument `" + name + "` does not name a parameter name!");
         }
 
 
-        const bool is_variadic = std::ranges::any_of(func.type.params, [] (const auto& e) { return type::isVariadic(e); });
         const size_t args_size = argsSize(args, expand_at);
 
-        if (not is_variadic and args_size + call->named_args.size() > func.params.size()) util::error("Too many arguments passed to function: " + call->stringify());
+        const auto   variadic_it    = std::ranges::find_if(func.type.params, [] (const auto& e) { return type::isVariadic(e); });
+        const bool   is_variadic    = variadic_it != func.type.params.end();
+        const size_t variadic_index = std::distance(func.type.params.begin(), variadic_it);
+
+        const bool variadic_is_named =
+            is_variadic
+            and std::holds_alternative<expr::Closure::RegularParam>(func.params[variadic_index])
+            and call->named_args.contains(get<expr::Closure::RegularParam>(func.params[variadic_index]).expr->stringify());
+
+        const bool is_positional_variadic = is_variadic and not variadic_is_named;
+        const bool variadic_is_defaulted  =
+            is_variadic and variadic_index >= func.params.size() - func.defaults.size();
 
 
-        // even if arguments go into params with default values, this check should be correct..i think
-        if (args_size + call->named_args.size() < func.params.size() - is_variadic - func.defaults.size()) {
-            // curry!
-            return partialApplication(call, func, args_size, std::move(expand_at), args, is_variadic);
+        if (not is_positional_variadic and args_size + call->named_args.size() > func.params.size())
+            util::error("Too many arguments passed to function: " + call->stringify());
+
+
+        std::vector<expr::ExprPtr> new_defaults;
+        {
+            auto named_args = call->named_args;
+            // removed named arguments that are before of default values
+            const auto args_before_defaults = func.params.size() - func.defaults.size();
+            for (size_t i{}; i < args_before_defaults; ++i) {
+                if (not std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) continue;
+                const auto& param = get<expr::Closure::RegularParam>(func.params[i]);
+
+                auto name = param.expr->stringify();
+                if (named_args.contains(name)) {
+                    named_args.erase(name);
+                }
+            }
+
+            for (const auto& [param, def] : std::views::zip(func.params | std::views::drop(args_before_defaults), func.defaults)) {
+                if (std::holds_alternative<expr::Closure::RegularParam>(param)) {
+                    const auto& p = get<expr::Closure::RegularParam>(param);
+
+                    if (named_args.contains(p.expr->stringify())) {
+                        named_args.erase(p.expr->stringify());
+                        continue;
+                    }
+                }
+
+                new_defaults.push_back(def);
+            }
         }
+
+
+        const size_t required_positional =
+              func.params.size()
+            - call->named_args.size()                                 // covered by name
+            - new_defaults.size()                                     // unnamed params with defaults
+            - (is_positional_variadic and not variadic_is_defaulted); // a bare variadic can be empty
+
+        if (args_size < required_positional) // curry!
+            return partialApplication(
+                call,
+                func,
+                std::move(new_defaults),
+                std::move(expand_at),
+                std::move(args),
+                args_size
+                //, is_positional_variadic
+            );
 
 
         //* full call. Don't curry!
         ScopeGuard sg{this, value::EnvTag::FUNC, func.envs.env.env};
-        value::Environment args_env; // in case the lambda needs to capture 
+        value::Environment args_env; // in case the lambda needs to capture
 
-
-        // !
-        for (const auto& [name, expr] : call->named_args) {
-            type::TypePtr type;
-            ssize_t id;
-
-            for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
-                if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
-                    auto& param = get<expr::Closure::RegularParam>(p);
-                    if (param.expr->stringify() == name) {
-                        type = t;
-                        id = param.ID;
-                        break;
-                    }
-                }
-            }
-
-
-            if (not type) util::error(); // should never happen anyway
-
-            value::Value value = std::visit(*this, expr->variant()).value;
-
-            value = typeCheck(value, type,
-                "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
-            );
-
-            // if (std::holds_alternative<expr::Closure>(value))
-            //     captureEnvForPassedClosure(get<expr::Closure>(value));
-
-            args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
-        }
-
-
-        std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params;
-        for (const auto& [param, type] : std::views::zip(func.params, func.type.params))
-            pos_params.push_back({param, type});
-
-        std::erase_if(pos_params, [named_args = call->named_args] (const auto& param) mutable {
-            // patterns should always be positional
-            if (std::holds_alternative<expr::unpack::PatternPtr>(param.first)) return false;
-
-            const auto& p = get<expr::Closure::RegularParam>(param.first);
-            const auto cond = std::ranges::find_if(named_args, [&p] (const auto& n) { return n.first == p.expr->stringify(); }) != named_args.cend();
-            if (cond) named_args.erase(p.expr->stringify());
-            return cond;
-        });
-
-
-        // if (args_size != pos_params.size())
-        //     util::error(
-        //         "Expected " + std::to_string(pos_params.size()) +
-        //         " postional arguments. Got " + std::to_string(args_size) +
-        //         ": " + call->stringify()
-        //     );
-
-
-        if (is_variadic) {
-            variadicCall(func, pos_params, expand_at, args, args_size, sg, args_env);
-        }
-        else {
-            regularCall(func, pos_params, expand_at, args, args_size, args_env, liftName(call));
-        }
+        bindNamedArgs(call, func, args_env);
+        auto pos_params = positionalParams(func.params, func.type.params, call->named_args);
+        positionalCall(func, std::move(pos_params), std::move(new_defaults), std::move(expand_at),
+                        args, args_size, sg, args_env, LIFT(call->stringify()));
 
 
         if (
@@ -4395,13 +5010,10 @@ There are no mistakes with art.)";
                             return true;
                     }
                     return false;
-
-                    // old code
-                    // return type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})});
                 }
             ) != func.params.cend()
         ) {
-            ScopeGuard sg{this, func.envs.env.env, args_env};
+            ScopeGuard ret_sg{this, func.envs.env.env, args_env};
             func.type.ret = validateType(std::move(func.type.ret));
         }
 
@@ -4410,7 +5022,6 @@ There are no mistakes with art.)";
         // if (type::isSyntax(func.type.ret)) return {func.body->variant(), type::builtins::Syntax()};
 
 
-        // sg.addEnv(func.args_env);
         sg.addEnv(func.envs.returned_env.env);
         sg.addEnv(args_env);
         sg.addEnv(func.envs.env.env);
@@ -4423,7 +5034,6 @@ There are no mistakes with art.)";
             ret = std::visit(*this, func.body->variant()).value;
 
             if (std::holds_alternative<expr::Closure>(ret))
-                // captureEnvForPassedClosure(get<expr::Closure>(ret));
                 captureEnvForReturnedClosure(get<expr::Closure>(ret));
         }
         else ret = std::visit(*this, func.body->variant()).value;
@@ -4437,6 +5047,273 @@ There are no mistakes with art.)";
 
         return {ret, func.type.ret};
     }
+
+
+    // ValueType closureCall(
+    //     const expr::Call *call,
+    //     expr::Closure func,
+    //     std::vector<pie::expr::ExprPtr> args,
+    //     std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at
+    // ) {
+
+    //     // // types are validate in operator()(const expr::Closure* c) for now
+    //     // for (auto& type : func.type.params) type = validateType(std::move(type));
+    //     // func.type.ret = validateType(std::move(func.type.ret));
+    //     // // func.type.ret = validateType(std::move(func).type.ret); // is this better?
+
+    //     if (func.self) selves.push_back(*func.self);
+    //     util::Deferred d1{[this, cond = static_cast<bool>(func.self)] { if (cond) selves.pop_back(); }};
+
+    //     auto old_spaces = std::move(current_space);
+    //     current_space = std::move(func.spaces);
+    //     util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+
+
+    //     // check for invalid named arguments
+    //     for (const auto& [name, _] : call->named_args) {
+    //         auto result = std::ranges::find_if(
+    //             func.params,
+    //             [&name] (const auto& param) {
+    //                 if (not std::holds_alternative<expr::Closure::RegularParam>(param)) return false;
+
+    //                 return get<expr::Closure::RegularParam>(param).expr->stringify() == name;
+    //             }
+    //         );
+
+    //         if (result == func.params.end())
+    //             util::error("Named argument `" + name + "` does not name a parameter name!");
+    //     }
+
+
+    //     // const bool is_variadic = std::ranges::any_of(func.type.params, [] (const auto& e) { return type::isVariadic(e); });
+    //     // if (not is_variadic and args_size + call->named_args.size() > func.params.size())
+    //     //     util::error("Too many arguments passed to function: " + call->stringify());
+    //     const size_t args_size = argsSize(args, expand_at);
+
+    //     const auto   variadic_it    = std::ranges::find_if(func.type.params, [] (const auto& e) { return type::isVariadic(e); });
+    //     const bool   is_variadic    = variadic_it != func.type.params.end();
+    //     const size_t variadic_index = std::distance(func.type.params.begin(), variadic_it);
+
+    //     const bool   variadic_is_named =
+    //         is_variadic
+    //         and std::holds_alternative<expr::Closure::RegularParam>(func.params[variadic_index])
+    //         and call->named_args.contains(get<expr::Closure::RegularParam>(func.params[variadic_index]).expr->stringify());
+
+    //     const bool is_positional_variadic = is_variadic and not variadic_is_named;
+    //     const bool variadic_is_defaulted =
+    //         is_variadic and variadic_index >= func.params.size() - func.defaults.size();
+
+
+    //     std::vector<expr::ExprPtr> new_defaults;
+    //     {
+    //         auto named_args = call->named_args;
+    //         // removed named arguments that are before of default values
+    //         const auto args_before_defaults = func.params.size() - func.defaults.size();
+    //         for (size_t i{}; i < args_before_defaults; ++i) {
+    //             if (not std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) continue;
+    //             const auto& param = get<expr::Closure::RegularParam>(func.params[i]);
+
+    //             auto name = param.expr->stringify();
+    //             if (named_args.contains(name)) {
+    //                 named_args.erase(name);
+    //             }
+    //         }
+
+    //         for (const auto& [param, def] : std::views::zip(func.params | std::views::drop(args_before_defaults), func.defaults)) {
+    //             if (std::holds_alternative<expr::Closure::RegularParam>(param)) {
+    //                 const auto& p = get<expr::Closure::RegularParam>(param);
+
+    //                 if (named_args.contains(p.expr->stringify())) {
+    //                     named_args.erase(p.expr->stringify());
+    //                     continue;
+    //                 }
+    //             }
+
+    //             new_defaults.push_back(def);
+    //         }
+    //     }
+
+
+    //     std::clog << "args_size: " << args_size << std::endl;
+    //     std::clog << "call->named_args.size(): " << call->named_args.size() << std::endl;
+    //     std::clog << "func.params.size(): " << func.params.size() << std::endl;
+    //     // std::clog << "is_variadic: " << is_variadic << std::endl;
+    //     std::clog << "new_defaults.size(): " << new_defaults.size() << std::endl;
+
+
+    //     // {
+    //         // const auto iter = std::ranges::find_if(func.type.params, [] (const auto& e) { return type::isVariadic(e); });
+    //         // const size_t variadic_index = std::distance(func.type.params.begin(), iter);
+    //         // const auto is_variadic_defaulted = variadic_index >= (func.params.size() - func.defaults.size());
+
+
+    //         if (not is_positional_variadic and args_size + call->named_args.size() > func.params.size())
+    //             util::error("Too many arguments passed to function: " + call->stringify());
+
+    //         const size_t required_positional =
+    //               func.params.size()
+    //             - call->named_args.size()                                 // covered by name
+    //             - new_defaults.size()                                     // unnamed params with defaults
+    //             - (is_positional_variadic and not variadic_is_defaulted); // a bare variadic can be empty
+
+    //         if (args_size < required_positional)
+    //             return partialApplication(call, func, std::move(new_defaults), std::move(expand_at), std::move(args), args_size, is_positional_variadic);
+
+    //         // // even if arguments go into params with default values, this check should be correct..i think
+    //         // if (args_size + call->named_args.size() < func.params.size() - is_variadic - new_defaults.size() + is_variadic_defaulted) {
+    //         //     // curry!
+    //         //     return partialApplication(call, func, std::move(new_defaults), std::move(expand_at), std::move(args), args_size, is_variadic);
+    //         // }
+    //     // }
+
+
+    //     //* full call. Don't curry!
+    //     ScopeGuard sg{this, value::EnvTag::FUNC, func.envs.env.env};
+    //     value::Environment args_env; // in case the lambda needs to capture
+
+    //     puts("full call!");
+
+    //     // !
+    //     for (const auto& [name, expr] : call->named_args) {
+    //         type::TypePtr type;
+    //         ssize_t id;
+
+    //         for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
+    //             if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+    //                 auto& param = get<expr::Closure::RegularParam>(p);
+    //                 if (param.expr->stringify() == name) {
+    //                     type = t;
+    //                     id = param.ID;
+    //                     break;
+    //                 }
+    //             }
+    //         }
+
+
+    //         if (not type) util::error(); // should never happen anyway
+
+    //         auto value = std::visit(*this, expr->variant()).value;
+
+    //         value = typeCheck(value, type,
+    //             "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+    //         );
+
+    //         // if (std::holds_alternative<expr::Closure>(value))
+    //         //     captureEnvForPassedClosure(get<expr::Closure>(value));
+
+    //         args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
+    //     }
+
+
+
+    //     std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params;
+    //     for (const auto& [param, type] : std::views::zip(func.params, func.type.params))
+    //         pos_params.push_back({param, type});
+
+    //     std::erase_if(pos_params, [named_args = call->named_args] (const auto& param) mutable {
+    //         // patterns should always be positional
+    //         if (std::holds_alternative<expr::unpack::PatternPtr>(param.first)) return false;
+
+    //         const auto& p = get<expr::Closure::RegularParam>(param.first);
+
+    //         // const auto cond = std::ranges::find_if(named_args, [&p] (const auto& n) { return n.first == p.expr->stringify(); }) != named_args.cend();
+    //         if (named_args.contains(p.expr->stringify())) {
+    //             named_args.erase(p.expr->stringify());
+    //             return true;
+    //         }
+
+    //         return false;
+    //     });
+
+    //     // if (args_size != pos_params.size())
+    //     //     util::error(
+    //     //         "Expected " + std::to_string(pos_params.size()) +
+    //     //         " postional arguments. Got " + std::to_string(args_size) +
+    //     //         ": " + call->stringify()
+    //     //     );
+
+
+    //     // if (is_variadic) 
+    //     if (is_positional_variadic) {
+    //         puts("calling variadic");
+    //         variadicCall(
+    //             func,
+    //             std::move(pos_params),
+    //             std::move(new_defaults),
+    //             std::move(expand_at),
+    //             std::move(args),
+    //             args_size,
+    //             sg,
+    //             args_env,
+    //             LIFT(call->stringify())
+    //         );
+    //     }
+    //     else {
+    //         regularCall(
+    //             func,
+    //             std::move(pos_params),
+    //             std::move(new_defaults),
+    //             std::move(expand_at),
+    //             std::move(args),
+    //             args_size,
+    //             args_env,
+    //             liftName(call)
+    //         );
+    //     }
+
+
+    //     if (
+    //         std::ranges::find_if(
+    //             func.params, [&type = func.type.ret](const auto& p) {
+    //                 if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+    //                     const auto& param = get<expr::Closure::RegularParam>(p);
+
+    //                     if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
+    //                         return true;
+    //                 }
+    //                 return false;
+
+    //                 // old code
+    //                 // return type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})});
+    //             }
+    //         ) != func.params.cend()
+    //     ) {
+    //         ScopeGuard sg{this, func.envs.env.env, args_env};
+    //         func.type.ret = validateType(std::move(func.type.ret));
+    //     }
+
+
+    //     // //* should I capture the env and bundle it with the function before returning it?
+    //     // if (type::isSyntax(func.type.ret)) return {func.body->variant(), type::builtins::Syntax()};
+
+
+    //     // sg.addEnv(func.args_env);
+    //     sg.addEnv(func.envs.returned_env.env);
+    //     sg.addEnv(args_env);
+    //     sg.addEnv(func.envs.env.env);
+    //     sg.addEnv(func.envs.passed_env.env);
+    //     sg.addOps(func.envs.env.op_env);
+    //     sg.addPrefixOps(func.envs.env.prefix_op_env);
+
+    //     value::Value ret;
+    //     if (not dynamic_cast<const expr::Block*>(func.body.get())) {
+    //         ret = std::visit(*this, func.body->variant()).value;
+
+    //         if (std::holds_alternative<expr::Closure>(ret))
+    //             // captureEnvForPassedClosure(get<expr::Closure>(ret));
+    //             captureEnvForReturnedClosure(get<expr::Closure>(ret));
+    //     }
+    //     else ret = std::visit(*this, func.body->variant()).value;
+
+    //     if (func.self and std::holds_alternative<expr::Closure>(ret)) {
+    //         get<expr::Closure>(ret).captureThis(*func.self);
+    //     }
+
+
+    //     checkReturnType(ret, func.type.ret);
+
+    //     return {ret, func.type.ret};
+    // }
 
 
 
@@ -4473,312 +5350,314 @@ There are no mistakes with art.)";
     }
 
 
-    ValueType partialApplication(
-        const expr::Call *call,
-        const expr::Closure& func,
-        const size_t args_size,
-        std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at,
-        std::vector<expr::ExprPtr> args, 
-        const bool is_variadic
-    ) {
-        // ScopeGuard sg{this, EnvTag::FUNC, func.args_env, func.env};
-        ScopeGuard sg{this, value::EnvTag::FUNC, func.envs.env.env};
-        value::Environment args_env = func.envs.env.env;
-
-        for (const auto& [name, expr] : call->named_args) {
-            type::TypePtr type;
-            ssize_t id;
-            for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
-                if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
-                    auto& param = get<expr::Closure::RegularParam>(p);
-                    if (param.expr->stringify() == name) {
-                        type = t;
-                        id = param.ID;
-                        break;
-                    }
-                }
-            }
-
-            if (not type) util::error(); // should never happen anyway
-
-            value::Value value = std::visit(*this, expr->variant()).value;
-
-            value = typeCheck(value, type,
-                "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
-            );
-
-            // if (std::holds_alternative<expr::Closure>(value))
-            //     captureEnvForPassedClosure(get<expr::Closure>(value));
-
-            // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
-            args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
-        }
-
-
-        std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params;
-        for (const auto& [param, type] : std::views::zip(func.params, func.type.params))
-            pos_params.push_back({param, type});
-
-        std::erase_if(pos_params, [named_args = call->named_args] (const auto& p) mutable {
-            if (not std::holds_alternative<expr::Closure::RegularParam>(p.first)) return false;
-
-            auto name = get<expr::Closure::RegularParam>(p.first).expr->stringify();
-
-            if (
-                std::ranges::find_if(
-                    named_args,
-                    [&name] (const auto& n) {
-                        return n.first == name;
-                    }
-                )
-                !=
-                named_args.cend()
-            ) {
-                named_args.erase(name);
-                return true;
-            }
-
-            return false;
-        });
-
-        std::vector<expr::Closure::Param> new_params;
-        for (const auto& [param_expr, _] : pos_params | std::views::drop(args_size))
-            new_params.push_back(param_expr);
-
-        std::vector<type::TypePtr> new_types;
-        for (const auto& param : new_params) {
-            type::TypePtr type;
-
-            if (std::holds_alternative<expr::Closure::RegularParam>(param)) {
-                auto& new_param = get<expr::Closure::RegularParam>(param);
-
-                for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
-                    // looking them by name is NOT sufficient anymore
-                    // since we got unpackmeters 
-
-                    if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
-                        auto& func_param = get<expr::Closure::RegularParam>(p);
-
-                        if (func_param.expr->stringify() == new_param.expr->stringify()) {
-                            type = t;
-                            break;
-                        }
-                    }
-                }
-            }
-            else {
-
-            }
-
-            new_types.push_back(std::move(type));
-        }
-
-        auto new_defaults = func.defaults;
-        std::erase_if(
-            new_defaults,
-            [named_args = call->named_args] (const auto& param) mutable {
-                auto name = param->stringify();
-                if (named_args.contains(name)) {
-                    named_args.erase(name);
-                    return true;
-                }
-                return false;
-            }
-        );
-
-        // this is never true...otherwise it wouldn't have been a partial application
-        // if (args_size + func.defaults.size() >= pos_params.size())
-        //     new_defaults
-        //         = new_defaults
-        //         | std::views::drop(args_size + func.defaults.size() - pos_params.size())
-        //         | std::ranges::to<std::vector<expr::ExprPtr>>();
-
-        type::FuncType func_type{std::move(new_types), func.type.ret};
-        expr::Closure closure{
-            std::move(new_params),
-            std::move(func_type),
-            std::move(new_defaults),
-            func.body
-        };
-
-
-        bool normal = true;
-        if (is_variadic) {
-            // const auto iter = std::ranges::find_if(pos_params, type::isVariadic, &std::pair::second);
-            const auto iter = std::ranges::find_if(pos_params, [] (const auto& e) { return type::isVariadic(e.second); });
-            const size_t variadic_index = std::distance(pos_params.begin(), iter);
-
-            if (args_size > variadic_index) {
-                normal = false;
-
-                // FIX: first add the empty pack
-                {
-                    value::Environment sg_env;
-                    bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, sg_env);
-                    sg.addEnv(std::move(sg_env));
-                }
-
-                bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, args_env);
-
-                // only then should you remove the parameter
-                // previously, I only had the following. So the pack was left as undefined instead of empty
-                pos_params.erase(std::next(pos_params.begin(), variadic_index));
-
-                // we ignore the pack, so we consume an extra argument. Remove it from the carried function
-                closure.params.erase(closure.params.begin());
-                closure.type.params.erase(closure.type.params.begin());
-
-                // for(size_t i{}, curr{}; const auto& [param, expr] : std::views::zip(pos_params, args)) {
-                for (size_t i{}, p{}, curr{}; p < args_size; ++p, ++i) {
-
-                    if (curr < expand_at.size() and i == expand_at[curr].first) {
-                        for (auto& val : expand_at[curr++].second) {
-                            auto& [sid, type] = pos_params[p];
-
-                            // const auto& [param_expr, id, is_syntax] = sid;
-                            if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue; 
-                            const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
-
-                            auto name = param_expr->stringify();
-                            // if (findType(p, type)) type = validateType(std::move(type));
-
-                            ++p;
-
-                            val = typeCheck(val, type,
-                                "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(val)->text()
-                            );
-
-                            if (std::holds_alternative<expr::Closure>(val))
-                                captureEnvForPassedClosure(get<expr::Closure>(val));
-
-                            // sg.addEnv({{name, {std::make_shared<value::Value>(val), type}}});
-                            args_env[id] = {{name}, std::make_shared<value::Value>(std::move(val)), std::move(type)};
-                        }
-                        --p;
-                    }
-                    else {
-                        auto& [sid, type] = pos_params[p];
-
-                        // const auto& [param_expr, id, is_syntax] = sid;
-                        if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue; 
-                        const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
-
-                        auto name = param_expr->stringify();
-                        const auto& expr = args[i];
-                        // if (findType(p, type)) type = validateType(std::move(type));
-
-                        value::Value value;
-                        value = std::visit(*this, expr->variant()).value;
-
-                        value = typeCheck(value, type,
-                            "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
-                        );
-
-                        // if (std::holds_alternative<expr::Closure>(value))
-                        //     captureEnvForPassedClosure(get<expr::Closure>(value));
-                        // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
-                        args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
-                    }
-                }
-            }
-        }
-
-        if (normal) {
-            const auto findType = [&func] (const size_t p, const type::TypePtr& type) {
-                // it doesn't matter if there are multiple arguments with this name
-                // `validateType` will choose the lastly-bounded one
-                // we just need to proof that A parameter exists in order to call `validateType`
-                for (size_t i{}; i <= p; ++i) {
-                    if (std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) {
-                        const auto& param = get<expr::Closure::RegularParam>(func.params[i]);
-
-                        if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
-                            return true;
-                    }
-                    else; // handle unpackmeters
-                }
-
-                // // look in the arguments env (from a partially evaluated function that yielded this function)
-                for (const auto& [_, obj] : func.envs.env.env) {
-                    const auto& [name, __, ___] = obj;
-                    if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name.name, util::SourceSpan{})}))
-                        return true;
-                }
-
-                return false;
-            };
-
-            // for(size_t i{}, curr{}; const auto& [param, expr] : std::views::zip(pos_params, args)) {
-            for (size_t i{}, p{}, curr{}; p < args_size; ++p, ++i) {
-
-                if (curr < expand_at.size() and i == expand_at[curr].first) {
-                    for (auto& val : expand_at[curr++].second) {
-                        auto& [sid, type] = pos_params[p];
-
-                        // const auto& [param_expr, id, is_syntax] = sid;
-                        if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue; 
-                        const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
-
-                        auto name = param_expr->stringify();
-
-                        if (findType(p, type)) {
-                            // ScopeGuard sg{this, func.args_env, args_env};
-                            ScopeGuard sg{this, func.envs.env.env, args_env};
-                            type = validateType(std::move(type));
-                        }
-                        ++p;
-
-                        val = typeCheck(val, type,
-                            "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(val)->text()
-                        );
-
-                        if (std::holds_alternative<expr::Closure>(val))
-                            captureEnvForPassedClosure(get<expr::Closure>(val));
-
-                        // sg.addEnv({{name, {std::make_shared<value::Value>(val), type}}});
-                        args_env[id] = {{name}, std::make_shared<value::Value>(std::move(val)), std::move(type)};
-                    }
-                    --p;
-                }
-                else {
-                    auto& [sid, type] = pos_params[p];
-
-                    // const auto& [param_expr, id, is_syntax] = sid;
-                    if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue; 
-                    const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
-
-                    auto name = param_expr->stringify();
-
-                    if (findType(p, type)) {
-                        // ScopeGuard sg{this, func.args_env, args_env};
-                        ScopeGuard sg{this, func.envs.env.env, args_env};
-                        type = validateType(std::move(type));
-                    }
-
-                    const auto& expr = args[i];
-
-                    value::Value value = std::visit(*this, expr->variant()).value;
-
-                    value = typeCheck(value, type,
-                        "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
-                    );
-
-                    // if (std::holds_alternative<expr::Closure>(value))
-                    //     captureEnvForPassedClosure(get<expr::Closure>(value));
-
-                    // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
-                    args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
-                }
-            }
-        }
-
-
-
-        // closure.captureArgs(args_env);
-        closure.capture(args_env);
-
-        return {closure, std::make_shared<type::FuncType>(closure.type)};
-    }
+    // ValueType partialApplication(
+    //     const expr::Call *call,
+    //     const expr::Closure& func,
+    //     std::vector<expr::ExprPtr> defaults,
+    //     std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at,
+    //     std::vector<expr::ExprPtr> args, 
+    //     const size_t args_size,
+    //     const bool is_variadic
+    // ) {
+    //     // ScopeGuard sg{this, EnvTag::FUNC, func.args_env, func.env};
+    //     ScopeGuard sg{this, value::EnvTag::FUNC, func.envs.env.env};
+    //     value::Environment args_env = func.envs.env.env;
+
+    //     for (const auto& [name, expr] : call->named_args) {
+    //         type::TypePtr type;
+    //         ssize_t id;
+    //         for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
+    //             if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+    //                 auto& param = get<expr::Closure::RegularParam>(p);
+    //                 if (param.expr->stringify() == name) {
+    //                     type = t;
+    //                     id = param.ID;
+    //                     break;
+    //                 }
+    //             }
+    //         }
+
+    //         if (not type) util::error(); // should never happen anyway
+
+    //         value::Value value = std::visit(*this, expr->variant()).value;
+
+    //         value = typeCheck(value, type,
+    //             "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+    //         );
+
+    //         // if (std::holds_alternative<expr::Closure>(value))
+    //         //     captureEnvForPassedClosure(get<expr::Closure>(value));
+
+    //         // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
+    //         args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
+    //     }
+
+
+    //     std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params;
+    //     for (const auto& [param, type] : std::views::zip(func.params, func.type.params))
+    //         pos_params.push_back({param, type});
+
+    //     std::erase_if(pos_params, [named_args = call->named_args] (const auto& p) mutable {
+    //         if (not std::holds_alternative<expr::Closure::RegularParam>(p.first)) return false;
+
+    //         auto name = get<expr::Closure::RegularParam>(p.first).expr->stringify();
+
+    //         if (
+    //             std::ranges::find_if(
+    //                 named_args,
+    //                 [&name] (const auto& n) {
+    //                     return n.first == name;
+    //                 }
+    //             )
+    //             !=
+    //             named_args.cend()
+    //         ) {
+    //             named_args.erase(name);
+    //             return true;
+    //         }
+
+    //         return false;
+    //     });
+
+    //     std::vector<expr::Closure::Param> new_params;
+    //     for (const auto& [param_expr, _] : pos_params | std::views::drop(args_size))
+    //         new_params.push_back(param_expr);
+
+    //     std::vector<type::TypePtr> new_types;
+    //     for (const auto& param : new_params) {
+    //         type::TypePtr type;
+
+    //         if (std::holds_alternative<expr::Closure::RegularParam>(param)) {
+    //             auto& new_param = get<expr::Closure::RegularParam>(param);
+
+    //             for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
+    //                 // looking them by name is NOT sufficient anymore
+    //                 // since we got unpackmeters 
+
+    //                 if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+    //                     auto& func_param = get<expr::Closure::RegularParam>(p);
+
+    //                     if (func_param.expr->stringify() == new_param.expr->stringify()) {
+    //                         type = t;
+    //                         break;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         else {
+
+    //         }
+
+    //         new_types.push_back(std::move(type));
+    //     }
+
+    //     // auto new_defaults = func.defaults;
+    //     // std::erase_if(
+    //     //     new_defaults,
+    //     //     [named_args = call->named_args] (const auto& param) mutable {
+    //     //         auto name = param->stringify();
+    //     //         if (named_args.contains(name)) {
+    //     //             named_args.erase(name);
+    //     //             return true;
+    //     //         }
+    //     //         return false;
+    //     //     }
+    //     // );
+
+    //     // this is never true...otherwise it wouldn't have been a partial application
+    //     // if (args_size + func.defaults.size() >= pos_params.size())
+    //     //     new_defaults
+    //     //         = new_defaults
+    //     //         | std::views::drop(args_size + func.defaults.size() - pos_params.size())
+    //     //         | std::ranges::to<std::vector<expr::ExprPtr>>();
+
+    //     type::FuncType func_type{std::move(new_types), func.type.ret};
+    //     expr::Closure closure{
+    //         std::move(new_params),
+    //         std::move(func_type),
+    //         std::move(defaults),
+    //         func.body
+    //     };
+
+
+    //     bool normal = true;
+    //     if (is_variadic) {
+    //         // const auto iter = std::ranges::find_if(pos_params, type::isVariadic, &std::pair::second);
+    //         const auto iter = std::ranges::find_if(pos_params, [] (const auto& e) { return type::isVariadic(e.second); });
+    //         const size_t variadic_index = std::distance(pos_params.begin(), iter);
+
+    //         if (args_size > variadic_index) {
+    //             normal = false;
+
+    //             // FIX: first add the empty pack
+    //             {
+    //                 value::Environment sg_env;
+    //                 bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, sg_env);
+    //                 sg.addEnv(std::move(sg_env));
+    //             }
+
+    //             bindParam(pos_params[variadic_index].first, {value::makePack(), pos_params[variadic_index].second}, args_env);
+
+    //             // only then should you remove the parameter
+    //             // previously, I only had the following. So the pack was left as undefined instead of empty
+    //             pos_params.erase(std::next(pos_params.begin(), variadic_index));
+
+    //             // we ignore the pack, so we consume an extra argument. Remove it from the carried function
+    //             closure.params.erase(closure.params.begin());
+    //             closure.type.params.erase(closure.type.params.begin());
+
+    //             // for(size_t i{}, curr{}; const auto& [param, expr] : std::views::zip(pos_params, args)) {
+    //             for (size_t i{}, p{}, curr{}; p < args_size; ++p, ++i) {
+
+    //                 if (curr < expand_at.size() and i == expand_at[curr].first) {
+    //                     for (auto& val : expand_at[curr++].second) {
+    //                         auto& [sid, type] = pos_params[p];
+
+    //                         // const auto& [param_expr, id, is_syntax] = sid;
+    //                         if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue;
+    //                         const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+
+    //                         auto name = param_expr->stringify();
+    //                         // if (findType(p, type)) type = validateType(std::move(type));
+
+    //                         ++p;
+
+    //                         val = typeCheck(val, type,
+    //                             "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(val)->text()
+    //                         );
+
+    //                         if (std::holds_alternative<expr::Closure>(val))
+    //                             captureEnvForPassedClosure(get<expr::Closure>(val));
+
+    //                         // sg.addEnv({{name, {std::make_shared<value::Value>(val), type}}});
+    //                         args_env[id] = {{name}, std::make_shared<value::Value>(std::move(val)), std::move(type)};
+    //                     }
+    //                     --p;
+    //                 }
+    //                 else {
+    //                     auto& [sid, type] = pos_params[p];
+
+    //                     // const auto& [param_expr, id, is_syntax] = sid;
+    //                     if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue;
+    //                     const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+
+    //                     auto name = param_expr->stringify();
+    //                     const auto& expr = args[i];
+    //                     // if (findType(p, type)) type = validateType(std::move(type));
+
+    //                     value::Value value;
+    //                     value = std::visit(*this, expr->variant()).value;
+
+    //                     value = typeCheck(value, type,
+    //                         "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+    //                     );
+
+    //                     // if (std::holds_alternative<expr::Closure>(value))
+    //                     //     captureEnvForPassedClosure(get<expr::Closure>(value));
+    //                     // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
+    //                     args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     if (normal) {
+    //         const auto findType = [&func] (const size_t p, const type::TypePtr& type) {
+    //             // it doesn't matter if there are multiple arguments with this name
+    //             // `validateType` will choose the lastly-bounded one
+    //             // we just need to proof that A parameter exists in order to call `validateType`
+    //             for (size_t i{}; i <= p; ++i) {
+    //                 if (std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) {
+    //                     const auto& param = get<expr::Closure::RegularParam>(func.params[i]);
+
+    //                     if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
+    //                         return true;
+    //                 }
+    //                 else; // handle unpackmeters
+    //             }
+
+    //             // // look in the arguments env (from a partially evaluated function that yielded this function)
+    //             for (const auto& [_, obj] : func.envs.env.env) {
+    //                 const auto& [name, __, ___] = obj;
+    //                 if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name.name, util::SourceSpan{})}))
+    //                     return true;
+    //             }
+
+    //             return false;
+    //         };
+
+    //         // for(size_t i{}, curr{}; const auto& [param, expr] : std::views::zip(pos_params, args)) {
+    //         for (size_t i{}, p{}, curr{}; p < args_size; ++p, ++i) {
+
+    //             if (curr < expand_at.size() and i == expand_at[curr].first) {
+    //                 for (auto& val : expand_at[curr++].second) {
+    //                     auto& [sid, type] = pos_params[p];
+
+    //                     // const auto& [param_expr, id, is_syntax] = sid;
+    //                     if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue;
+    //                     const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+
+    //                     auto name = param_expr->stringify();
+
+    //                     if (findType(p, type)) {
+    //                         // ScopeGuard sg{this, func.args_env, args_env};
+    //                         ScopeGuard sg{this, func.envs.env.env, args_env};
+    //                         type = validateType(std::move(type));
+    //                     }
+    //                     ++p;
+
+    //                     val = typeCheck(val, type,
+    //                         "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(val)->text()
+    //                     );
+
+    //                     if (std::holds_alternative<expr::Closure>(val))
+    //                         captureEnvForPassedClosure(get<expr::Closure>(val));
+
+    //                     // sg.addEnv({{name, {std::make_shared<value::Value>(val), type}}});
+    //                     args_env[id] = {{name}, std::make_shared<value::Value>(std::move(val)), std::move(type)};
+    //                 }
+    //                 --p;
+    //             }
+    //             else {
+    //                 auto& [sid, type] = pos_params[p];
+
+    //                 // const auto& [param_expr, id, is_syntax] = sid;
+    //                 if (not std::holds_alternative<expr::Closure::RegularParam>(sid)) continue;
+    //                 const auto& [param_expr, id, is_syntax] = get<expr::Closure::RegularParam>(sid);
+
+    //                 auto name = param_expr->stringify();
+
+    //                 if (findType(p, type)) {
+    //                     // ScopeGuard sg{this, func.args_env, args_env};
+    //                     ScopeGuard sg{this, func.envs.env.env, args_env};
+    //                     type = validateType(std::move(type));
+    //                 }
+
+    //                 const auto& expr = args[i];
+
+    //                 value::Value value = std::visit(*this, expr->variant()).value;
+
+    //                 value = typeCheck(value, type,
+    //                     "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
+    //                 );
+
+    //                 // if (std::holds_alternative<expr::Closure>(value))
+    //                 //     captureEnvForPassedClosure(get<expr::Closure>(value));
+
+    //                 // sg.addEnv({{name, {std::make_shared<value::Value>(value), type}}});
+    //                 args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
+    //             }
+    //         }
+    //     }
+
+
+
+    //     // closure.captureArgs(args_env);
+    //     closure.capture(args_env);
+
+    //     return {closure, std::make_shared<type::FuncType>(closure.type)};
+    // }
+
 
     value::Value handleNonClasses(const expr::Call *call, const type::TypePtr type) {
         if (not call->args.empty()) util::error("Can't pass arguments to non-class types: " + call->stringify());
@@ -5432,11 +6311,12 @@ There are no mistakes with art.)";
             if (args.size() != 1)
                 util::error("`__builtin_decltype` takes in 1 argument only: "  + call->stringify());
 
-            const auto *name = dynamic_cast<expr::Name*>(args[0].get());
-            if (not name)
-                util::error("`__builtin_decltype` takes in proper names ony: " + call->stringify());
+            return declType({args.front()->stringify(), args.front()->var_ID});
 
-            return declType({name->name, name->var_ID});
+            // const auto *name = dynamic_cast<expr::Name*>(args[0].get());
+            // if (not name)
+            //     util::error("`__builtin_decltype` takes in proper names ony: " + call->stringify());
+            // return declType({name->name, name->var_ID});
         }
 
 
@@ -5871,7 +6751,7 @@ There are no mistakes with art.)";
                     size_t i{};
                     // skip the first 2 arguments
                     const auto& value : expanded_args | std::views::drop(2)
-                    // size_t i{}, p{2}, curr{}, val_idx{}; 
+                    // size_t i{}, p{2}, curr{}, val_idx{};
                     // p < expanded_args.size();
                     // ++i
                 ) {
@@ -6375,7 +7255,7 @@ There are no mistakes with art.)";
             return var->type;
         }
 
-        util::error("");
+        util::error("Name `" + name.name + "` not found inside `__builtin_decltype`!");
     }
 
 

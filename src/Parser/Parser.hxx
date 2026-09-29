@@ -297,8 +297,8 @@ public:
             }
 
             case WALRUS: {
-                if (not dynamic_cast<expr::Name*>(left.get()))
-                    util::error<except::SyntaxError>("Only proper names may appear on the LHS of the walrus operator `:=`: " + left->stringify());
+                // if (not dynamic_cast<expr::Name*>(left.get()))
+                //     util::error<except::SyntaxError>("Only proper names may appear on the LHS of the walrus operator `:=`: " + left->stringify());
 
                 return std::make_shared<expr::InferredAssignment>(
                     std::move(left)->stringify(),
