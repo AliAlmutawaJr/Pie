@@ -12,6 +12,135 @@
 
 
 
+TEST_CASE("Variadic Functions Testing", "[Pack][Param]") {
+{
+    const auto src = R"(
+func = (a, b, c: ...) => __builtin_print(a, __builtin_type(a), b, __builtin_type(b), c, __builtin_type(c));
+func(10, 20, 1);
+func(10, 20);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(10 Int 20 Int 1 ...Int
+10 Int 20 Int  ...)");
+}
+{
+    const auto src = R"(
+func = (a, b, c: ...) => __builtin_print(a, __builtin_type(a), b, __builtin_type(b), c, __builtin_type(c));
+func(c = 110, 20);
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"(
+makePack = (args: ...) => args;
+func = (a, b, c, x = 5) => __builtin_print(a, b, c, x);
+f = func(1, 2);
+f(3);
+f(3, 10);
+func(x = 10, makePack(1, 2, 3)...);
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(1 2 3 5
+1 2 3 10
+1 2 3 10)");
+}
+}
+
+
+TEST_CASE("Default Values and Variadics", "[Pack][Param]") {
+{
+    const auto src = R"(
+
+f5 = (a: ..., b = 5) => __builtin_print(a, "|", b);
+f5();
+f5(1);
+f5(1, 2);
+f5(1, 2, 3);
+)";
+
+    REQUIRE(pie::test::run(src) == R"( | 5
+ | 1
+1 | 2
+1, 2 | 3)");
+}
+{
+    const auto src = R"(
+f5 = (a: ..., b = 5) => __builtin_print(a, "|", b);
+f5();
+f5(1);
+f5(1, 2);
+f5(1, 2, 3);
+)";
+
+    REQUIRE(pie::test::run(src) == R"( | 5
+ | 1
+1 | 2
+1, 2 | 3)");
+}
+{
+    const auto src = R"(
+makePack = (args: ...) => args;
+f55 = (a: ... = makePack(5)) => __builtin_print("A:", a);
+f55();
+f55(1);
+f55(1, 2);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(A: 5
+A: 1
+A: 1, 2)");
+}
+{
+    const auto src = R"(
+makePack = (args: ...) => args;
+f55 = (a: ... = makePack(5), b = 10) => __builtin_print("A:", a, "|", b);
+f55();
+f55(1);
+f55(1, 2);
+f55(1, 2, 3);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(A: 5 | 10
+A:  | 1
+A: 1 | 2
+A: 1, 2 | 3)");
+}
+{
+    const auto src = R"(
+makePack = (args: ...) => args;
+f555 = (a = 1, b = 2, c: ... = makePack(3)) => __builtin_print(a, b, c);
+f555();
+f555(10);
+f555(10, 20);
+f555(10, 20, 30);
+f555(10, 20, 30, 40);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(1 2 3
+10 2 3
+10 20 3
+10 20 30
+10 20 30, 40)");
+}
+{
+    const auto src = R"(
+makePack = (args: ...) => args;
+f7 = (a, b: ... = makePack(3), c = 1) => __builtin_print(a, b, c);
+f7(1);          .: a = 1
+f7(1, 2);       .: a = 1, c = 2
+f7(1, 2, 3);    .: a = 1, b = (2), c = 2
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(1 3 1
+1  2
+1 2 3)");
+}
+}
+
+
 
 TEST_CASE("Packs Type Checking", "[Pack][Type][Param]") {
 {

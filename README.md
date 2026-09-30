@@ -926,17 +926,17 @@ this isn't
 
 #### in order of priority
 
-- [ ] Add default values to function parameters
+
+- [ ] Use Big Int instead of `int64_t`
 - [ ] Improve error messages (add line and column numbers)
+- [ ] Fix defer throwing (inside destructor)
+- [ ] Make `=` and `=>` overloadable
 - [ ] Better File IO
 - [ ] Breaking Out of Nested Loops
-- [ ] Use Big Int instead of `int64_t`
-- [ ] Simplify Pack Expansion (internal)
+- [ ] World domination
 - [ ] Simplify Closure Captures without performance penalty (internal)
 - [ ] Clean up builtin functions code (internal)
 - [ ] `Expr::involveName()` seems to be not exhastive, especially with Closure. Check it.
-- [ ] World domination
-- [ ] Make `=` and `=>` overloadable
 - [ ] Fix builtin reset (value-reset, reset/name-reset) 
 - [ ] Move from Make to Bake
 - [ ] Add LLVM backend
@@ -945,6 +945,8 @@ this isn't
 ---
 
 ### Done
+- [x] Simplify Pack Expansion (internal)
+- [x] Add default values to function parameters
 - [x] Make sure to expand args for EVERY builtin function (`ffi_call` and `defer` come to mind)
 - [x] Hidden Class Members
 - [x] toString methods

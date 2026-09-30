@@ -104,7 +104,7 @@ public:
     { }
 
 
-    ~Visitor() {
+    ~Visitor() noexcept(false) {
         // no need to mess with captured envs since this is global scope
         for (const auto& [expr, env] : deferred[0] | std::views::reverse) {
             ScopeGuard sg{this, env->env};
@@ -4631,6 +4631,14 @@ There are no mistakes with art.)";
             if (not type) util::error(); // should never happen anyway
 
             auto value = std::visit(*this, expr->variant()).value;
+
+
+            if (type::isVariadic(type) and not std::holds_alternative<value::Pack>(value))
+                util::error<except::TypeMismatch>(
+                    "In call: " + call->stringify() +
+                    "\nNamed argument for variadic parameter `" + name +
+                    "` must be a pack, got: " + stringify(value)
+                );
 
             value = typeCheck(value, type,
                 "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
