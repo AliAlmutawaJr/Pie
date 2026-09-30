@@ -12,6 +12,102 @@
 
 
 
+TEST_CASE("Match Disallowing Structural Sub-typing", "[Match]") {
+{
+    const auto src = R"(
+Human = class { name = ""; age = 0; };
+Named = class { name = ""; };
+makePack = (args: ...) => args;
+
+list = {Human(), Named(), Named()};
+match list {
+    {a: Human, ...b: ...Human} => __builtin_print(1);
+    {a: Named, ...b: ...Human} => __builtin_print(2);
+    {a: Human, ...b: ...Named} => __builtin_print(3);
+    {a: Named, ...b: ...Named} => __builtin_print(4);
+};
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(3)");
+}
+{
+    const auto src = R"(
+Human = class { name = ""; age = 0; };
+Named = class { name = ""; };
+makePack = (args: ...) => args;
+
+list = {Human(), Named(), Named(), Human()};
+match list {
+    {a: Human, ...b: ...Human} => __builtin_print(1);
+    {a: Named, ...b: ...Human} => __builtin_print(2);
+    {a: Human, ...b: ...Named} => __builtin_print(3);
+    {a: Named, ...b: ...Named} => __builtin_print(4);
+};
+
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
+
+TEST_CASE("Unpackmeters Introduce a Pack Member", "[Unpack][Pack][Param]") {
+{
+    const auto src = R"(
+Human = class { name = ""; age = 0; };
+makePack = (args: ...) => args;
+
+f = ({name, age}: ...Human) => __builtin_print(name, "|", age);
+
+f();
+f(Human("Pie", 3));
+f(Human("Pie", 3), Human("C++", 40));
+)";
+
+    REQUIRE(pie::test::run(src) == R"( | 
+Pie | 3
+Pie, C++ | 3, 40)");
+}
+}
+
+
+
+TEST_CASE("Pack Match Against Type", "[Pack][Match]") {
+{
+    const auto src = R"(
+l = {1, 2, 3, 4};
+
+match l {
+    {x: String, ...rest: ...Int   } => __builtin_print("str int:", x, rest);
+    {x: Int   , ...rest: ...String} => __builtin_print("int str", x, rest);
+    {x: Int   , ...rest: ...Int   } => __builtin_print("int int", x, rest);
+};
+)";
+
+    REQUIRE(pie::test::run(src) == R"(int int 1 2, 3, 4)");
+}
+}
+
+
+TEST_CASE("Pack Match Against Type ", "[Pack][Match]") {
+{
+    const auto src = R"(
+l = {1, 2, 3, 4};
+
+match l {
+    {x: String, ...rest: ...Int   } => __builtin_print("str int:", x, rest);
+    {x: Int   , ...rest: ...String} => __builtin_print("int str", x, rest);
+    {x: Int   , ...rest: ...Int   } => __builtin_print("int int", x, rest);
+};
+)";
+
+    REQUIRE(pie::test::run(src) == R"(int int 1 2, 3, 4)");
+}
+}
+
+
+
 TEST_CASE("Variadic Functions Testing", "[Pack][Param]") {
 {
     const auto src = R"(

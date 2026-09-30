@@ -70,11 +70,12 @@ static std::string stringify(const std::vector<std::string>& spaces) {
 class Parser {
     enum class Context {
         NONE,
-        MATCH,
+        ALLOW_ASSIGNMENT,
         MAP,
         CALL,
+        FOLLOWED_BY_COLON,
         PACK,
-        LOOP_VAR,
+        // LOOP_VAR,
     };
 
     enum class EnvTag {
@@ -166,7 +167,7 @@ public:
 
         while (precedence < getPrecedence()) {
             if constexpr (not PARSE_TYPE or CTX == Context::MAP) if (check(token::TokenKind::COLON)) break;
-            if constexpr (CTX == Context::MATCH) if (check(token::TokenKind::ASSIGN)) break;
+            if constexpr (CTX == Context::ALLOW_ASSIGNMENT) if (check(token::TokenKind::ASSIGN)) break;
             // // both context's need to parse comma separated lists
             // if constexpr (CTX == Context::CALL)
             //     if (check(token::TokenKind::COMMA)) break;
@@ -308,7 +309,7 @@ public:
 
 
             case ASSIGN:
-                if constexpr (CTX == Context::MATCH) return left;
+                if constexpr (CTX == Context::ALLOW_ASSIGNMENT) return left;
                 if constexpr (CTX == Context::PACK) return left;
 
                 if (auto fix = analysis::exprContains<expr::Fix>(left)) {
@@ -1197,7 +1198,7 @@ public:
 
         // indicates a loop variable
         if (has_var) {
-            loop_var = parseUnpackmentPattern<Context::LOOP_VAR>();
+            loop_var = parseUnpackmentPattern<Context::FOLLOWED_BY_COLON>();
             consume(COLON);
         }
 
@@ -1291,7 +1292,7 @@ public:
 
                 // check for unpackments first.
                 if (check(L_BRACE)) {
-                    params.emplace_back(parseUnpackmentPattern());
+                    params.emplace_back(parseUnpackmentPattern<Context::FOLLOWED_BY_COLON>());
                     params_types.push_back(match(COLON) ? parseType() : type::builtins::_());
 
                     continue;
@@ -1508,7 +1509,7 @@ public:
 
         // indicates a loop variable
         if (has_var) {
-            loop_var = parseUnpackmentPattern<Context::LOOP_VAR>();
+            loop_var = parseUnpackmentPattern<Context::FOLLOWED_BY_COLON>();
             consume(COLON);
         }
 
@@ -1700,17 +1701,17 @@ public:
             //  since that's considered just an assignment
             // so we lie and say we're inside a match (we're practically are)
             //  just to allow for matching against values
-            do patterns.push_back(parseUnpackmentPattern<Context::MATCH>()); while(match(COMMA));
+            do patterns.push_back(parseUnpackmentPattern<Context::ALLOW_ASSIGNMENT>()); while(match(COMMA));
 
             consume(R_BRACE);
 
             type::TypePtr type  = nullptr;
             expr::ExprPtr value = nullptr;
 
-            if constexpr (CTX != Context::LOOP_VAR) {
+            if constexpr (CTX != Context::FOLLOWED_BY_COLON) {
                 if (match(COLON )) type  = parseType();
             }
-            if constexpr (CTX == Context::MATCH) {
+            if constexpr (CTX == Context::ALLOW_ASSIGNMENT) {
                 if (match(ASSIGN)) value = parseExpr();
             }
 
@@ -1765,10 +1766,10 @@ public:
             type::TypePtr type  = nullptr;
             expr::ExprPtr value = nullptr;
 
-            if constexpr (CTX != Context::LOOP_VAR) {
+            if constexpr (CTX != Context::FOLLOWED_BY_COLON) {
                 if (match(COLON )) type  = parseType();
             }
-            if constexpr (CTX == Context::MATCH) {
+            if constexpr (CTX == Context::ALLOW_ASSIGNMENT) {
                 if (match(ASSIGN)) value = parseExpr();
             }
 
@@ -1783,7 +1784,7 @@ public:
             if (not check(COLON) and not check(ASSIGN))
                 name = parseExpr<not PARSE_TYPE, CTX>();
 
-            if constexpr (CTX != Context::LOOP_VAR) {
+            if constexpr (CTX != Context::FOLLOWED_BY_COLON) {
                 if (match(COLON )) type = parseType();
             }
 
@@ -1946,19 +1947,22 @@ public:
     expr::ExprPtr LBrace() {
         using enum token::TokenKind;
 
+        // empty map `{:}`
+        if (check(COLON) and check(R_BRACE, 1)) {
+            consume(COLON  );
+            consume(R_BRACE);
+            return std::make_shared<expr::Map>();
+        }
+
+
+        if constexpr (PARSE_UNPACKMENT) if (isUnpackment()) return unpackment();
+
         // empty list `{}`
         if (match(R_BRACE)) return std::make_shared<expr::List>();
-
-        // empty map `{:}`
-        if (match(COLON)) return consume(R_BRACE), std::make_shared<expr::Map>();
-
 
         // if there is at least one top-level semicolon, it's a scope!
         if (isScope()     ) return handleScope();
 
-
-        if constexpr (PARSE_UNPACKMENT)
-            if (isUnpackment()) return unpackment();
 
 
         const auto funcs = {

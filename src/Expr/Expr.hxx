@@ -440,8 +440,10 @@ inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t
 
 
         // removing the trailing comma
-        s.pop_back();
-        s.pop_back();
+        if (not list->patterns.empty()) {
+            s.pop_back();
+            s.pop_back();
+        }
 
         s += '}';
     }
@@ -469,8 +471,8 @@ inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t
     else util::error();
 
 
-    if (pattern->type ) s += ": "  + pattern->type ->text     (indent + 4);
-    if (pattern->value) s += " = " + pattern->value->stringify(indent + 4);
+    if (pattern->type ) s += "`:` "  + pattern->type ->text     (indent + 4);
+    if (pattern->value) s += " `=` " + pattern->value->stringify(indent + 4);
 
     return s;
 }
@@ -499,6 +501,22 @@ inline bool patternInvolves(const unpack::Pattern *pattern, const std::string_vi
 
     return false;
 }
+
+
+inline ExprPtr boundExprOf(const Pattern *pattern) {
+    if (auto e = dynamic_cast<const unpack::Expr*>(pattern)) return e->expr;
+    if (auto p = dynamic_cast<const unpack::Pack*>(pattern)) return p->expr;
+    return nullptr;
+}
+
+
+inline void forEach(const Pattern *pattern, const auto& fn) {
+    fn(pattern);
+
+    if (auto list = dynamic_cast<const unpack::List*>(pattern))
+        for (const auto& sub : list->patterns) forEach(sub.get(), fn);
+}
+
 } // namespace unpack
 
 
