@@ -14,13 +14,13 @@ space std {
     type     = __builtin_type    ;
     decltype = __builtin_decltype;
 
-    input = (args: ...) => {
+    input = (...args) => {
         __builtin_print(args..., end = "");
         __builtin_input_str();
     };
 
-    Pack = (args: ...) => args;
-    PackOf = (T: Type, args: ...T): ...T => args;
+    Pack = (...args) => args;
+    PackOf = (T: Type, ...args: ...T): ...T => args;
 
 
     infix + = (a: String, b: String) => __builtin_concat(a, b);
@@ -118,7 +118,7 @@ space std {
 
     .: Factory Function..
     .: probably means I need some form of constructors :)
-    Iota = (args: ...) => {
+    Iota = (...args) => {
         __builtin_conditional(
             __builtin_gt(__builtin_len(args), 3),
             __builtin_panic("Can't pass more than 3 arguments to std::Iota"),

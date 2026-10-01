@@ -1304,7 +1304,16 @@ public:
                 // check for unpackments first.
                 if (check(L_BRACE)) {
                     params.emplace_back(parseUnpackmentPattern<Context::FOLLOWED_BY_COLON>());
-                    params_types.push_back(match(COLON) ? parseType() : type::builtins::_());
+
+                    if (match(COLON))
+                        params_types.push_back(parseType());
+                    else {
+                        // not `Any`, but `_` in case `Any` was assigned to
+                        if (i - 1 == variadic_index) 
+                            params_types.push_back(type::VariadicOf(type::builtins::_()));
+                        else
+                            params_types.push_back(type::builtins::_());
+                    }
 
                     continue;
                 }

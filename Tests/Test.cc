@@ -12,6 +12,143 @@
 
 
 
+TEST_CASE("Unpackmeters Packs with Nested Packs", "[Class][Param]") {
+{
+    const auto src = R"(
+func = (a, b, a) => __builtin_print(a);
+
+Pair = class {
+    T = Int;
+    member = 0;
+};
+
+func = ({t, x: __builtin_type(t)}) => 0;
+func(Pair("", ""));
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+{
+    const auto src = R"(
+func = (a, b, a) => __builtin_print(a);
+
+Pair = class {
+    T = Int;
+    member = 0;
+};
+
+func = ({t, x: __builtin_type(t)}) => 0;
+func(Pair(""));
+)";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+}
+
+
+
+TEST_CASE("Unpackmeters Packs with Nested Packs", "[Pack][Unpack][Variadic]") {
+{
+    const auto src = R"(
+r = (...{first, ...rest}) => __builtin_print(first, "|", rest);
+r({1, 2, 3}, {4, 5});
+)";
+
+    REQUIRE(pie::test::run(src) == "1, 4 | 2, 3, 5");
+}
+}
+
+
+
+TEST_CASE("Unpackmeters Packs", "[Pack][Unpack][Variadic]") {
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+    child = 0;
+};
+
+g = (...{name: ...String}: ...Human) => name;
+__builtin_print(__builtin_type(g(Human("Pie", 3))));
+)";
+
+    REQUIRE(pie::test::run(src) == "...String");
+}
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+};
+
+makePack = (...args) => args;
+
+h = (...{name = makePack("Pie", "C++")}: ...Human) => 0;
+h(Human("Pie", 3), Human("C++", 40));
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+};
+
+h = (...{name = std::Pack("Pie", "C++")}: ...Human) => 0;
+h(Human("C++", 40), Human("Pie", 3));
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+func = (...{first, second}) => __builtin_print("pack:", second);
+
+func();
+func({1, 2});
+func({1, 2}, {3, 4});
+)";
+
+    REQUIRE(pie::test::run(src) == "pack: \npack: 2\npack: 2, 4");
+}
+}
+
+
+
+TEST_CASE("Pack Propogation", "[Pack]") {
+{
+    const auto src = R"(
+Human = class {
+    name = "";
+    age = 0;
+    child = 0;
+};
+
+
+g = (...args) => args.child.name;
+a = g(Human(0, 0, Human("1")), Human(0, 0, Human("2")), Human(0, 0, Human("3")));
+__builtin_print(a);
+)";
+
+    REQUIRE(pie::test::run(src) == "1, 2, 3");
+}
+}
+
+
+TEST_CASE("Variadic Parameter with non-variadic type", "[Func][Variadic]") {
+{
+    const auto src = R"(
+(...c: Int) => "";
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
+
 TEST_CASE("Match Disallowing Structural Sub-typing", "[Match]") {
 {
     const auto src = R"(

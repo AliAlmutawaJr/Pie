@@ -5268,7 +5268,19 @@ There are no mistakes with art.)";
                 else; // check unpackmeters
             }
 
-            if (not found) type = validateType(std::move(type));
+            if (not found) {
+                type = validateType(std::move(type));
+
+                if (
+                    c->variadic_index       and
+                    i == *c->variadic_index and
+                    not type::isVariadic(type)
+                )
+                util::error(
+                    "In closure: " + c->stringify() +
+                    "\nVariadic parameter must have a variadic type. Got: " + type->text()
+                );
+            }
         }
 
         if (
