@@ -174,8 +174,8 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
     }
 
     #ifdef PIE_DEBUG
-        os << ", <" << token.span.first .line << ":" << token.span.first .column
-           << ", "  << token.span.second.line << ":" << token.span.second.column << ">";
+        os << ", <" << token.span.span.first .line << ":" << token.span.span.first .column
+           << ", "  << token.span.span.second.line << ":" << token.span.span.second.column << ">";
     #endif
 
     return os << '}';
@@ -204,8 +204,8 @@ struct std::formatter<pie::token::Token> : std::formatter<std::string> {
                     "Token{{{}, '{}', <{}:{}, {}:{}>}}",
                     stringify(token.kind),
                     token.text,
-                    token.span.first .line, token.span.first .column,
-                    token.span.second.line, token.span.second.column
+                    token.span.span.first .line, token.span.span.first .column,
+                    token.span.span.second.line, token.span.span.second.column
                 );
             #else
                 return std::format_to(ctx.out(), "Token{{{}, '{}'}}", stringify(token.kind), token.text);
