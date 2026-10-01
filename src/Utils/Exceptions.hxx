@@ -14,8 +14,11 @@
 
 
 namespace pie {
-
 namespace except {
+
+    // struct 
+
+
     DefineError(UknownOption       );
     DefineError(LexerError         );
     DefineError(UnexpectedToken    );
@@ -25,10 +28,8 @@ namespace except {
     DefineError(NameLookup         );
     DefineError(InvalidArgument    );
     DefineError(OpeningDyLib       );
-    DefineError(DyLibSymbolLookup);
-}
-
-
+    DefineError(DyLibSymbolLookup  );
+} // namespace except
 } // namespace pie
 
 #undef DefineError

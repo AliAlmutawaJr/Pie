@@ -127,7 +127,7 @@ CharClass classify(const char c) noexcept {
 }
 
 
-token::Tokens lex(const std::string& src, const bool check_for_semis) {
+token::Tokens lex(const std::string& src, const bool check_for_semis, const std::string_view file) {
     token::TokenLines lines = {{}};
     token::Tokens line;
 
@@ -142,7 +142,7 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
         if constexpr (sizeof...(args) == 2) {
             return lines.back().emplace_back(
                 std::forward<decltype(args)>(args)...,
-                util::SourceSpan{{from_line, from_column}, {to_line, to_column}}
+                util::SourceSpan{{{from_line, from_column}, {to_line, to_column}}, file}
             );
         }
         else
@@ -409,7 +409,7 @@ token::Tokens lex(const std::string& src, const bool check_for_semis) {
                 if (fstring_tokens.empty())
                     emplace(STRING, str);
                 else
-                    emplace(FSTRING, str, SourceSpan{{from_line, from_column}, {to_line, to_column}}, fstring_tokens);
+                    emplace(FSTRING, str, SourceSpan{{{from_line, from_column}, {to_line, to_column}}, file}, fstring_tokens);
             } break;
 
 

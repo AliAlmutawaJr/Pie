@@ -35,7 +35,11 @@ enum class CharClass {
 
 [[nodiscard]] CharClass classify(const char) noexcept;
 
-[[nodiscard]] token::Tokens lex(const std::string& src, const bool check_for_semis = true);
+[[nodiscard]] token::Tokens lex(
+    const std::string& src,
+    const bool check_for_semis = true,
+    const std::string_view file = ""
+);
 
 
 

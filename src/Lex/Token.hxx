@@ -16,8 +16,11 @@ namespace pie {
 namespace util {
 
     struct SourceLocation { size_t line, column; };
-    using SourceSpan = std::pair<SourceLocation, SourceLocation>;
-    // struct SourceSpan { std::pair<size_t, size_t> lines, columnsI ; };
+    struct SourceSpan {
+        using Span = std::pair<SourceLocation, SourceLocation>;
+        Span span;
+        std::string_view file = "";
+    };
 
 }
 
