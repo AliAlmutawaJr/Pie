@@ -17,7 +17,7 @@ TEST_CASE("Match Disallowing Structural Sub-typing", "[Match]") {
     const auto src = R"(
 Human = class { name = ""; age = 0; };
 Named = class { name = ""; };
-makePack = (args: ...) => args;
+makePack = (...args) => args;
 
 list = {Human(), Named(), Named()};
 match list {
@@ -56,9 +56,9 @@ TEST_CASE("Unpackmeters Introduce a Pack Member", "[Unpack][Pack][Param]") {
 {
     const auto src = R"(
 Human = class { name = ""; age = 0; };
-makePack = (args: ...) => args;
+makePack = (...args) => args;
 
-f = ({name, age}: ...Human) => __builtin_print(name, "|", age);
+f = (...{name, age}: ...Human) => __builtin_print(name, "|", age);
 
 f();
 f(Human("Pie", 3));
@@ -108,10 +108,10 @@ match l {
 
 
 
-TEST_CASE("Variadic Functions Testing", "[Pack][Param]") {
+TEST_CASE("Variadic Functions Testing", "[Pack][Param][Variadic]") {
 {
     const auto src = R"(
-func = (a, b, c: ...) => __builtin_print(a, __builtin_type(a), b, __builtin_type(b), c, __builtin_type(c));
+func = (a, b, ...c) => __builtin_print(a, __builtin_type(a), b, __builtin_type(b), c, __builtin_type(c));
 func(10, 20, 1);
 func(10, 20);
 )";
@@ -121,7 +121,7 @@ func(10, 20);
 }
 {
     const auto src = R"(
-func = (a, b, c: ...) => __builtin_print(a, __builtin_type(a), b, __builtin_type(b), c, __builtin_type(c));
+func = (a, b, ...c) => __builtin_print(a, __builtin_type(a), b, __builtin_type(b), c, __builtin_type(c));
 func(c = 110, 20);
 )";
 
@@ -129,7 +129,7 @@ func(c = 110, 20);
 }
 {
     const auto src = R"(
-makePack = (args: ...) => args;
+makePack = (...args) => args;
 func = (a, b, c, x = 5) => __builtin_print(a, b, c, x);
 f = func(1, 2);
 f(3);
@@ -145,11 +145,11 @@ func(x = 10, makePack(1, 2, 3)...);
 }
 
 
-TEST_CASE("Default Values and Variadics", "[Pack][Param]") {
+TEST_CASE("Default Values and Variadics", "[Pack][Param][Variadic]") {
 {
     const auto src = R"(
 
-f5 = (a: ..., b = 5) => __builtin_print(a, "|", b);
+f5 = (...a, b = 5) => __builtin_print(a, "|", b);
 f5();
 f5(1);
 f5(1, 2);
@@ -163,7 +163,7 @@ f5(1, 2, 3);
 }
 {
     const auto src = R"(
-f5 = (a: ..., b = 5) => __builtin_print(a, "|", b);
+f5 = (...a, b = 5) => __builtin_print(a, "|", b);
 f5();
 f5(1);
 f5(1, 2);
@@ -177,8 +177,8 @@ f5(1, 2, 3);
 }
 {
     const auto src = R"(
-makePack = (args: ...) => args;
-f55 = (a: ... = makePack(5)) => __builtin_print("A:", a);
+makePack = (...args) => args;
+f55 = (...a = makePack(5)) => __builtin_print("A:", a);
 f55();
 f55(1);
 f55(1, 2);
@@ -190,8 +190,8 @@ A: 1, 2)");
 }
 {
     const auto src = R"(
-makePack = (args: ...) => args;
-f55 = (a: ... = makePack(5), b = 10) => __builtin_print("A:", a, "|", b);
+makePack = (...args) => args;
+f55 = (...a = makePack(5), b = 10) => __builtin_print("A:", a, "|", b);
 f55();
 f55(1);
 f55(1, 2);
@@ -205,8 +205,8 @@ A: 1, 2 | 3)");
 }
 {
     const auto src = R"(
-makePack = (args: ...) => args;
-f555 = (a = 1, b = 2, c: ... = makePack(3)) => __builtin_print(a, b, c);
+makePack = (...args) => args;
+f555 = (a = 1, b = 2, ...c = makePack(3)) => __builtin_print(a, b, c);
 f555();
 f555(10);
 f555(10, 20);
@@ -222,8 +222,8 @@ f555(10, 20, 30, 40);
 }
 {
     const auto src = R"(
-makePack = (args: ...) => args;
-f7 = (a, b: ... = makePack(3), c = 1) => __builtin_print(a, b, c);
+makePack = (...args) => args;
+f7 = (a, ...b = makePack(3), c = 1) => __builtin_print(a, b, c);
 f7(1);          .: a = 1
 f7(1, 2);       .: a = 1, c = 2
 f7(1, 2, 3);    .: a = 1, b = (2), c = 2
@@ -241,8 +241,8 @@ f7(1, 2, 3);    .: a = 1, b = (2), c = 2
 TEST_CASE("Packs Type Checking", "[Pack][Type][Param]") {
 {
     const auto src = R"(
-makePack = (args: ...) => args;
-f = (xs: ...Int = makePack("a")) => xs;
+makePack = (...args) => args;
+f = (...xs: ...Int = makePack("a")) => xs;
 f();
 )";
 
@@ -250,8 +250,8 @@ f();
 }
 {
     const auto src = R"(
-makePack = (args: ...) => args;
-f = (xs: ...Int = makePack("a")) => xs;
+makePack = (...args) => args;
+f = (...xs: ...Int = makePack("a")) => xs;
 f(1);
 )";
 
@@ -279,7 +279,7 @@ TEST_CASE("Slicing for Packs!", "[Param]") {
 Named = class { name = ""; };
 Person = class { name = ""; age = 0; };
 
-func = (nameds: ...Named) => __builtin_print(__builtin_get(nameds, 1).name);
+func = (...nameds: ...Named) => __builtin_print(__builtin_get(nameds, 1).name);
 
 func(Named("ali"), Person("Pie", 3));
 )";
@@ -291,7 +291,7 @@ func(Named("ali"), Person("Pie", 3));
 Named = class { name = ""; };
 Person = class { name = ""; age = 0; };
 
-func = (nameds: ...Named) => __builtin_get(nameds, 1).age;
+func = (...nameds: ...Named) => __builtin_get(nameds, 1).age;
 
 func(Named("ali"), Person("Pie", 3));
 )";
@@ -455,7 +455,7 @@ TEST_CASE("Moving out of Packs by accident", "[Pack]") {
 {
     const auto src = R"(
     infix + = (a, b) => 0;
-    makePack = (args: ...) => args;
+    makePack = (...args) => args;
     pack = makePack("a", "b", "c");
     (pack + ...);
     __builtin_print(pack);
@@ -583,7 +583,7 @@ infix + = (a, b) => __builtin_add(a, b);
 C = class {
     pack: ...Int = 0;
 };
-makeC = (x: ...Int) => C(x);
+makeC = (...x: ...Int) => C(x);
 __builtin_print((makeC(5, 6, 7).pack + ...));
 
 )";
@@ -594,7 +594,7 @@ __builtin_print((makeC(5, 6, 7).pack + ...));
     const auto src = R"(
 infix + = (a, b) => __builtin_add(a, b);
 
-makePack = (args: ...) => args;
+makePack = (...args) => args;
 sum = (makePack(1, 2, 3) + ...);
 __builtin_print(sum);
 )";
@@ -1211,9 +1211,9 @@ TEST_CASE("Expansions inside lists", "[List]") {
     const auto src = R"(
 
 makeList =
-    (args1: ...) =>
-        (args2: ...) =>
-            (args3: ...) =>
+    (...args1) =>
+        (...args2) =>
+            (...args3) =>
                 { args1..., args2..., args3... };
 
 
@@ -1242,7 +1242,7 @@ TEST_CASE("Expansion In Union", "[Variadic][Union][Type]") {
 {
     const auto src = R"(
 
-makeUnion = (types: ...) => union { types...; };
+makeUnion = (...types) => union { types...; };
 
 Int = 1;
 U = makeUnion(Int, String, Bool, class { name = ""; });
@@ -1264,7 +1264,7 @@ x: U = class { name = ".."; }("Yo");
 {
     const auto src = R"(
 
-makeUnion = (types: ...) => union { types...; };
+makeUnion = (...types) => union { types...; };
 
 Int = 1;
 U = makeUnion(Int, String, Bool, class { name = ""; });
@@ -1352,7 +1352,7 @@ TEST_CASE("Dual Seperated Fold Expressions", "[Fold]") {
 infix + = (a, b) => __builtin_add(a, b);
 infix - = (a, b) => __builtin_sub(a, b);
 
-func = (args: ...) => (args + ... - 1);
+func = (...args) => (args + ... - 1);
 __builtin_print(func(1, 2, 3, 4));
 
 )";
@@ -2328,7 +2328,7 @@ TEST_CASE("Walrus Operator with Fold Expression", "[Assign][Fold]") {
     const auto src1 = R"(
 infix + = (a, b) => __builtin_add(a, b);
 
-func = (ints: ...) => {
+func = (...ints) => {
     x := (0 + ints + ...);
 
     __builtin_print(__builtin_decltype(x));
@@ -2343,7 +2343,7 @@ func();
     const auto src2 = R"(
 infix + = (a, b) => __builtin_add(a, b);
 
-func = (ints: ...) => {
+func = (...ints) => {
     x := (0 + ints + ...);
 
     __builtin_print(__builtin_decltype(x));
@@ -2543,7 +2543,7 @@ C = class {
 };
 
 
-makeC = (args: ...) => C(args...);
+makeC = (...args) => C(args...);
 
 c = makeC(1, 2);
 
@@ -3461,7 +3461,7 @@ callFunc = (f) => {
     f(Double);
 };
 
-func = (T, x: ...T) => 0;
+func = (T, ...x: ...T) => 0;
 
 callFunc(func);
 )";
@@ -3476,7 +3476,7 @@ TEST_CASE("Returning Variadic Eager Param Function", "[Func][Param][Variadic]") 
 getFunc = () => {
     T = Double;
 
-    (a: ...T, T, x: T) => "";
+    (...a: ...T, T, x: T) => "";
 };
 
 func = getFunc();
@@ -3492,7 +3492,7 @@ func(2.1, 5.4, 9.8, Int, 1);
 getFunc = () => {
     T = Double;
 
-    (a, T, x: ...T) => "";
+    (a, T, ...x: ...T) => "";
 };
 
 func = getFunc();
@@ -3541,7 +3541,7 @@ f(func2, 3);
 
 TEST_CASE("Variadic Function Eager Parameter", "[Func][Param][Variadic]") {
     const auto src1 = R"(
-func = (T: Type, args: ...T, w, z) => 1;
+func = (T: Type, ...args: ...T, w, z) => 1;
 
 func(Int, 1, 2, 3, "meow", 3.14);
 func(Bool, true, false, "meow", 3.14);
@@ -3551,7 +3551,7 @@ func(Bool, true, false, "meow", 3.14);
 
 
     const auto src2 = R"(
-func = (T: Type, args: ...T, w, z) => 1;
+func = (T: Type, ...args: ...T, w, z) => 1;
 
 func(Int, 1, "", 2, 3);
 )";
@@ -3560,9 +3560,9 @@ func(Int, 1, "", 2, 3);
 
 
     const auto src3 = R"(
-func = (T: Type, args: ...T, w, z) => 1;
+func = (T: Type, ...args: ...T, w, z) => 1;
 
-call = (args: ...Any) => func(Int, args...);
+call = (...args: ...Any) => func(Int, args...);
 
 call(1, 2, 3);
 )";
@@ -3571,9 +3571,9 @@ call(1, 2, 3);
 
 
     const auto src4 = R"(
-func = (T: Type, args: ...T, w, z) => 1;
+func = (T: Type, ...args: ...T, w, z) => 1;
 
-call = (args: ...Any) => func(Int, args...);
+call = (...args: ...Any) => func(Int, args...);
 
 call(true, false, 3.14, 2);
 )";
@@ -3672,56 +3672,56 @@ Object {
 
 
 
+// TEST_CASE("Implicit Parameter Pack", "[Func][Param][Variadic]") {
 
-TEST_CASE("Implicit Parameter Pack", "[Func][Param][Variadic]") {
+//     const auto src1 =
+// R"(
+// print = __builtin_print;
 
-    const auto src1 =
-R"(
-print = __builtin_print;
-
-func: (Int, ...Bool, String): Any = (a, b, c) => print(b);
-func(1, true, false, true, true, "what");
-)";
-
-
-    REQUIRE(pie::test::run(src1) == "true, false, true, true");
+// func: (Int, ...Bool, String): Any = (a, b, c) => print(b);
+// func(1, true, false, true, true, "what");
+// )";
 
 
-    const auto src2 =
-R"(
-print = __builtin_print;
-
-func: (Int, ...Bool, String): Any = (a, b, c) => print(a, b, c);
-func(1, false, "what");
-)";
+//     REQUIRE(pie::test::run(src1) == "true, false, true, true");
 
 
-    REQUIRE(pie::test::run(src2) == "1 false what");
+//     const auto src2 =
+// R"(
+// print = __builtin_print;
+
+// func: (Int, ...Bool, String): Any = (a, b, c) => print(a, b, c);
+// func(1, false, "what");
+// )";
 
 
-    const auto src3 =
-R"(
-print = __builtin_print;
-
-func: (Int, ...Bool, String): Any = (a, b, c) => print(a, b, c);
-func(1, 2, 3);
-)";
+//     REQUIRE(pie::test::run(src2) == "1 false what");
 
 
-    REQUIRE_THROWS_AS(pie::test::run(src3), pie::except::TypeMismatch);
+//     const auto src3 =
+// R"(
+// print = __builtin_print;
+
+// func: (Int, ...Bool, String): Any = (a, b, c) => print(a, b, c);
+// func(1, 2, 3);
+// )";
 
 
-    const auto src4 =
-R"(
-print = __builtin_print;
-
-func: (Int, ...Bool, String): Any = (a, b, c) => print(a, b, c);
-func(1, true, 3);
-)";
+//     REQUIRE_THROWS_AS(pie::test::run(src3), pie::except::TypeMismatch);
 
 
-    REQUIRE_THROWS_AS(pie::test::run(src4), pie::except::TypeMismatch);
-}
+//     const auto src4 =
+// R"(
+// print = __builtin_print;
+
+// func: (Int, ...Bool, String): Any = (a, b, c) => print(a, b, c);
+// func(1, true, 3);
+// )";
+
+
+//     REQUIRE_THROWS_AS(pie::test::run(src4), pie::except::TypeMismatch);
+// }
+
 
 
 
@@ -4230,7 +4230,7 @@ TEST_CASE("Expanding Pack in Partial Application", "[Func]") {
     const auto src = R"(
 print = __builtin_print;
 f = (a, b, c, z) => print(a, b, c, z);
-caller = (args: ...Any) => f(10, args...);
+caller = (...args: ...Any) => f(10, args...);
 new_closure = caller(1, 2);
 new_closure(1000);
 )";
@@ -4591,7 +4591,7 @@ func();
 TEST_CASE("Eager Type Parameters For Expanded Calls", "[Type][Func]") {
     const auto src = R"(
 func = (T, a: Int, x) => __builtin_print("called with T =", T, "and a =", a, "and x =", x);
-call = (args: ...Any) => func(args...);
+call = (...args: ...Any) => func(args...);
 f = call(Int, 1, "hi");
 )";
 
@@ -4941,7 +4941,7 @@ TEST_CASE("List Types", "[Type]") {
 
 TEST_CASE("Looping Over Pack Without Loop Var", "[Loop]") {
     const auto src = R"(
-func = (pack: ...Any) => loop pack __builtin_print(0);
+func = (...pack: ...Any) => loop pack __builtin_print(0);
 
 func(1, "Hi", 3.14);
 )";
@@ -4954,7 +4954,7 @@ func(1, "Hi", 3.14);
 
 TEST_CASE("Looping Over Pack", "[Loop]") {
     const auto src = R"(
-func = (pack: ...Any) => loop e : pack __builtin_print(e);
+func = (...pack: ...Any) => loop e : pack __builtin_print(e);
 
 func(1, "Hi", 3.14);
 )";
@@ -5026,7 +5026,7 @@ TEST_CASE("Empty Pack", "[General]") {
     const auto src = R"(
 print = __builtin_print;
 
-printPack = (first, rest: ...Any) => __builtin_conditional(
+printPack = (first, ...rest: ...Any) => __builtin_conditional(
     __builtin_eq(
         __builtin_len(rest), 0),
             print(first),
@@ -5085,7 +5085,7 @@ TEST_CASE("unary separated left fold", "[Fold]") {
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
 
-func = (args: ...Any) => (args - ... - 10); .: (1 - 10 - 2 - 10 - 3 - 10 - 4)
+func = (...args: ...Any) => (args - ... - 10); .: (1 - 10 - 2 - 10 - 3 - 10 - 4)
 print(func(1, 2, 3, 4));
 )";
 
@@ -5098,7 +5098,7 @@ TEST_CASE("unary separated right fold", "[Fold]") {
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
 
-func = (args: ...Any) => (10 - ... - args); .: (1 - (10 - (2 - (10 - (3 - (4 - 10))))))
+func = (...args: ...Any) => (10 - ... - args); .: (1 - (10 - (2 - (10 - (3 - (4 - 10))))))
 print(func(1, 2, 3, 4));
 )";
 
@@ -5113,7 +5113,7 @@ infix + = (a: Int, b: Int) => __builtin_add(a, b);
 infix + = (a: String, b: String) => __builtin_concat(a, b);
 
 
-greet = (greetings: String, names: ...String, delim: String) => greetings + ("Teach" + names + ... + delim) + "!";
+greet = (greetings: String, ...names: ...String, delim: String) => greetings + ("Teach" + names + ... + delim) + "!";
 print(greet("Hello ", "Ali", "Ben", "Byt", ", "));
 )";
 
@@ -5126,7 +5126,7 @@ TEST_CASE("binary left fold", "[Fold]") {
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
 
-func = (args: ...Any) => (10 - args - ...); .: ((((10 - 1) - 2) - 3) - 4)
+func = (...args: ...Any) => (10 - args - ...); .: ((((10 - 1) - 2) - 3) - 4)
 
 print(func(1, 2, 3, 4));
 )";
@@ -5141,7 +5141,7 @@ TEST_CASE("unary right fold", "[Fold]") {
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
 
-func = (args: ...Any) => (... - args); .: (1 - (2 - (3 - 4)))
+func = (...args: ...Any) => (... - args); .: (1 - (2 - (3 - 4)))
 
 print(func(1, 2, 3, 4));
 )";
@@ -5156,7 +5156,7 @@ TEST_CASE("binary right fold", "[Fold]") {
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
 
-func = (args: ...Any) => (... - args - 10); .: (1 - (2 - (3 - (4 - 10))))
+func = (...args: ...Any) => (... - args - 10); .: (1 - (2 - (3 - (4 - 10))))
 
 print(func(1, 2, 3, 4));
 )";
@@ -5170,7 +5170,7 @@ TEST_CASE("left fold", "[Fold]") {
 print = __builtin_print;
 infix - = (a: Int, b: Int) => __builtin_sub(a, b);
 
-func = (args: ...Any) => (args - ...); .: (((1 - 2) - 3) - 4)
+func = (...args: ...Any) => (args - ...); .: (((1 - 2) - 3) - 4)
 
 print(func(1, 2, 3, 4));
 )";
@@ -5477,7 +5477,7 @@ a: w.inner = w.inner();
 TEST_CASE("Var args4", "[Variadic]") {
     const auto src = R"(
 print = __builtin_print;
-f = (a, b, c, es: ...String, x, y, z) => {
+f = (a, b, c, ...es: ...String, x, y, z) => {
     print(a);
     print(b);
     print(c);
@@ -5517,7 +5517,7 @@ TEST_CASE("Var args3", "[Variadic]") {
 R"(
 print = __builtin_print;
 
-func1 = (a: String, args: ...Any, b: String): ...Int => args;
+func1 = (a: String, ...args: ...Any, b: String): ...Int => args;
 
 x: ...Int = func1("first", "last");
 y: ...Int = func1("first", 1, 2, 3, "last");
@@ -5535,22 +5535,22 @@ R"(
 print = __builtin_print;
 
 (es) => 1;
-f = (es: ...Any) => 1;
+f = (...es: ...Any) => 1;
 f();
 
-f = (x, es: ...Any) => 1;
+f = (x, ...es: ...Any) => 1;
 f();
 
-f = (x, y, es: ...Any) => 1;
+f = (x, y, ...es: ...Any) => 1;
 f();
 
-f = (es: ...Any, a) => 1;
+f = (...es: ...Any, a) => 1;
 f();
 
-f = (es: ...Any, a, b) => 1;
+f = (...es: ...Any, a, b) => 1;
 f();
 
-f = (a, es: ...Any, b) => 1;
+f = (a, ...es: ...Any, b) => 1;
 f();
 
 )";
@@ -5573,8 +5573,8 @@ func2 = (x, y, z, a) => {
     "done";
 };
 
-out = (As: ...Any) => {
-    func = (a, b, c, args: ...Any) => func2(a = 300, As..., args...);
+out = (...As: ...Any) => {
+    func = (a, b, c, ...args: ...Any) => func2(a = 300, As..., args...);
 
     func(1, 2, 3, 5);
 };

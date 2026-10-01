@@ -1404,6 +1404,7 @@ struct Closure : Expr {
 
     std::vector<Param> params;
     type::FuncType type;
+    std::optional<size_t> variadic_index;
     std::vector<ExprPtr> defaults;
     ExprPtr body;
 
@@ -1421,11 +1422,12 @@ struct Closure : Expr {
 
     std::vector<interp::NameSpace*> spaces;
 
-    Closure(std::vector<Param> ps, type::FuncType t, std::vector<ExprPtr> default_values, ExprPtr b, util::SourceSpan sp = {}) noexcept
+    Closure(std::vector<Param> ps, type::FuncType t, std::optional<size_t> v_index, std::vector<ExprPtr> default_values, ExprPtr b, util::SourceSpan sp = {}) noexcept
     :
     Expr{std::move(sp)},
     params{std::move(ps)},
     type{std::move(t)},
+    variadic_index{std::move(v_index)},
     defaults{std::move(default_values)},
     body{std::move(b)}
     { }
@@ -1437,22 +1439,10 @@ struct Closure : Expr {
     Closure& operator=(Closure&&) = default;
     ~Closure() = default;
 
-    // Closure(std::vector<std::string> ps, ExprPtr b, type::FuncType t)
-    // :
-    // // params{std::move(ps)},
-    // body{std::move(b)}, type{std::move(t)} {
-    //     for (auto& s : ps)
-    //         params.emplace_back(std::move(s));
-
-
-    //     if(params.size() != type.params.size()) util::error(); // should never happen anyway
-    // }
-
 
     void inSpace(const std::vector<interp::NameSpace*>& sps) {
         spaces = sps;
     }
-
 
     // const as in doesn't change params or body.
     void capture(const value::Environment& e) {

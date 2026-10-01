@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdio>
+#include <optional>
 #include <print>
 #include <filesystem>
 #include <memory>
@@ -1285,10 +1286,20 @@ public:
         std::vector<expr::Closure::Param> params;
         std::vector<type::TypePtr> params_types;
         std::vector<expr::ExprPtr> default_values;
+        std::optional<size_t> variadic_index;
 
         if (not match(R_PAREN)) {
-            do {
+            size_t i {};
+            do { ++i;
+
                 constexpr auto DONT_PARSE_TYPE = false;
+
+                if (match(ELLIPSIS)) {
+                    if (not variadic_index)
+                        variadic_index = i - 1; // it guranteed to be at least 1 here
+                    else
+                        util::error<except::SyntaxError>("Cannot have more than 1 variadic parameter in a closure!");
+                }
 
                 // check for unpackments first.
                 if (check(L_BRACE)) {
@@ -1303,18 +1314,24 @@ public:
 
                 if (auto s = expr::is<expr::Syntax>(param.get())) {
                     if (not default_values.empty())
-                        util::error("All default values must be at the end of the parameter list");
+                        util::error("Syntax parameter's can't come after defaulted parameters!");
 
                     params.push_back(expr::Closure::RegularParam{s->expr, -1, true});
-                    params_types.push_back(type::builtins::_());
+                    // params_types.push_back(type::builtins::_());
+                    params_types.push_back(type::builtins::Syntax());
                 }
                 else {
                     params.push_back(expr::Closure::RegularParam{param});
 
                     if (match(COLON))
                         params_types.push_back(parseType());
-                    else 
-                        params_types.push_back(type::builtins::_()); // not `Any`, but `_` in case `Any` was assigned to
+                    else {
+                        // not `Any`, but `_` in case `Any` was assigned to
+                        if (i - 1 == variadic_index) 
+                            params_types.push_back(type::VariadicOf(type::builtins::_()));
+                        else
+                            params_types.push_back(type::builtins::_());
+                    }
 
 
                     if (match(ASSIGN))
@@ -1329,12 +1346,13 @@ public:
         }
 
 
-        for (bool found{}; auto&& type : params_types) {
-            if (type::isVariadic(type)) {
-                if  (found) util::error<except::SyntaxError>("Variadic parameters can only appear once in parameter list!");
-                else found = true;
-            }
-        }
+        // check uneeded
+        // for (bool found{}; auto&& type : params_types) {
+        //     if (type::isVariadic(type)) {
+        //         if  (found) util::error<except::SyntaxError>("Variadic parameters can only appear once in parameter list!");
+        //         else found = true;
+        //     }
+        // }
 
 
         type::TypePtr return_type = match(COLON) ? parseType() : type::builtins::_();
@@ -1344,6 +1362,7 @@ public:
         return std::make_shared<expr::Closure>(
             std::move(params),
             type::FuncType{std::move(params_types), std::move(return_type)},
+            std::move(variadic_index),
             std::move(default_values),
             closureBody()
         );
@@ -2007,10 +2026,27 @@ public:
             return std::make_shared<expr::Closure>(
                 std::vector<expr::Closure::Param>{},
                 type::FuncType{{}, std::move(return_type)},
-                std::vector<expr::ExprPtr>{},
+                std::optional<size_t>{},      // variadic index
+                std::vector<expr::ExprPtr>{}, // default values
                 closureBody()
             );
         }
+
+
+        const bool closure_expr = [this] {
+            size_t i{};
+            for (; /* not atEnd(i) and */ not check(R_PAREN , i); ++i) {
+                if (check(L_BRACE, i)) while (not check(R_BRACE, i)) ++i;
+                if (check(L_PAREN, i)) while (not check(R_PAREN, i)) ++i;
+            }
+            ++i;
+
+            return (CTX != Context::MAP and check(COLON, i)) or check(FAT_ARROW, i); // ( ... ): OR ( ... ) =>
+        }();
+
+
+        if (closure_expr) return closure();
+
 
         // todo: fix this algorithm
         const bool fold_expr = [this] {
@@ -2029,21 +2065,6 @@ public:
         if (fold_expr) return parseFoldExpr();
 
         // auto exprs = parseCommaList();
-
-
-        const bool closure_expr = [this] {
-            size_t i{};
-            for (; /* not atEnd(i) and */ not check(R_PAREN , i); ++i) {
-                if (check(L_BRACE, i)) while (not check(R_BRACE, i)) ++i;
-                if (check(L_PAREN, i)) while (not check(R_PAREN, i)) ++i;
-            }
-            ++i;
-
-            return (CTX != Context::MAP and check(COLON, i)) or check(FAT_ARROW, i); // ( ... ): OR ( ... ) =>
-        }();
-
-
-        if (closure_expr) return closure();
 
 
         // just a grouping `(x)`
