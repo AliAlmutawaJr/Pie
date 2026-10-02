@@ -4,7 +4,7 @@
 
 
 #include "../Utils/utils.hxx"
-#include "../Utils/Exceptions.hxx"
+#include "../Diagnostic/Exceptions.hxx"
 #include "../Declarations.hxx"
 #include "../Expr/Expr.hxx"
 

@@ -10,13 +10,20 @@
 
 
 #include "CLI/CLI.hxx"
-#include "Utils/Exceptions.hxx"
+#include "Diagnostic/Exceptions.hxx"
+#include "Diagnostic/Diagnostic.hxx"
 #include "Utils/utils.hxx"
 
 
 #if WEB_PIE
-extern "C" EMSCRIPTEN_KEEPALIVE void execute(const char *code) {
+extern "C" EMSCRIPTEN_KEEPALIVE void execute(const char *code) try {
     pie::cli::run(std::string{code}, false, false, false);
+}
+catch (const std::exception& e) {
+    std::println(std::cerr, "{}", pie::err::render(e));
+}
+catch (...) {
+    std::println(std::cerr, "Unknown Exception!");
 }
 #endif
 
@@ -39,23 +46,21 @@ static int pieMain(int argc, char *argv[]) {
 
     std::string_view fname;
 
-    // this would leave file name at argv[1]
-    for(; argc > 1; --argc, ++argv) {
-        if      (argv[1] == "-t"sv  or argv[1] == "--tokens"sv ) print_tokens       = true;
-        else if (argv[1] == "-a"sv  or argv[1] == "--ast"sv    ) print_parsed       = true;
-        else if (argv[1] == "-h"sv  or argv[1] == "--help"sv   ) print_help         = true;
-        else if (argv[1] == "-i"sv  or argv[1] == "--ins"sv    ) print_ins          = true;
-        else if (argv[1] == "-n"sv  or argv[1] == "--norun"sv  ) norun              = true;
-        else if (argv[1] == "-vm"sv or argv[1] == "--machine"sv) vm                 = true;
-        else if (argv[1] == "-c"sv  or argv[1] == "--command"sv) command            = true;
-        else if (argv[1] == "-r"sv  or argv[1] == "--repl"sv   ) repl               = true;
-        else if (not fname.empty()) pie::util::error<pie::except::UknownOption>("Unrecognized Option: "s + argv[1]);
-        else fname = argv[1];
-    }
-
-
-
     try {
+        // this would leave file name at argv[1]
+        for(; argc > 1; --argc, ++argv) {
+            if      (argv[1] == "-t"sv  or argv[1] == "--tokens"sv ) print_tokens       = true;
+            else if (argv[1] == "-a"sv  or argv[1] == "--ast"sv    ) print_parsed       = true;
+            else if (argv[1] == "-h"sv  or argv[1] == "--help"sv   ) print_help         = true;
+            else if (argv[1] == "-i"sv  or argv[1] == "--ins"sv    ) print_ins          = true;
+            else if (argv[1] == "-n"sv  or argv[1] == "--norun"sv  ) norun              = true;
+            else if (argv[1] == "-vm"sv or argv[1] == "--machine"sv) vm                 = true;
+            else if (argv[1] == "-c"sv  or argv[1] == "--command"sv) command            = true;
+            else if (argv[1] == "-r"sv  or argv[1] == "--repl"sv   ) repl               = true;
+            else if (not fname.empty()) pie::util::error<pie::except::UknownOption>("Unrecognized Option: "s + argv[1]);
+            else fname = argv[1];
+        }
+    
 
         if (command) {
             pie::cli::run(std::string{fname}, print_tokens, print_parsed, norun);
@@ -85,7 +90,8 @@ static int pieMain(int argc, char *argv[]) {
         }
     }
     catch(const std::exception& e) {
-        std::println(std::cerr, "{}", e.what());
+        // std::println(std::cerr, "{}", e.what());
+        std::println(std::cerr, "{}", pie::err::render(e));
         return 1;
     }
     catch (...) {

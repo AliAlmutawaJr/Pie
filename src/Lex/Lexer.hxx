@@ -38,7 +38,7 @@ enum class CharClass {
 [[nodiscard]] token::Tokens lex(
     const std::string& src,
     const bool check_for_semis = true,
-    const std::string_view file = ""
+    const std::string& file = ""
 );
 
 

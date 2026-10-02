@@ -19,7 +19,7 @@ namespace util {
     struct SourceSpan {
         using Span = std::pair<SourceLocation, SourceLocation>;
         Span span;
-        std::string_view file = "";
+        std::string file = "";
     };
 
 }

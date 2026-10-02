@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "../Lex/Token.hxx"
+#include "../Diagnostic/Exceptions.hxx"
 
 
 
@@ -58,6 +59,27 @@ template <typename Except = std::runtime_error>
 {
     error<Except>("[no diagnostic]. If you see this, please file a bug report!", location);
 }
+
+
+template <typename Except = except::Error>
+[[noreturn]] inline void error(
+    const SourceSpan& span,
+    std::string_view msg,
+    const std::source_location& location = std::source_location::current()
+)
+{
+
+    // can turn this into a compile time check!
+    try {
+        error<Except>(msg, location);
+    }
+    catch (except::LocatedError& e) {
+        if (span.span.first.line != 0) e.span = span;
+
+        throw; // rethrow
+    }
+}
+
 
 
 [[noreturn]] void expected(const token::TokenKind exp, const token::Token& got, const std::source_location& location = std::source_location::current());

@@ -7,7 +7,8 @@
 
 #include "../Lex/Lexer.hxx"
 #include "../Parser/Parser.hxx"
-#include "../Utils/Exceptions.hxx"
+#include "../Diagnostic/Exceptions.hxx"
+#include "Diagnostic/Sources.hxx"
 #include "Expr/Expr.hxx"
 
 
@@ -892,8 +893,10 @@ void LexicalAnalysis::operator()(expr::Import *import) {
     if (import->path == "self") return;
 
 
-    const auto src = util::readFile(auto{import->path}.replace_extension(".pie").string());
-    const token::Tokens tokens = lex::lex(src);
+    const auto path = auto{import->path}.replace_extension(".pie").string();
+    const auto src = util::readFile(path);
+    util::sources.insert({path, src});
+    const token::Tokens tokens = lex::lex(std::move(src), true, std::move(path));
     if (tokens.empty()) util::error("Can't import an empty file!");
 
     parse::Parser p{std::move(tokens), import->path};

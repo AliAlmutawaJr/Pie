@@ -16,9 +16,9 @@
 #include <type_traits>
 #include <variant>
 
-#include "../Utils/ConstexprLookup.hxx"
-#include "../Utils/Exceptions.hxx"
 #include "../Utils/utils.hxx"
+#include "../Utils/ConstexprLookup.hxx"
+#include "../Diagnostic/Exceptions.hxx"
 #include "Value/Value.hxx"
 
 

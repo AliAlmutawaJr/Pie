@@ -5,6 +5,8 @@
 
 #include "../Lex/Lexer.hxx"
 // #include "../Preprocessor/Preprocessor.hxx"
+#include "../Diagnostic/Sources.hxx"
+#include "../Diagnostic/Diagnostic.hxx"
 #include "../Parser/Parser.hxx"
 #include "../Analysis/LexicalAnalysis.hxx"
 #include "../Interp/Interpreter.hxx"
@@ -44,7 +46,9 @@ namespace cli {
             if (line.back() != ';') line += ';';
 
 
-            token::Tokens v = lex::lex(std::move(line));
+            constexpr auto SOURCE = "<REPL>";
+            util::sources[SOURCE] = line;
+            token::Tokens v = lex::lex(std::move(line), true, SOURCE);
             if (print_tokens) std::println(std::clog, "{}", v);
 
             // if (v.empty()) continue;
@@ -74,7 +78,8 @@ namespace cli {
             }
         }
         catch(const std::exception &e) {
-            std::clog << e.what() << std::endl;
+            // std::cerr << e.what() << std::endl;
+            std::cerr << err::render(e) << std::endl;
         }
     }
 
@@ -88,11 +93,12 @@ namespace cli {
         const bool print_ins,
         const bool vm
     ) {
-        auto src = util::readFile(fname.string());
+        auto src = util::readFile(fname);
 
-        auto processed_src = std::move(src);
+        const auto filename = fname.string();
+        util::sources.insert({filename, src});
 
-        token::Tokens v = lex::lex(std::move(processed_src));
+        token::Tokens v = lex::lex(std::move(src), true, filename);
         if (print_tokens) std::println(std::clog, "{}", v);
 
         if (v.empty()) return;
@@ -151,7 +157,11 @@ namespace cli {
         const bool print_parsed,
         const bool norun
     ) {
-        token::Tokens v = lex::lex(std::move(src));
+        constexpr auto SOURCE = "<input>";
+        // util::sources.insert({"<input>"}, src);
+        util::sources[SOURCE] = src;
+
+        token::Tokens v = lex::lex(std::move(src), true, SOURCE);
         if (print_tokens) std::println(std::clog, "{}", v);
 
         if (v.empty()) return;

@@ -20,7 +20,7 @@
 #include <cassert>
 
 
-#include "../Utils/Exceptions.hxx"
+#include "../Diagnostic/Exceptions.hxx"
 #include "../Lex/Token.hxx"
 #include "../Lex/Lexer.hxx"
 #include "../Expr/Expr.hxx"
@@ -150,7 +150,7 @@ public:
 
                     // most operators are 1 or 2 chars long
                     if (t.text.length() > 2) msg += " Did you, perhaps, forget a ';' on the previous line?";
-                    util::error<except::OperatorError>(msg); //  + '\n' + expressions.back()->stringify()
+                    util::error<except::OperatorError>(t.span, msg); //  + '\n' + expressions.back()->stringify()
                 }
                 util::expected(token::TokenKind::SEMI, t);
             }
@@ -1506,6 +1506,8 @@ public:
         return std::make_shared<expr::Map>(std::move(exprs));
     }
 
+
+
     expr::ExprPtr comprehension() {
         using enum token::TokenKind;
 
@@ -2136,7 +2138,7 @@ public:
                 //* I can fix this. Check if the name is the first or not and error accordingly!
                 case EXFIX: {
                     const auto& op = dynamic_cast<const expr::Exfix*>(findOp(token.text).get());
-                    if (token.text != op->name2) util::error<except::OperatorError>("Open exfix operator found where closing one was expected!");
+                    if (token.text != op->name2) util::error<except::OperatorError>(token.span, "Open exfix operator found where closing one was expected!");
 
                     return left;
                 }
@@ -2149,8 +2151,8 @@ public:
                     // // in the middle of parsing a OpCall. Do nothing.
                     // if (token.text != op->name)  return left;
 
-                    if (token.text != op->name) util::error<except::OperatorError>("Must start operator with `" + op->name + "` instead of `" + token.text + '`');
-                    if (op->op_pos[0]) util::error<except::OperatorError>("Operator '" + op->name + "' has to come before an expression!");
+                    if (token.text != op->name) util::error<except::OperatorError>(token.span, "Must start operator with `" + op->name + "` instead of `" + token.text + '`');
+                    if (op->op_pos[0]) util::error<except::OperatorError>(token.span, "Operator '" + op->name + "' has to come before an expression!");
                     // if (op->op_pos[0]) util::error<except::OperatorError>("Operator '" + token.text + "' has to come before an expression!");
 
 
@@ -2176,7 +2178,7 @@ public:
                     return std::make_shared<expr::OpCall>(op->name, op->rest, std::move(exprs), op->op_pos);
                 }
 
-                default: util::error<except::OperatorError>("prefix operator used as [inf/suf]fix");
+                default: util::error<except::OperatorError>(token.span, "prefix operator used as [inf/suf]fix");
             }
         }
 
@@ -2198,14 +2200,14 @@ public:
 
                 auto ret = std::make_shared<expr::CircumOp>(op->name, op->name2, parseExpr());
 
-                if (not match(op->name2)) util::error<except::OperatorError>("Exfix operator not closed!");
+                if (not match(op->name2)) util::error<except::OperatorError>(token.span, "Exfix operator not closed!");
 
                 return ret;
             }
 
             case MIXFIX: {
                 auto op = dynamic_cast<const expr::Operator*>(findPrefixOp(token.text).get());
-                if (not op->op_pos[0]) util::error<except::OperatorError>("Operator '" + token.text + "' has to come after an expression!");
+                if (not op->op_pos[0]) util::error<except::OperatorError>(token.span, "Operator '" + token.text + "' has to come after an expression!");
 
                 const int prec = prec::calculate(op->high, op->low, consolidateOps());
 
@@ -2226,7 +2228,7 @@ public:
 
             default:
                 // log();
-                util::error<except::OperatorError>("[in/suf]fix operator '" + token.text + "' used as [pre/ex]fix");
+                util::error<except::OperatorError>(token.span, "[in/suf]fix operator '" + token.text + "' used as [pre/ex]fix");
         }
     }
 
@@ -2321,7 +2323,7 @@ public:
 
         // technically I can report this error 2 lines earlier, but printing out the operator name could be very handy!
         if (high == low and (prec::precedenceOf(high, consolidated) == prec::HIGH_VALUE or prec::precedenceOf(low, consolidated) == prec::LOW_VALUE))
-            util::error<except::OperatorError>("Can't have set operator precedence to only LOW/HIGH: " + name);
+            util::error<except::OperatorError>(token.span, "Can't have set operator precedence to only LOW/HIGH: " + name);
 
         checkOperator(token.kind, name, high, low);
 
@@ -2354,18 +2356,18 @@ public:
 
         const expr::ExprPtr func = parseExpr();
         const expr::Closure *c = dynamic_cast<expr::Closure*>(func.get());
-        if (not c) util::error<except::OperatorError>("[pre/in/suf] fix operator has to be equal to a function!");
+        if (not c) util::error<except::OperatorError>(token.span, "[pre/in/suf] fix operator has to be assigned to a function!");
 
 
         // do error checking now
         if (token.kind == PREFIX) {
-            if (c->params.size() != 1) util::error<except::OperatorError>("Prefix operator must be assigned to a unary closure!");
+            if (c->params.size() != 1) util::error<except::OperatorError>(token.span, "Prefix operator must be assigned to a unary closure!");
         }
         else if (token.kind == INFIX) {
-            if (c->params.size() != 2) util::error<except::OperatorError>("Infix operator must be assigned to a binary closure!");
+            if (c->params.size() != 2) util::error<except::OperatorError>(token.span, "Infix operator must be assigned to a binary closure!");
         }
         else /* if (token.kind == SUFFIX) */ {
-            if (c->params.size() != 1) util::error<except::OperatorError>("Suffix operator must be assigned to a unary closure!");
+            if (c->params.size() != 1) util::error<except::OperatorError>(token.span, "Suffix operator must be assigned to a unary closure!");
         }
 
 
@@ -2392,10 +2394,12 @@ public:
     expr::ExprPtr exfixOperator() {
         using enum token::TokenKind;
 
-        std::string name1 = consume(NAME).text;
+        auto token1 = consume(NAME);
         consume(COLON);
-        std::string name2 = consume(NAME).text;
+        auto token2 = consume(NAME);
 
+        std::string name1 = token1.text;
+        std::string name2 = token2.text;
 
         std::shared_ptr<expr::Fix> p = std::make_shared<expr::Exfix>(
             name1, name2, prec::LOW, prec::LOW, 0
@@ -2420,7 +2424,7 @@ public:
             auto ex = dynamic_cast<const expr::Exfix*>(op.get());
 
             if (ex->name != name1 or ex->name2 != name2) {
-                util::error<except::OperatorError>("Overload set of exfix operator must all have the same operator name `" + ex->name + " : " + ex->name2 + '`');
+                util::error<except::OperatorError>(token1.span, "Overload set of exfix operator must all have the same operator name `" + ex->name + " : " + ex->name2 + '`');
             }
 
         }
@@ -2437,8 +2441,8 @@ public:
 
         expr::ExprPtr func = parseExpr();
         expr::Closure *c = dynamic_cast<expr::Closure*>(func.get());
-        if (not c                ) util::error<except::OperatorError>("Exfix operator has to be equal to a function!");
-        if (c->params.size() != 1) util::error<except::OperatorError>("Exfix operator must be assigned to a unary closure!");
+        if (not c                ) util::error<except::OperatorError>(token1.span,"Exfix operator has to be assigned to a function!");
+        if (c->params.size() != 1) util::error<except::OperatorError>(token1.span,"Exfix operator must be assigned to a unary closure!");
 
 
         p->funcs.push_back(func);
@@ -2469,14 +2473,14 @@ public:
             return low;
         }();
 
-        consume(R_PAREN);
+        auto t = consume(R_PAREN);
 
         // const bool begins_with_expr = match(COLON);
 
         std::vector<bool> op_pos;
         std::string first;
 
-        if (match(SCOPE_RESOLVE)) util::error<except::OperatorError>("Mixfix operator may only require 1 argument before an operator name!");
+        if (match(SCOPE_RESOLVE)) util::error<except::OperatorError>(t.span, "Mixfix operator may only require 1 argument before an operator name!");
 
         if (match(COLON)) {
             op_pos.push_back(false);
@@ -2511,10 +2515,6 @@ public:
 
 
         if (opsContain(first) or prefixOpsContain(first)) {
-
-            // How THE FUCK did this used not to error??
-            // const auto& op = findOp(first);
-
             const auto& op = [this, is_prefix, &first] -> auto& {
                 if (is_prefix) return findPrefixOp(first);
                 else return findOp(first);
@@ -2543,7 +2543,7 @@ public:
 
         expr::ExprPtr func = parseExpr();
         expr::Closure *c = dynamic_cast<expr::Closure*>(func.get());
-        if (not c) util::error<except::OperatorError>("Operators have to be equal to a function!");
+        if (not c) util::error<except::OperatorError>(t.span, "Operators have to be assigned to a function!");
 
 
         if (
@@ -2562,7 +2562,7 @@ public:
             }
 
             const std::string& n = std::to_string(param_count);
-            util::error<except::OperatorError>("Operator '" + op_name + "' must be assigned to a closure with " + n + " parameters!");
+            util::error<except::OperatorError>(t.span, "Operator '" + op_name + "' must be assigned to a closure with " + n + " parameters!");
         }
 
 
@@ -2674,7 +2674,10 @@ public:
 
     token::Token lookAhead(const size_t distance = 0, const std::source_location& loc = std::source_location::current()) {
         while (distance >= red.size()) {
-            if (atEnd()) util::error("out of token!", loc);
+            // const util::SourceSpan last = token_iterator == iterator_beginning ? util::SourceSpan{} : std::prev(token_iterator)->span;
+            // point to last token's span if out of tokens!
+            if (atEnd()) util::error(std::prev(token_iterator)->span, "out of tokens!", loc);
+
             red.push_back(*token_iterator++);
         }
 

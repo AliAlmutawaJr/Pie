@@ -4,14 +4,13 @@
 #include <sstream>
 
 #include "../Lex/Token.hxx"
-#include "../Utils/Exceptions.hxx"
+#include "../Diagnostic/Exceptions.hxx"
 
 
-namespace pie {
-namespace util {
+namespace pie::util {
 
 [[noreturn]] void expected(const token::TokenKind exp, const token::Token& got, const std::source_location& location) {
-    error<except::UnexpectedToken>(std::string{"Expected token "} + stringify(exp) + " and found " + stringify(got.kind) + ": " + got.text, location);
+    error<except::UnexpectedToken>(got.span, std::string{"Expected token "} + stringify(exp) + " and found " + stringify(got.kind) + ": " + got.text, location);
 }
 
 [[noreturn]] void expected(const token::TokenKind exp, const token::TokenKind got, const std::source_location& location) {
@@ -19,7 +18,7 @@ namespace util {
 }
 
 [[noreturn]] void expected(const std::string& exp, const token::Token& got, const std::source_location& location) {
-    error<except::UnexpectedToken>(std::string{"Expected '"} + exp + "' and found " + stringify(got.kind) + ": " + got.text, location);
+    error<except::UnexpectedToken>(got.span, std::string{"Expected '"} + exp + "' and found " + stringify(got.kind) + ": " + got.text, location);
 }
 
 
@@ -75,5 +74,4 @@ std::filesystem::path getPiePath() {
 }
 
 
-} // namespace util
-} // namespace pie
+} // namespace pie::util

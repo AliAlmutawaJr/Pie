@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Declarations.hxx"
+#include "Diagnostic/Sources.hxx"
 #include "Lex/Token.hxx"
 #include <string>
 #include <string_view>
@@ -33,8 +34,8 @@
 
 #include "../Functions/BuiltinFunctions.hxx"
 #include "../Utils/utils.hxx"
-#include "../Utils/Exceptions.hxx"
 #include "../Utils/ConstexprLookup.hxx"
+#include "../Diagnostic/Exceptions.hxx"
 #include "../Lex/Lexer.hxx"
 #include "../Analysis/LexicalAnalysis.hxx"
 #include "../Expr/Expr.hxx"
@@ -2540,8 +2541,10 @@ There are no mistakes with art.)";
         if (import->path == "self") return zenOfPie();
 
 
-        const auto src = util::readFile(auto{import->path}.replace_extension(".pie").string());
-        const token::Tokens tokens = lex::lex(src);
+        const auto path = auto{import->path}.replace_extension(".pie").string();
+        const auto src = util::readFile(path);
+        util::sources.insert({path, src});
+        const token::Tokens tokens = lex::lex(std::move(src), true, std::move(path));
         if (tokens.empty()) util::error("Can't import an empty file!");
 
         Parser p{std::move(tokens), import->path};

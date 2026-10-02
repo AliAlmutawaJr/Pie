@@ -4,7 +4,7 @@
 
 #include "Token.hxx"
 #include "../Utils/utils.hxx"
-#include "../Utils/Exceptions.hxx"
+#include "../Diagnostic/Exceptions.hxx"
 
 
 namespace pie {
@@ -127,7 +127,7 @@ CharClass classify(const char c) noexcept {
 }
 
 
-token::Tokens lex(const std::string& src, const bool check_for_semis, const std::string_view file) {
+token::Tokens lex(const std::string& src, const bool check_for_semis, const std::string& file) {
     token::TokenLines lines = {{}};
     token::Tokens line;
 
