@@ -165,12 +165,12 @@ func(two=1, 1);
 
 ### Variadic Functions
 
-A function can have at most **one** variadic parameter. The variadic parameter can be anywhere in the parameter list.
+A function can have at most **one** variadic parameter. The variadic parameter can be anywhere in the parameter list:
 
-The variadic argument has to be annotated with a type with leading ellipsis `...<type>`:
+<!-- The variadic argument has to be annotated with a type with leading ellipsis `...<type>`: -->
 
 ```pie
-getLast = (all: ...Any, last) => last;
+getLast = (...all, last) => last;
 
 x = getLast(1, 2, 3);
 ```
@@ -179,9 +179,9 @@ x = getLast(1, 2, 3);
 
 Use the trailing `...` to expand a pack:
 ```pie
-getFirst = (first, rest: ...Any) => first;
+getFirst = (first, ...rest) => first;
 
-forward = (args: ...Any) => getFirst(args...);
+forward = (...args) => getFirst(args...);
 ```
 
 ## Classes
@@ -641,10 +641,10 @@ The `1 + 2` calls the first operator. `"Hi" + "Bye"` calls the second!
 ## Packs
 Packs in Pie are analogous to C++'s packs. One can only declare a pack as a function parameter:
 ```pie
-func = (pack: ...Any) => __builtin_print(pack);
+func = (...pack) => __builtin_print(pack);
 func(1, "Hello", 3.14);
 ```
-Note that to declare a pack, the argument **MUST** be given a type preceded by ellipses. Packs may be empty.
+<!-- Note that to declare a pack, the argument **MUST** be given a type preceded by ellipses. Packs may be empty. -->
 
 #### Fold Expressions:
 Pie supports Fold Expressions, much like C++:
