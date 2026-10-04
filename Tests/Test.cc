@@ -12,6 +12,50 @@
 
 
 
+TEST_CASE("Big Int Literal", "[Big]") {
+{
+    const auto src = R"(
+x = 12346789987654321234567898765432134567876543213456789019283746565748392010298376483981272;
+__builtin_print(x);
+)";
+
+    REQUIRE(pie::test::run(src) == "12346789987654321234567898765432134567876543213456789019283746565748392010298376483981272");
+}
+}
+
+
+TEST_CASE("Big Int!", "[Big]") {
+{
+    const auto src = R"(
+a = 1;
+b = 0;
+
+i = 0;
+loop {
+    __builtin_conditional(
+        __builtin_gt(i, 298),
+        break "",
+        ""
+    );
+
+    x = a;
+    a = __builtin_add(a, b);
+    b = x;
+    i = __builtin_add(i, 1);
+};
+i = __builtin_add(i, 1);
+
+
+__builtin_print("fib of {i} is {a}");
+
+)";
+
+    REQUIRE(pie::test::run(src) == "fib of 300 is 222232244629420445529739893461909967206666939096499764990979600");
+}
+}
+
+
+
 TEST_CASE("Unpackmeters Packs with Nested Packs", "[Class][Param]") {
 {
     const auto src = R"(

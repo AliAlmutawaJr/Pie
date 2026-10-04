@@ -3,6 +3,7 @@
 #include "Declarations.hxx"
 #include "Diagnostic/Sources.hxx"
 #include "Lex/Token.hxx"
+#include <limits>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -33,8 +34,8 @@
 
 
 #include "../Functions/BuiltinFunctions.hxx"
+#include "../Functions/ConstexprLookup.hxx"
 #include "../Utils/utils.hxx"
-#include "../Utils/ConstexprLookup.hxx"
 #include "../Diagnostic/Exceptions.hxx"
 #include "../Lex/Lexer.hxx"
 #include "../Analysis/LexicalAnalysis.hxx"
@@ -207,7 +208,7 @@ public:
 
         // have to do an if rather than ternary so the return value isn't always coerced into doubles
         if (n->num.find('.') != std::string::npos) return {std::stod(n->num), type::builtins::Double()};
-        else return {std::stoll(n->num), type::builtins::Int()};
+        else return {BigInt{n->num}, type::builtins::Int()};
     }
 
 
@@ -6039,13 +6040,26 @@ There are no mistakes with art.)";
 
 
             const auto& str = get<std::string>(value1);
-            auto start = std::max<BigInt> (get<BigInt>(start_v), 0);
-            const auto end = std::clamp<BigInt>(get<BigInt>(  end_v), 0, (BigInt)(str.length()));
+            auto start_big = std::max<BigInt> (get<BigInt>(start_v), 0);
+
+            if (start_big >= std::numeric_limits<size_t>::max() or start_big < 0)
+                util::error("Index: " + start_big.str() + " is too large for slice!");
+
+            auto start = start_big.convert_to<size_t>();
+
+            const auto end = std::clamp<BigInt>(get<BigInt>(end_v), 0, (BigInt)(str.length()));
             const auto stride = get<BigInt>(stride_v);
 
             std::string ret;
-            for (; start < end; start += stride)
+            for (; start < end; ) {
                 ret += str[start];
+
+                constexpr auto max = std::numeric_limits<size_t>::max();
+                const auto res = start + stride;
+                if (res >= max) break;
+
+                start = static_cast<size_t>(res);
+            }
 
             return ret;
         }
@@ -6174,7 +6188,7 @@ There are no mistakes with art.)";
 
 
 
-        deferred[deferred.size() - 1 - depth].emplace_back(args[0], env.back());
+        deferred[deferred.size() - 1 - depth.convert_to<size_t>()].emplace_back(args[0], env.back());
 
         return args.front()->variant();
     }
@@ -6287,7 +6301,7 @@ There are no mistakes with art.)";
                     const auto type_id = get<BigInt>(type);
 
                     if (not (type_id >= 0 or type_id <= FFI_TYPE_LAST) and type_id != FFI_TYPE_CSTRING)
-                        util::error("Invalid C Type: " + std::to_string(type_id));
+                        util::error("Invalid C Type: " + type_id.str());
 
                     // Pointer-to-struct(s): inferred from the shape of the
                     // Pie value actually passed, not from anything declared

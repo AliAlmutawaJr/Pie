@@ -31,7 +31,8 @@ std::string stringify(const Value& value, const size_t indent, const bool show_h
     else if (std::holds_alternative<BigInt>(value)) {
         const auto& v = std::get<BigInt>(value);
 
-        s = std::to_string(v);
+        // s = std::to_string(v);
+        s = v.str();
     }
 
     else if (std::holds_alternative<double>(value)) {

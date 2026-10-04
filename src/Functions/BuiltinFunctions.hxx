@@ -4,22 +4,27 @@
 #include <fstream>
 #include <iterator>
 #include <cstdio>
+#include <limits>
 #include <random>
-#include <cmath>
-
-#include <dlfcn.h>
-
 #include <ranges>
-#include <stdx/tuple.hpp>
 #include <ffi.h>
 #include <string>
 #include <type_traits>
 #include <variant>
 
+#include <dlfcn.h>
+
+
+#include <stdx/tuple.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
+#include <boost/multiprecision/cpp_bin_float.hpp>
+#include <boost/random/uniform_int_distribution.hpp>
+
+#include "Declarations.hxx"
+#include "ConstexprLookup.hxx"
 #include "../Utils/utils.hxx"
-#include "../Utils/ConstexprLookup.hxx"
 #include "../Diagnostic/Exceptions.hxx"
-#include "Value/Value.hxx"
+#include "../Value/Value.hxx"
 
 
 // for libffi
@@ -31,6 +36,19 @@
 namespace pie {
 inline namespace funcs {
 inline namespace builtins {
+
+
+inline auto handleNums(const auto& a, const auto& b, const auto& op) {
+    using T1 = std::remove_cvref_t<decltype(a)>;
+    using T2 = std::remove_cvref_t<decltype(b)>;
+
+    if constexpr (std::is_same_v<T1, T2>)
+        return op(a, b);
+    else if constexpr (std::is_same_v<T1, BigInt>)
+        return op(a.template convert_to<T2>(), b);
+    else
+        return op(a, b.template convert_to<T1>());
+}
 
 
 //* ============================ FUNCTIONS ============================
@@ -55,7 +73,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 std::getline(std::cin, out);
                 if (not std::ranges::all_of(out, isdigit)) util::error("'__builtin_input_int' recieved a non-int \"" + out + "\"!");
 
-                return std::stoll(out);
+                return BigInt{out};
             }),
             void
         >
@@ -106,7 +124,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"abs">,
         Func<
-            decltype([](const auto& x, const auto&) { return std::abs(x); }),
+            decltype([](const auto& x, const auto&) {
+                return x < 0 ? -1 * x : x;
+            }),
             TypeList<BigInt>,
             TypeList<double>
         >
@@ -124,15 +144,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"to_int">,
         Func<
             decltype([](const auto& x, const auto&) -> BigInt {
-                if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, std::string>)
-                    return std::stoll(x);
-
-                // if constexpr (
-                //     std::is_same_v<std::remove_cvref_t<decltype(x)>, BigInt> or
-                //     std::is_same_v<std::remove_cvref_t<decltype(x)>, double> or
-                //     std::is_same_v<std::remove_cvref_t<decltype(x)>, bool>
-                // )
-                else return x;
+                return BigInt{x};
             }),
             TypeList<BigInt>,
             TypeList<double>,
@@ -153,7 +165,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 //     std::is_same_v<std::remove_cvref_t<decltype(x)>, double> or
                 //     std::is_same_v<std::remove_cvref_t<decltype(x)>, bool>
                 // )
-                else return x;
+                else return double(x);
             }),
             TypeList<BigInt>,
             TypeList<double>,
@@ -363,9 +375,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     }
 
                     const auto type = that->typeOf(cont);
-                    const auto& list_type = dynamic_cast<const type::ListType&>(*type);
+                    [[maybe_unused]] const auto& list_type = dynamic_cast<const type::ListType&>(*type);
 
-                    cont.elts->values.insert(std::next(cont.elts->values.begin(), ind), value);
+                    cont.elts->values.insert(std::next(cont.elts->values.begin(), size_t(ind)), value);
                     // cont.elts->values.insert(std::next(cont.elts->values.begin(), ind), that->typeCheck(value, list_type.type));
                 }
                 // else if constexpr (std::is_same_v<T, value::Map>) {
@@ -386,7 +398,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     //     util::error("Cannot call `insert_at` with a non-string value: " + value::stringify(value));
                     // }
 
-                    cont.insert(ind, value);
+                    cont.insert(size_t(ind), value);
                 }
 
                 return value;
@@ -412,8 +424,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                         else util::error("Index out of range inside call to `remove_at`!");
                     }
 
-                    const auto value = cont.elts->values[ind];
-                    cont.elts->values.erase(std::next(cont.elts->values.begin(), ind));
+                    const auto value = cont.elts->values[size_t(ind)];
+                    cont.elts->values.erase(std::next(cont.elts->values.begin(), size_t(ind)));
                     return value;
                 }
                 else if constexpr (std::is_same_v<T, value::Map>) {
@@ -431,8 +443,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                         else util::error("Index out of range inside call to `remove_at`!");
                     }
 
-                    const std::string elt = {cont[ind]};
-                    cont.erase(ind, 1);
+                    const std::string elt = {cont[size_t(ind)]};
+                    cont.erase(size_t(ind), 1);
                     return elt;
                 }
 
@@ -468,9 +480,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
                 if constexpr (std::is_same_v<T, value::List>) {
                     if (ind < 0 or size_t(ind) >= a.elts->values.size())
-                        util::error("Accessing list '" + stringify(a) + "' at index '" + std::to_string(ind) + "' which is out of bounds!");
+                        util::error("Accessing list '" + stringify(a) + "' at index '" + ind.str() + "' which is out of bounds!");
 
-                    return a.elts->values[ind]; 
+                    return a.elts->values[size_t(ind)]; 
                 }
                 else if constexpr (std::is_same_v<T, value::Map>) {
                     if (not a.items->map.contains(ind))
@@ -490,14 +502,14 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 }
                 else if constexpr (std::is_same_v<T, value::Pack>) {
                     if (ind < 0 or size_t(ind) >= a->values.size())
-                        util::error("Accessing list '" + stringify(a) + "' at index '" + std::to_string(ind) + "' which is out of bounds!");
+                        util::error("Accessing list '" + stringify(a) + "' at index '" + ind.str() + "' which is out of bounds!");
 
-                    return a->values[ind]; 
+                    return a->values[size_t(ind)]; 
                 }
                 else { // if constexpr (std::is_same_v<std::remove_cvref_t<decltype(a)>, std::string>) {
                     if (ind < 0 or size_t(ind) >= a.length())
-                        util::error("Accessing string '" + a + "' at index '" + std::to_string(ind) + "' which is out of bounds!");
-                    return std::string{a[ind]};
+                        util::error("Accessing string '" + a + "' at index '" + ind.str() + "' which is out of bounds!");
+                    return std::string{a[size_t(ind)]};
                 }
             }),
             TypeList<value::List, BigInt>,
@@ -519,9 +531,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     const auto& list_type = dynamic_cast<const type::ListType&>(*type);
 
                     if (at < 0 or size_t(at) >= cont.elts->values.size())
-                        util::error("`set` accessing list '" + stringify(cont) + "' at index '" + std::to_string(at) + "' which is out of bounds!");
+                        util::error("`set` accessing list '" + stringify(cont) + "' at index '" + at.str() + "' which is out of bounds!");
 
-                    return cont.elts->values[at] = that->typeCheck(elt, list_type.type);
+                    return cont.elts->values[size_t(at)] = that->typeCheck(elt, list_type.type);
                 }
                 else if constexpr (std::is_same_v<T, value::Map>) {
                     const auto type = that->typeOf(cont);
@@ -606,7 +618,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"add">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a + b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a + b; });
+            }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
             TypeList<double, BigInt>,
@@ -617,7 +631,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"sub">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a - b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a - b; });
+            }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
             TypeList<double, BigInt>,
@@ -628,7 +644,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"mul">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a * b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [](const auto& a, const auto& b) { return a * b; });
+            }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
             TypeList<double, BigInt>,
@@ -642,7 +660,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             decltype([](const auto& a, const auto& b, const auto&) {
                 if (b == 0) util::error("Division by 0(!)");
 
-                return a / b;
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a / b; });
             }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
@@ -654,7 +672,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"mod">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a % b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a % b; });
+            }),
             TypeList<BigInt, BigInt>
         >
     >{},
@@ -662,7 +682,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"bit_and">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a & b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a & b; });
+            }),
             TypeList<BigInt, BigInt>
         >
     >{},
@@ -670,7 +692,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"bit_or">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a | b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a | b; });
+            }),
             TypeList<BigInt, BigInt>
         >
     >{},
@@ -678,7 +702,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"xor">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a ^ b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a ^ b; });
+            }),
             TypeList<BigInt, BigInt>
         >
     >{},
@@ -689,11 +715,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             decltype([](const auto& min, const auto& max, const auto&) {
                 static std::random_device rd{};
                 static std::mt19937 gen{rd()};
-
-                std::uniform_int_distribution<BigInt> dist{min, max};
-
+                boost::random::uniform_int_distribution<BigInt> dist{min, max};
                 return dist(gen);
-
             }),
             TypeList<BigInt, BigInt>
         >
@@ -703,19 +726,32 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"pow">,
         Func<
             decltype(
-                [](const auto& a, const auto& b, const auto&) -> std::common_type_t<decltype(a), decltype(b)> { return std::pow(a, b); }
+                [](const auto& a, const auto& b, const auto&) -> value::Value {
+                    using T1 = std::remove_cvref_t<decltype(a)>;
+
+                    if (b >= std::numeric_limits<size_t>::max() or b < 0)
+                        util::error("Cannot pass a negative power to `__builtin_pow`" + b.str());
+
+                    if constexpr (std::is_same_v<T1, double>) {
+                        boost::multiprecision::cpp_bin_float_100 triple = a;
+                        return double{boost::multiprecision::pow(triple, size_t(b))};
+                    }
+                    else return boost::multiprecision::pow(a, size_t(b));
+                }
             ),
             TypeList<BigInt, BigInt>,
-            TypeList<BigInt, double>,
-            TypeList<double, BigInt>,
-            TypeList<double, double>
+            TypeList<double, BigInt>
+            // TypeList<BigInt, double>,
+            // TypeList<double, double>
         >
     >{},
 
     MapEntry<
         S<"gt">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a > b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a > b; });
+            }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
             TypeList<double, BigInt>,
@@ -726,7 +762,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"geq">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a >= b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a >= b; });
+            }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
             TypeList<double, BigInt>,
@@ -750,7 +788,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"leq">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a <= b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a <= b; });
+            }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
             TypeList<double, BigInt>,
@@ -761,7 +801,9 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"lt">,
         Func<
-            decltype([](const auto& a, const auto& b, const auto&) { return a < b; }),
+            decltype([](const auto& a, const auto& b, const auto&) {
+                return handleNums(a, b, [] (const auto& a, const auto& b) { return a < b; });
+            }),
             TypeList<BigInt, BigInt>,
             TypeList<BigInt, double>,
             TypeList<double, BigInt>,
@@ -944,8 +986,13 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ptr_to_string">,
         Func<
             decltype([](const auto& ptr, const auto&) -> std::string {
-                if (ptr == 0) util::error("`ptr_to_string` received a null pointer!");
-                return std::string{reinterpret_cast<const char*>(ptr)};
+                if (ptr == 0)
+                    util::error("`ptr_to_string` received a null pointer!");
+
+                if (ptr > std::numeric_limits<size_t>::max())
+                    util::error("`ptr_to_string` received invalid pointer");
+
+                return std::string{reinterpret_cast<const char*>(size_t(ptr))};
             }),
             TypeList<BigInt>
         >

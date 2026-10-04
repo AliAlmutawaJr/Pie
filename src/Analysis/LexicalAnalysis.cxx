@@ -174,7 +174,7 @@ void LexicalAnalysis::operator()(expr::Num *n) {
     }
     else {
         // integer
-        constants.insert({str, {n->constant_ID, std::stoll(n->num)}});
+        constants.insert({str, {n->constant_ID, BigInt{n->num}}});
     }
 }
 

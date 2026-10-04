@@ -52,7 +52,9 @@ public:
 // static type descriptors. FFI_TYPE_INT is treated as a plain 32-bit `int`,
 // which is correct for every ABI libffi actually targets.
 inline ffi_type* baseType(const BigInt type_id) noexcept {
-    switch (type_id) {
+    if (type_id != FFI_TYPE_CSTRING and (type_id >= FFI_TYPE_LAST or type_id < 0)) return nullptr;
+
+    switch (type_id.convert_to<uintptr_t>()) {
         case FFI_TYPE_VOID      : return &ffi_type_void;
         case FFI_TYPE_INT       :
         case FFI_TYPE_SINT32    : return &ffi_type_sint32;
@@ -108,7 +110,7 @@ inline T narrowTo(const BigInt v, const int ffi_type_tag) {
         ( sizeof(BigInt) > sizeof(T) and v > BigInt(std::numeric_limits<T>::max()))
     )
         util::error(
-            "Value " + std::to_string(v) + " does not fit in C type `" +
+            "Value " + v.str() + " does not fit in C type `" +
             typeName(ffi_type_tag) + "`"
         );
 
@@ -127,20 +129,15 @@ inline BigInt asInt(const value::Value& value, const int ffi_type_tag) {
     );
 }
 
-inline double asNumber(const value::Value& value, const int ffi_type_tag) {
+inline double asDouble(const value::Value& value, const int ffi_type_tag) {
     if (std::holds_alternative<double>(value)) return get<double>(value);
-    if (std::holds_alternative<BigInt>(value)) return get<BigInt>(value);
+    if (std::holds_alternative<BigInt>(value)) return get<BigInt>(value).convert_to<double>();
 
     util::error(
         "C type `" + std::string{typeName(ffi_type_tag)} +
         "` expects a Pie Int or Double, got: " + value::stringify(value)
     );
 }
-
-// Storage for anything a pointer needs to keep pointing at for the
-// lifetime of a single ffi_call (currently: copied-out string bytes for
-// `const char*` arguments). A deque so addresses handed out earlier stay
-// valid no matter how much more gets appended later.
 
 
 // Pie has no pointer type of its own.
@@ -149,7 +146,13 @@ inline double asNumber(const value::Value& value, const int ffi_type_tag) {
 // (the value::Value that owns them is often a short-lived temporary)
 // so they get copied into `scratch` and the pointer to _that_ copy is what's actually passed.
 inline void* asPointer(const value::Value& value, std::deque<std::vector<std::byte>>& scratch) {
-    if (std::holds_alternative<BigInt>(value)) return reinterpret_cast<void*>(get<BigInt>(value));
+
+    if (std::holds_alternative<BigInt>(value)) {
+        const auto& bigint = get<BigInt>(value);
+        if (bigint > std::numeric_limits<uintptr_t>::max() or bigint < 0) return nullptr;
+
+        return reinterpret_cast<void*>(bigint.convert_to<uintptr_t>());
+    }
 
     if (std::holds_alternative<std::string>(value)) {
         const auto& s = get<std::string>(value);
@@ -182,7 +185,7 @@ inline auto structFields(const value::Object& obj) {
 inline std::unique_ptr<FFI> prepareFFI(const value::Value& value, const BigInt type_id) {
     if (type_id != FFI_TYPE_STRUCT) {
         auto* t = baseType(type_id);
-        if (not t) util::error("Unknown/unsupported C type id: " + std::to_string(type_id));
+        if (not t) util::error("Unknown/unsupported C type id: " + type_id.str());
 
         auto node = std::make_unique<FFI>();
         node->type = t;
@@ -256,8 +259,8 @@ inline void packScalar(std::byte* dst, const int ffi_type_tag, const value::Valu
         case FFI_TYPE_SINT64 : *reinterpret_cast<int64_t *>(dst) = static_cast< int64_t>(asInt(value, ffi_type_tag)); return;
         case FFI_TYPE_UINT64 : *reinterpret_cast<uint64_t*>(dst) = static_cast<uint64_t>(asInt(value, ffi_type_tag)); return;
 
-        case FFI_TYPE_FLOAT  : *reinterpret_cast<float   *>(dst) = static_cast<   float>(asNumber(value, ffi_type_tag)); return;
-        case FFI_TYPE_DOUBLE : *reinterpret_cast<double  *>(dst) = asNumber(value, ffi_type_tag); return;
+        case FFI_TYPE_FLOAT  : *reinterpret_cast<float   *>(dst) = static_cast<float>(asDouble(value, ffi_type_tag)); return;
+        case FFI_TYPE_DOUBLE : *reinterpret_cast<double  *>(dst) = asDouble(value, ffi_type_tag); return;
 
 
         case FFI_TYPE_CSTRING:
@@ -299,20 +302,20 @@ inline void pack(std::byte *buffer, const FFI *ffi, const value::Value& value, s
 // ..I should probably ask the user to pass the class, not the object
 inline value::Value unpackScalar(const std::byte *src, const int ffi_type_tag) {
     switch (ffi_type_tag) {
-        case FFI_TYPE_SINT8  : return static_cast<BigInt>(*reinterpret_cast<const std::int8_t  *>(src));
-        case FFI_TYPE_UINT8  : return static_cast<BigInt>(*reinterpret_cast<const std::uint8_t *>(src));
-        case FFI_TYPE_SINT16 : return static_cast<BigInt>(*reinterpret_cast<const std::int16_t *>(src));
-        case FFI_TYPE_UINT16 : return static_cast<BigInt>(*reinterpret_cast<const std::uint16_t*>(src));
-        case FFI_TYPE_SINT32 : return static_cast<BigInt>(*reinterpret_cast<const std::int32_t *>(src));
-        case FFI_TYPE_UINT32 : return static_cast<BigInt>(*reinterpret_cast<const std::uint32_t*>(src));
-        case FFI_TYPE_SINT64 : return static_cast<BigInt>(*reinterpret_cast<const std::int64_t *>(src));
-        case FFI_TYPE_UINT64 : return static_cast<BigInt>(*reinterpret_cast<const std::uint64_t*>(src));
+        case FFI_TYPE_SINT8  : return *reinterpret_cast<const std::int8_t  *>(src);
+        case FFI_TYPE_UINT8  : return *reinterpret_cast<const std::uint8_t *>(src);
+        case FFI_TYPE_SINT16 : return *reinterpret_cast<const std::int16_t *>(src);
+        case FFI_TYPE_UINT16 : return *reinterpret_cast<const std::uint16_t*>(src);
+        case FFI_TYPE_SINT32 : return *reinterpret_cast<const std::int32_t *>(src);
+        case FFI_TYPE_UINT32 : return *reinterpret_cast<const std::uint32_t*>(src);
+        case FFI_TYPE_SINT64 : return *reinterpret_cast<const std::int64_t *>(src);
+        case FFI_TYPE_UINT64 : return *reinterpret_cast<const std::uint64_t*>(src);
 
         case FFI_TYPE_FLOAT  : return static_cast<double>(*reinterpret_cast<const float *>(src));
         case FFI_TYPE_DOUBLE : return *reinterpret_cast<const double*>(src);
 
-        case FFI_TYPE_CSTRING: return reinterpret_cast<BigInt>(*reinterpret_cast<void* const*>(src));
-        case FFI_TYPE_POINTER: return reinterpret_cast<BigInt>(*reinterpret_cast<void* const*>(src));
+        case FFI_TYPE_CSTRING: return BigInt{reinterpret_cast<uintptr_t>(*reinterpret_cast<void* const*>(src))};
+        case FFI_TYPE_POINTER: return BigInt{reinterpret_cast<uintptr_t>(*reinterpret_cast<void* const*>(src))};
 
         case FFI_TYPE_VOID   : return BigInt{0};
 

@@ -62,7 +62,7 @@ fuck windows (for now)
 - [Collections](#collections)
 - [Comprehensions](#comprehensions)
 - [Loops](#loops)
-- [Match Expressions](#match-expressions)
+- [Pattern Matching](#pattern-matching)
 - [Namespaces](#namespaces)
 - [Scopes](#scopes)
 - [Import System](#import-system)
@@ -319,11 +319,11 @@ For an object to be qualified as an iterator, it must define 2 methods:
 
 `hasNext` must return a boolean indicating whether the loops should continue or terminate. `next` yields the next value.
 
-
 #### Break/Continue
+todo
 
 
-## Match Expressions
+## Pattern Matching
 
 Match expressions can match against 3 things.
 1. Value
@@ -360,9 +360,9 @@ C = class { a = 0; b = "";};
 c = C(314, C(1, "two"));
 
 match c {
-    C(x: Int, ="two") => print(x);
-    C(y=3, :String = "something") => print(2);
-    C(n: Int = 314, C(=1, ="two")) => print(n);
+    {x: Int, ="two"}             => print(x);
+    {y=3, :String = "something"} => print(2);
+    {n: Int = 314, {=1, ="two"}} => print(n);
 };
 ```
 The code above ends up printing `314`.
@@ -374,20 +374,18 @@ is called a `Single`.
 
 
 
- **Guards and such**:
- You can match against multiple patterns in a single case by using the pipe symbol `|` and you can guard against any case by using the ampersand `&`:
+**Guards**:
+You can guard against any case by using a comma `,`:
 
  ```pie
 x = 5;
 
 match x {
-    =1 | =2 | =3 => print("one two three");
-    a & __builtin_lt(a, 0) => print("negative");
-    a & __builtin_gt(a, 0) => print("positive (not 1, 2, or 3)");
+    a, __builtin_lt(a, 0) => print("negative");
+    a, __builtin_gt(a, 0) => print("positive (not 1, 2, or 3)");
 };
 ```
 
-Of course, you can have both conditions and pipes in the same case.
 
 
 ## Namespaces
@@ -829,15 +827,15 @@ a = 5; .: Error!
 ```
 Concepts also allow for what's known as "Design by Contract" where pre-conditions are the types of the arguments, and the post-condition is the return type.
 
+<!-- 
 #### Syntax Type
-
 The `Syntax` type is a special type that gives a handle onto the AST node used to represent an expression.\
 Take this example:
 
 ```pie
 infix + = (a, b) => __builtin_add(a, b);
 
-x: Syntax = 1 + a;
+x: Syntax = `1 + a`;
 ```
 
 `x` is a handle to the AST which represents the expression `1 + a`.
@@ -855,7 +853,8 @@ result = __builtin_eval(x);
 __builtin_print(result);
 ```
 
-`6` will be printed.
+`6` will be printed. -->
+
 
 ## Comments
 
@@ -926,8 +925,6 @@ this isn't
 
 #### in order of priority
 
-
-- [ ] Use Big Int instead of `int64_t`
 - [ ] Improve error messages (add line and column numbers)
 - [ ] Fix defer throwing (inside destructor)
 - [ ] Make `=` and `=>` overloadable
@@ -945,6 +942,7 @@ this isn't
 ---
 
 ### Done
+- [x] Use Big Int instead of `int64_t`
 - [x] Simplify Pack Expansion (internal)
 - [x] Add default values to function parameters
 - [x] Make sure to expand args for EVERY builtin function (`ffi_call` and `defer` come to mind)

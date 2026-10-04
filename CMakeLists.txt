@@ -1,9 +1,6 @@
-# Bundled libffi is intentionally built outside the project tree because
-# libffi's configure script rejects source directories containing spaces.
-
 cmake_minimum_required(VERSION 3.21)
-
 project(Pie LANGUAGES C CXX)
+
 
 # for clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -19,15 +16,71 @@ include(ExternalProject)
 # Header-only dependencies
 # ============================================================================
 
-# These are header-only dependencies for Pie. We only want FetchContent to
-# download them. We deliberately do NOT configure their own CMake projects.
-#
-# cpp-std-extensions has its own dependency manager and pins MP11 internally.
-# Configuring it as a subproject causes a dependency-version conflict.
 FetchContent_Declare(
     mp11
     GIT_REPOSITORY https://github.com/boostorg/mp11.git
     GIT_TAG boost-1.83.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR __pie_do_not_configure__
+)
+
+# dependency for random
+FetchContent_Declare(
+    boost_config
+    GIT_REPOSITORY https://github.com/boostorg/config.git
+    GIT_TAG boost-1.89.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR __pie_do_not_configure__
+)
+
+# dependency for random
+FetchContent_Declare(
+    boost_assert
+    GIT_REPOSITORY https://github.com/boostorg/assert.git
+    GIT_TAG boost-1.89.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR __pie_do_not_configure__
+)
+
+# dependency for random
+FetchContent_Declare(
+    boost_integer
+    GIT_REPOSITORY https://github.com/boostorg/integer.git
+    GIT_TAG boost-1.89.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR __pie_do_not_configure__
+)
+
+# dependency for random
+FetchContent_Declare(
+    boost_static_assert
+    GIT_REPOSITORY https://github.com/boostorg/static_assert.git
+    GIT_TAG boost-1.89.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR __pie_do_not_configure__
+)
+
+FetchContent_Declare(
+    boost_type_traits
+    GIT_REPOSITORY https://github.com/boostorg/type_traits.git
+    GIT_TAG boost-1.89.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR __pie_do_not_configure__
+)
+
+FetchContent_Declare(
+    random
+    GIT_REPOSITORY https://github.com/boostorg/random.git
+    GIT_TAG boost-1.89.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR __pie_do_not_configure__
+)
+
+
+FetchContent_Declare(
+    multiprecision
+    GIT_REPOSITORY https://github.com/boostorg/multiprecision.git
+    GIT_TAG boost-1.89.0
     GIT_SHALLOW TRUE
     SOURCE_SUBDIR __pie_do_not_configure__
 )
@@ -40,11 +93,24 @@ FetchContent_Declare(
     SOURCE_SUBDIR __pie_do_not_configure__
 )
 
-FetchContent_MakeAvailable(mp11 cpp_std_extensions)
+FetchContent_MakeAvailable(
+    mp11
+    boost_config
+    boost_assert
+    boost_integer
+    boost_static_assert
+    boost_type_traits
+    random
+    multiprecision
+    cpp_std_extensions
+)
 
 # ============================================================================
 # libffi
 # ============================================================================
+
+# Bundled libffi is intentionally built outside the project tree because
+# libffi's configure script rejects source directories containing spaces.
 
 set(LIBFFI_VERSION "3.7.1")
 
@@ -183,6 +249,13 @@ file(GLOB PIE_SOURCES CONFIGURE_DEPENDS
 set(PIE_INCLUDE_DIRS
     "${PROJECT_SOURCE_DIR}/src"
     "${mp11_SOURCE_DIR}/include"
+    "${boost_config_SOURCE_DIR}/include"
+    "${boost_assert_SOURCE_DIR}/include"
+    "${boost_integer_SOURCE_DIR}/include"
+    "${boost_static_assert_SOURCE_DIR}/include"
+    "${boost_type_traits_SOURCE_DIR}/include"
+    "${random_SOURCE_DIR}/include"
+    "${multiprecision_SOURCE_DIR}/include"
     "${cpp_std_extensions_SOURCE_DIR}/include"
 )
 
@@ -199,6 +272,7 @@ function(configure_pie_target target)
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wextra>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wpedantic>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-braces>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-deprecated-declarations>
     )
 endfunction()
 
@@ -296,6 +370,13 @@ if(EMCC_EXECUTABLE)
             -std=c++23
             "-I${PROJECT_SOURCE_DIR}/src"
             "-I${mp11_SOURCE_DIR}/include/"
+            "-I${boost_config_SOURCE_DIR}/include/"
+            "-I${boost_assert_SOURCE_DIR}/include/"
+            "-I${boost_integer_SOURCE_DIR}/include/"
+            "-I${boost_static_assert_SOURCE_DIR}/include/"
+            "-I${boost_type_traits_assert_SOURCE_DIR}/include/"
+            "-I${random_SOURCE_DIR}/include/"
+            "-I${multiprecision_SOURCE_DIR}/include/"
             "-I${cpp_std_extensions_SOURCE_DIR}/include/"
             -O2
             "${PROJECT_SOURCE_DIR}/src/main.cc"

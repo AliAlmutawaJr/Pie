@@ -1,17 +1,15 @@
 #pragma once
 
-#include "Lex/Token.hxx"
-#include <optional>
 #include <string>
 #include <exception>
 
+#include "../Lex/Token.hxx"
 
 
 namespace pie {
 namespace except {
 
     struct LocatedError {
-        std::string msg;
         util::SourceSpan span;
     };
 
