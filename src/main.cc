@@ -4,10 +4,6 @@
 #include <string_view>
 #include <filesystem>
 
-#if WEB_PIE
-#include <emscripten.h>
-#endif
-
 
 #include "CLI/CLI.hxx"
 #include "Diagnostic/Exceptions.hxx"
@@ -15,7 +11,11 @@
 #include "Utils/utils.hxx"
 
 
+
 #if WEB_PIE
+#include <emscripten.h>
+
+
 extern "C" EMSCRIPTEN_KEEPALIVE void execute(const char *code) try {
     pie::cli::run(std::string{code}, false, false, false);
 }
@@ -28,11 +28,16 @@ catch (...) {
 #endif
 
 
+
 static int pieMain(int argc, char *argv[]) {
+    constexpr auto VERSION = "1.11.1";
+
     using std::operator""s ;
     using std::operator""sv;
 
-    const auto canonical_root = std::filesystem::canonical(*argv);
+    // const auto canonical_root = std::filesystem::canonical(*argv);
+    const auto path = pie::util::getPiePath();
+    const auto canonical_root = std::filesystem::canonical(path);
 
     bool print_tokens       = false;
     bool print_parsed       = false;
@@ -42,6 +47,7 @@ static int pieMain(int argc, char *argv[]) {
     bool repl               = false;
     bool vm                 = false;
     bool command            = false;
+    bool version            = false;
 
 
     std::string_view fname;
@@ -57,40 +63,35 @@ static int pieMain(int argc, char *argv[]) {
             else if (argv[1] == "-vm"sv or argv[1] == "--machine"sv) vm                 = true;
             else if (argv[1] == "-c"sv  or argv[1] == "--command"sv) command            = true;
             else if (argv[1] == "-r"sv  or argv[1] == "--repl"sv   ) repl               = true;
+            else if (argv[1] == "-v"sv  or argv[1] == "--version"sv) version            = true;
             else if (not fname.empty()) pie::util::error<pie::except::UknownOption>("Unrecognized Option: "s + argv[1]);
             else fname = argv[1];
         }
-    
 
-        if (command) {
-            pie::cli::run(std::string{fname}, print_tokens, print_parsed, norun);
-            return 0;
-        }
+        if (version)
+            return std::println("Pie v{}", VERSION), 0;
 
-        if (print_help) {
-            pie::cli::help();
-            return 0;
-        }
+        if (command)
+            return pie::cli::run(std::string{fname}, print_tokens, print_parsed, norun), 0;
 
-        if (fname.empty() or repl) {
-            pie::cli::REPL(
-                std::move(canonical_root),
-                print_tokens, print_parsed, norun
-            );
-        }
-        else {
-            pie::cli::runFile(
-                std::filesystem::path(fname),
-                print_tokens,
-                print_parsed,
-                norun,
-                print_ins,
-                vm
-            );
-        }
+        if (print_help)
+            return pie::cli::help(), 0;
+
+
+        if (fname.empty() or repl)
+            return pie::cli::REPL(std::move(canonical_root), print_tokens, print_parsed, norun), 0;
+
+
+        pie::cli::runFile(
+            std::filesystem::path(fname),
+            print_tokens,
+            print_parsed,
+            norun,
+            print_ins,
+            vm
+        );
     }
     catch(const std::exception& e) {
-        // std::println(std::cerr, "{}", e.what());
         std::println(std::cerr, "{}", pie::err::render(e));
         return 1;
     }
