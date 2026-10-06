@@ -12,6 +12,154 @@
 
 
 
+TEST_CASE("Flatten List", "[Algorithm]") {
+{
+    const auto src = R"(
+isEmpty  = (cont) => __builtin_eq(__builtin_len(cont), 0);
+
+flatten = (list) => {
+
+    __builtin_conditional(
+        isEmpty(list),
+        {},
+        {
+            out = {};
+            loop e : list
+                __builtin_conditional(
+                    __builtin_eq(__builtin_type(e), Int),
+                    __builtin_push(out, e),
+                    loop elt : flatten(e) __builtin_push(out, elt) => {}
+                );
+            out;
+        }
+    );
+};
+
+l = {};
+
+flattened = flatten(l);
+__builtin_print(flattened);
+)";
+
+    REQUIRE(pie::test::run(src) == "{}");
+}
+{
+    const auto src = R"(
+isEmpty  = (cont) => __builtin_eq(__builtin_len(cont), 0);
+
+flatten = (list) => {
+
+    __builtin_conditional(
+        isEmpty(list),
+        {},
+        {
+            out = {};
+            loop e : list
+                __builtin_conditional(
+                    __builtin_eq(__builtin_type(e), Int),
+                    __builtin_push(out, e),
+                    loop elt : flatten(e) __builtin_push(out, elt) => {}
+                );
+            out;
+        }
+    );
+};
+
+flattened = flatten({1, 2, 3});
+__builtin_print(flattened);
+)";
+
+    REQUIRE(pie::test::run(src) == "{1, 2, 3}");
+}
+{
+    const auto src = R"(
+isEmpty  = (cont) => __builtin_eq(__builtin_len(cont), 0);
+
+flatten = (list) => {
+
+    __builtin_conditional(
+        isEmpty(list),
+        {},
+        {
+            out = {};
+            loop e : list
+                __builtin_conditional(
+                    __builtin_eq(__builtin_type(e), Int),
+                    __builtin_push(out, e),
+                    loop elt : flatten(e) __builtin_push(out, elt) => {}
+                );
+            out;
+        }
+    );
+};
+
+
+flattened = flatten({{}, {1}, {2, 3}, {4, 5, 6}});
+__builtin_print(flattened);
+)";
+
+    REQUIRE(pie::test::run(src) == "{1, 2, 3, 4, 5, 6}");
+}
+{
+    const auto src = R"(
+isEmpty  = (cont) => __builtin_eq(__builtin_len(cont), 0);
+
+flatten = (list) => {
+
+    __builtin_conditional(
+        isEmpty(list),
+        {},
+        {
+            out = {};
+            loop e : list
+                __builtin_conditional(
+                    __builtin_eq(__builtin_type(e), Int),
+                    __builtin_push(out, e),
+                    loop elt : flatten(e) __builtin_push(out, elt) => {}
+                );
+            out;
+        }
+    );
+};
+
+
+
+flattened = flatten({{}, {{}}, {1, 2, 3}, {{1, 2}, {{10, 20}, {{{1000, 2000}}}, {100}, {{{5000}}}}}});
+__builtin_print(flattened);
+)";
+
+    REQUIRE(pie::test::run(src) == "{1, 2, 3, 1, 2, 10, 20, 1000, 2000, 100, 5000}");
+}
+}
+
+
+
+TEST_CASE("Recursive Shadowing", "[Var]") {
+{
+    const auto src = R"(
+func = (cond) => {
+    a = "first call";
+
+    __builtin_conditional(
+        cond,
+        (a = "recursive"),
+        {
+            func(true);
+            __builtin_print(a);
+        }
+    );
+};
+
+func(false);
+
+)";
+
+    REQUIRE(pie::test::run(src) == "first call");
+}
+}
+
+
+
 TEST_CASE("Big Int Literal", "[Big]") {
 {
     const auto src = R"(

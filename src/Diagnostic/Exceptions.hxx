@@ -9,9 +9,7 @@
 namespace pie {
 namespace except {
 
-    struct LocatedError {
-        util::SourceSpan span;
-    };
+    struct LocatedError { util::SourceSpan span; };
 
 
 #define DefineError(NAME)                                             \

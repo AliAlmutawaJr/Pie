@@ -421,15 +421,16 @@ void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern) {
     // }
     else if (auto pack = dynamic_cast<expr::unpack::Pack*>(pattern)) {
         // nameless pack
-        if (not pack->expr) return;
+        if (not pack->pattern) return;
+        checkPattern(pack->pattern.get());
 
-        if (const auto id = findVariable(pack->expr->stringify()); id) {
-            pack->expr->var_ID = *id;
-            if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
-        }
+        // if (const auto id = findVariable(pack->expr->stringify()); id) {
+        //     pack->expr->var_ID = *id;
+        //     if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
+        // }
 
-        pack->expr->var_ID = next();
-        addVar(pack->expr->stringify(), pack->expr->var_ID);
+        // pack->expr->var_ID = next();
+        // addVar(pack->expr->stringify(), pack->expr->var_ID);
     }
     else util::error();
 }
@@ -462,13 +463,17 @@ void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern, [[maybe_unuse
     //     }
     // }
     else if (auto pack = dynamic_cast<expr::unpack::Pack*>(pattern)) {
-        if (const auto id = findVariable(pack->expr->stringify()); id) {
-            pack->expr->var_ID = *id;
-            if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
-        }
+        // nameless pack
+        if (not pack->pattern) return;
+        checkPattern(pack->pattern.get(), {});
 
-        pack->expr->var_ID = next();
-        addVar(pack->expr->stringify(), pack->expr->var_ID);
+        // if (const auto id = findVariable(pack->expr->stringify()); id) {
+        //     pack->expr->var_ID = *id;
+        //     if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
+        // }
+
+        // pack->expr->var_ID = next();
+        // addVar(pack->expr->stringify(), pack->expr->var_ID);
     }
     else util::error();
 
@@ -1153,6 +1158,11 @@ void LexicalAnalysis::visitType(const type::TypePtr& type) {
     }
     else if(const auto var = type::isVariadic(type)) {
         visitType(var->type);
+    }
+    else if(const auto var = type::isBuiltin(type); var) {
+        if (const auto id = findVariable(var->t); id) {
+            var->ID = *id;
+        }
     }
 }
 

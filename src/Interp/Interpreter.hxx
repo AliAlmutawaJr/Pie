@@ -349,10 +349,6 @@ public:
         if (const auto& var = getVar(list->var_ID, liftName(list)); var) return *var;
 
         std::vector<value::Value> values;
-        // std::transform(
-        //     list->elements.cbegin(), list->elements.cend(), std::back_inserter(values),
-        //     [this] (const auto& expr) { return std::visit(*this, expr->variant()).value; }
-        // );
 
         for (auto& elt : list->elements) {
             // pack expansion
@@ -986,14 +982,17 @@ public:
     }
 
 
+
     ValueType nameAssign(const expr::Assignment *ass, const expr::Name* name) {
 
         // * walrus assignment may need to propogate the type here
         type::TypePtr type = ass->type;
         bool change{};
 
+
+        constexpr auto STRICT = true;
         // variable already exists. Check that type matches the rhs type
-        if (const auto& var = getVar(name->var_ID, liftName(name)); var) {
+        if (const auto& var = getVar<STRICT>(name->var_ID, liftName(name)); var) {
             if (isRef(name->var_ID)) return refAssign(ass, name);
 
             if (type::shouldReassign(type)) {
@@ -1635,7 +1634,7 @@ public:
         std::vector<ValueType> valuetypes;
         const size_t at_least = list->patterns.size() - pack_index.has_value();
 
-        if constexpr (MODE == TEST) {
+        if constexpr (MODE == TEST or MODE == VARIADIC) {
             constexpr auto INFERRED = true;
             if (not unpackIntoList<INFERRED>(expr_str, valuetypes, valuetype.value, at_least, pack_index.has_value()))
                 return false;
@@ -1660,7 +1659,7 @@ public:
             if (not matchPattern<MODE>(expr_str, sub.get(), vt, record)) return false;
 
 
-        if (const auto pack_pattern = dynamic_cast<const Pack*>(list->patterns[*pack_index].get()); pack_pattern->expr) {
+        if (const auto pack_pattern = dynamic_cast<const Pack*>(list->patterns[*pack_index].get()); pack_pattern->pattern) {
             value::Value pack = value::makePack(
                 valuetypes
                 | std::views::drop(leading_count)
@@ -1702,12 +1701,21 @@ public:
                     }
                 }
 
-                addVar(
-                    pack_pattern->expr->stringify(),
-                    pack_pattern->expr->var_ID,
-                    std::make_shared<value::Value>(std::move(pack)),
-                    std::move(type)
-                );
+
+
+                value::Environment e;
+                constexpr auto VARIADIC_MODE = MODE == TEST ? TEST : INFER;
+                if (not bindVariadicPattern<VARIADIC_MODE>(expr_str, pack_pattern->pattern.get(), get<value::Pack>(pack)->values, e))
+                    return false;
+
+                for (auto& [id, entry] : e) env.back()->env[id] = std::move(entry);
+
+                // addVar(
+                //     pack_pattern->expr->stringify(),
+                //     pack_pattern->expr->var_ID,
+                //     std::make_shared<value::Value>(std::move(pack)),
+                //     std::move(type)
+                // );
             }
         }
 
@@ -1736,47 +1744,67 @@ public:
     }
 
 
-    // Binds a variadic pattern parameter, e.g. `({name, age}: ...Human)`.
-    // Each node's values across all arguments become one pack; `=` and `:` inside the pattern apply to those packs.
-    void bindVariadicPattern(
+
+
+    // Binds a variadic pattern: each node's values across all elements become one pack.
+    // In TEST mode, a failed match returns false instead of raising an error, and nothing is bound.
+    template <PatternMode MODE = PatternMode::INFER>
+    bool bindVariadicPattern(
         const auto& expr_str,
         const expr::unpack::Pattern *pattern,
         const std::vector<value::Value>& elements,
         value::Environment& out
     ) {
+        using enum PatternMode;
+        static_assert(MODE == INFER or MODE == TEST);
+
+
+        // phase 1: destructure every element; no checks, no bindings
         std::unordered_map<const expr::unpack::Pattern*, std::vector<value::Value>> record;
-        for (const auto& element : elements)
-            matchPattern<PatternMode::VARIADIC>(expr_str, pattern, {element, typeOf(element)}, &record);
+
+        for (size_t i{}; i < elements.size(); ++i) {
+            if (not matchPattern<VARIADIC>(expr_str, pattern, {elements[i], typeOf(elements[i])}, &record)) {
+                if constexpr (MODE == TEST) return false;
+                else util::error(
+                    "In Unpackment:\n" + expr_str() +
+                    "\nElement " + std::to_string(i + 1) + " doesn't fit the pattern " +
+                    expr::unpack::stringifyPattern(pattern) + ": " + value::stringify(elements[i])
+                );
+            }
+        }
 
 
+        // collected first, so a failure below can return straight out of the function
+        std::vector<const expr::unpack::Pattern*> nodes;
+        expr::unpack::forEach(pattern, [&nodes] (const expr::unpack::Pattern *node) { nodes.push_back(node); });
 
-        ScopeGuard sg{this}; // collects the variables added below
-        expr::unpack::forEach(pattern, [&] (const expr::unpack::Pattern *node) {
+
+        // phase 2: check each node's constraints against its pack, then bind named nodes
+        ScopeGuard sg{this}; // collects the variables added below; discarded if we return false
+        for (const auto *node : nodes) {
             // anonymous `...` packs are not recorded
-            if (auto p = dynamic_cast<const expr::unpack::Pack*>(node); p and not p->expr) return;
-
+            if (auto p = dynamic_cast<const expr::unpack::Pack*>(node); p and not p->pattern) continue;
 
             value::Value pack = value::makePack(record[node]);
             type::TypePtr type = typeOf(pack);
 
-            // the root's type is the parameter's owm type which is already checked per argument
-            // so it'll be empty (nullptr) anyway
-            // and since we already check node->type down there
-            // this (node != pattern) check to make sure we're not double checking the root is useless
-            // since the root can't have a type and not even a value
-            // since `=` indicates a default argument for parameters
+            if (node->value and std::visit(*this, node->value->variant()).value != pack) {
+                if constexpr (MODE == TEST) return false;
+                else util::error(
+                    "In Unpackment:\n" + expr_str() +
+                    "\nPattern: " + expr::unpack::stringifyPattern(node) +
+                    "\nValue: `" + node->value->stringify() +
+                    "` didn't match value (pack): " + value::stringify(pack)
+                );
+            }
 
-            // if (node != pattern) {
-                if (node->value and std::visit(*this, node->value->variant()).value != pack)
-                    util::error(
-                        "In Unpackment:\n" + expr_str() +
-                        "\nPattern: " + expr::unpack::stringifyPattern(node) +
-                        "\nValue: `" + node->value->stringify() +
-                        "` didn't match value (pack): " + value::stringify(pack)
-                    );
+            if (node->type) {
+                auto expected = validateType(node->type);
 
-                if (node->type) {
-                    auto expected = validateType(node->type);
+                if constexpr (MODE == TEST) {
+                    if (not (*expected >= *type)) return false; // same rule as your pack check in TEST mode
+                }
+                else {
                     pack = typeCheck(
                         pack,
                         expected,
@@ -1785,15 +1813,44 @@ public:
                         "\nType: `" + expected->text() +
                         "` didn't match value: " + value::stringify(pack)
                     );
-                    type = std::move(expected);
                 }
-            // }
+                type = std::move(expected);
+            }
 
-            if (const auto bound = expr::unpack::boundExprOf(node))
-                addVar(bound->stringify(), bound->var_ID, std::make_shared<value::Value>(std::move(pack)), std::move(type));
-        });
+            if (const auto p = dynamic_cast<const expr::unpack::Pack*>(node)) {
+                // every element contributed one pack: destructure each with the sub-pattern
+                // then collect each name it binds across elements (one more pack level)
+                std::vector<expr::ExprPtr> names;
+                expr::unpack::forEachName(p->pattern.get(), [&names] (const expr::ExprPtr& name) { names.push_back(name); });
+
+                std::vector<std::vector<value::Value>> columns(names.size());
+
+                for (const auto& element_pack : record[node]) {
+                    value::Environment inner;
+                    if (not bindVariadicPattern<MODE>(expr_str, p->pattern.get(), get<value::Pack>(element_pack)->values, inner))
+                        return false; // only reachable in TEST mode
+
+                    for (size_t j{}; j < names.size(); ++j) {
+                        const auto& [ref, value_ptr, t] = inner.at(names[j]->var_ID);
+                        columns[j].push_back(*value_ptr);
+                    }
+                }
+
+                for (size_t j{}; j < names.size(); ++j) {
+                    value::Value collected = value::makePack(std::move(columns[j]));
+                    auto collected_type = typeOf(collected);
+                    addVar(names[j]->stringify(), names[j]->var_ID, std::make_shared<value::Value>(std::move(collected)), std::move(collected_type));
+                }
+
+                continue;
+            }
+
+            if (auto e = dynamic_cast<const expr::unpack::Expr*>(node); e and e->expr)
+                addVar(e->expr->stringify(), e->expr->var_ID, std::make_shared<value::Value>(std::move(pack)), std::move(type));
+        }
 
         for (auto& [id, entry] : env.back()->env) out[id] = std::move(entry);
+        return true;
     }
 
 
@@ -2908,7 +2965,6 @@ There are no mistakes with art.)";
                     }
 
                     if (auto cond = kind_value; var) {
-
                         for (loop_counter = 0; get<bool>(cond); ++loop_counter) {
                             continued = false;
 
@@ -2921,6 +2977,12 @@ There are no mistakes with art.)";
                             // if (continued) continue;
 
                             cond = std::visit(*this, kind->variant()).value;
+                            if (not std::holds_alternative<bool>(cond))
+                                util::error(
+                                    "While loop condition changed type from Bool to: " + 
+                                    stringify(cond) +
+                                    "\nWhich is of type: " + typeOf(cond)->text()
+                                );
                         }
 
                     }
@@ -2938,6 +3000,12 @@ There are no mistakes with art.)";
                         if (broken) break;
 
                         cond = std::visit(*this, kind->variant()).value;
+                        if (not std::holds_alternative<bool>(cond))
+                            util::error(
+                                "While loop condition changed type from Bool to: " + 
+                                stringify(cond) +
+                                "\nWhich is of type: " + typeOf(cond)->text()
+                            );
                     }
                 } break;
 
@@ -3907,6 +3975,7 @@ There are no mistakes with art.)";
         // return checkReturnType(std::visit(*this, func->body->variant()), func->type.ret);
     };
 
+
     ValueType operator()(const expr::OpCall *oc) {
         if (const auto& var = getVar(oc->var_ID, liftName(oc)); var) return *var;
 
@@ -4036,6 +4105,8 @@ There are no mistakes with art.)";
 
         return {};
     };
+
+
 
     ValueType operator()(const expr::Call *call) {
         if (const auto& var = getVar(call->var_ID, liftName(call)); var) return *var;
@@ -4560,7 +4631,6 @@ There are no mistakes with art.)";
     }
 
 
-    // formerly the `findType` lambda
     static bool findType(const expr::Closure& func, const size_t p, const type::TypePtr& type) {
         // it doesn't matter if there are multiple arguments with this name
         // `validateType` will choose the lastly-bounded one
@@ -4572,15 +4642,15 @@ There are no mistakes with art.)";
                 if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
                     return true;
             }
-            // else { // unpackmeter: check every name the pattern binds
-            //     bool involved = false;
-            //     expr::unpack::forEach(get<expr::unpack::PatternPtr>(func.params[i]).get(), [&] (const auto *node) {
-            //         if (const auto bound = expr::unpack::boundExprOf(node))
-            //             if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(bound->stringify(), util::SourceSpan{})}))
-            //                 involved = true;
-            //     });
-            //     if (involved) return true;
-            // }
+            else { // unpackmeter: check every name the pattern binds, including inside packs
+                bool involved = false;
+                expr::unpack::forEachName(get<expr::unpack::PatternPtr>(func.params[i]).get(), [&] (const expr::ExprPtr& name) {
+                    if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(name->stringify(), util::SourceSpan{})}))
+                        involved = true;
+                });
+
+                if (involved) return true;
+            }
         }
 
         // look in the arguments env (from a partially evaluated function that yielded this function)
@@ -4996,9 +5066,12 @@ There are no mistakes with art.)";
             );
 
 
+
         //* full call. Don't curry!
+
         ScopeGuard sg{this, value::EnvTag::FUNC, func.envs.env.env};
         value::Environment args_env; // in case the lambda needs to capture
+
 
         bindNamedArgs(call, func, args_env);
         auto [pos_params, pos_variadic_index] = positionalParams(func.params, func.type.params, func.variadic_index, call->named_args);
@@ -5637,7 +5710,7 @@ There are no mistakes with art.)";
                     }
                 )
             );
-            util::error<std::runtime_error, false>("");
+            util::error<std::runtime_error>("");
         }
 
         if (name == "id") {
@@ -6878,15 +6951,33 @@ There are no mistakes with art.)";
 
 
     bool isRef(const size_t ID) const {
-        for (const auto& e : std::views::reverse(env)) {
-            if (e->env.contains(ID)) {
-                const auto& [named_ref, _, __] = e->env.at(ID);
-                return named_ref.isRef();
+
+        for (size_t i = env.size(); i-- > 0; ) {
+            if (env[i]->env.contains(ID)) {
+                const auto& [ref, _, __] = env[i]->env.at(ID);
+                return ref.isRef();
             }
+
+            if (env[i]->tag == value::EnvTag::FUNC) break;
         }
 
+        if (env.front()->env.contains(ID)) {
+            const auto& [ref, _, __] = env.front()->env.at(ID);
+            return ref.isRef();
+        }
 
         return false;
+
+
+        // for (const auto& e : std::views::reverse(env)) {
+        //     if (e->env.contains(ID)) {
+        //         const auto& [named_ref, _, __] = e->env.at(ID);
+        //         return named_ref.isRef();
+        //     }
+        // }
+
+
+        // return false;
     }
 
 
@@ -6914,22 +7005,74 @@ There are no mistakes with art.)";
         return {};
     }
 
+
+    std::optional<ValueType> localLookup(const size_t ID) const {
+        // check scopes, but don't jump functions
+        for (size_t i = env.size(); i-- > 0; ) {
+            if (env[i]->env.contains(ID)) {
+                const auto& [_, value_ptr, type] = env[i]->env.at(ID);
+                return {{*value_ptr, type}};
+            }
+
+            if (env[i]->tag == value::EnvTag::FUNC) break;
+        }
+
+        // check globals only
+        if (env.front()->env.contains(ID)) {
+            const auto& [_, value_ptr, type] = env.front()->env.at(ID);
+            return {{*value_ptr, type}};
+        }
+
+        return {};
+    }
+    
+
+
+    // std::optional<ValueType> getVar(const ssize_t id, auto name) const {
+    //     if (id == -1) return {};
+
+    //     if (id == std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::DYNAMIC))
+    //         return dynamicLookup(name());
+
+    //     // for (const auto& e : std::views::reverse(env)) {
+    //     //     if (e->env.contains(id)) {
+    //     //         const auto& [_, value_ptr, type_ptr] = e->env.at(id);
+    //     //         return {{*value_ptr, type_ptr}};
+    //     //     }
+    //     // }
+
+    //     if (const auto var = localLookup(id); var) return var;
+
+
+    //     if (const auto var = checkMemberInThisObject(id); var) return *var;
+
+
+    //     for (const auto& ns : std::views::reverse(current_space)) {
+    //         if (ns->members.contains(id)) {
+    //             const auto& [_, value_ptr, type_ptr] = ns->members.at(id);
+    //             return {{*value_ptr, type_ptr}};
+    //         }
+    //     }
+
+    //     // if (env.contains(ID)) {
+    //     //     const auto& [_, value, type] = env.at(ID);
+    //     //     return {{*value, type}};
+    //     // }
+
+    //     return {};
+    // }
+
+
+    template <bool STRICT = false>
     std::optional<ValueType> getVar(const ssize_t id, auto name) const {
         if (id == -1) return {};
 
         if (id == std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::DYNAMIC))
             return dynamicLookup(name());
 
-        for (const auto& e : std::views::reverse(env)) {
-            if (e->env.contains(id)) {
-                const auto& [_, value_ptr, type_ptr] = e->env.at(id);
-                return {{*value_ptr, type_ptr}};
-            }
-        }
-
+        if (const auto var = localLookup(id); var) return var;
 
         if (const auto var = checkMemberInThisObject(id); var) return *var;
-
 
         for (const auto& ns : std::views::reverse(current_space)) {
             if (ns->members.contains(id)) {
@@ -6938,32 +7081,51 @@ There are no mistakes with art.)";
             }
         }
 
-        // if (env.contains(ID)) {
-        //     const auto& [_, value, type] = env.at(ID);
-        //     return {{*value, type}};
-        // }
+        // a variable from an enclosing call: readable, but never found by assignment
+        if constexpr (not STRICT) {
+            for (const auto& e : std::views::reverse(env)) {
+                if (e->env.contains(id)) {
+                    const auto& [_, value_ptr, type_ptr] = e->env.at(id);
+                    return {{*value_ptr, type_ptr}};
+                }
+            }
+        }
 
         return {};
     }
 
-    bool changeVar(const size_t ID, const value::Value& v) {
-        for (auto rev_it = env.rbegin(); rev_it != env.rend(); ++rev_it)
-            if ((*rev_it)->env.contains(ID)) {
-                // const auto& t = rev_it->first.at(ID);
-                // (*rev_it).first[name] = {std::make_shared<value::Value>(v), t};
-                // get<1>(rev_it->first.at(ID)) = std::make_shared<value::Value>(v);
-                *get<1>((*rev_it)->env.at(ID)) = v;
 
+
+    bool changeVar(const size_t ID, const value::Value& v) {
+        for (size_t i = env.size(); i-- > 0; ) {
+            if (env[i]->env.contains(ID)) {
+                // const auto& [_, value_ptr, type] = env[i]->env.at(ID);
+                *get<1>(env[i]->env.at(ID)) = v;
                 return true;
             }
 
-        // if (env.contains(ID)) {
-        //     const auto& [_, value, __] = env.at(ID);
-        //     *value = v;
-        //     return true;
-        // }
+            if (env[i]->tag == value::EnvTag::FUNC) break;
+        }
+
+        if (env.front()->env.contains(ID)) {
+            // const auto& [_, value_ptr, type] = env.front()->env.at(ID);
+            *get<1>(env.front()->env.at(ID)) = v;
+            return true;
+        }
 
         return false;
+
+        // for (auto rev_it = env.rbegin(); rev_it != env.rend(); ++rev_it)
+        //     if ((*rev_it)->env.contains(ID)) {
+        //         // const auto& t = rev_it->first.at(ID);
+        //         // (*rev_it).first[name] = {std::make_shared<value::Value>(v), t};
+        //         // get<1>(rev_it->first.at(ID)) = std::make_shared<value::Value>(v);
+        //         *get<1>((*rev_it)->env.at(ID)) = v;
+
+        //         return true;
+        //     }
+
+        // return false;
     }
 
     // std::optional<std::pair<value::Value, type::TypePtr>> globalLookup(const std::string& name) const {

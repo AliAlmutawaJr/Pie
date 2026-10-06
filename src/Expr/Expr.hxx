@@ -418,10 +418,14 @@ struct List : Pattern {
 // };
 
 struct Pack : Pattern {
-    ExprPtr expr;
+    // ExprPtr expr;
     // Pack() = default;
-    Pack(ExprPtr e, type::TypePtr type = nullptr, ExprPtr value = nullptr) noexcept
-    : Pattern{std::move(type), std::move(value)}, expr{std::move(e)} { }
+    // Pack(ExprPtr e, type::TypePtr type = nullptr, ExprPtr value = nullptr) noexcept
+    // : Pattern{std::move(type), std::move(value)}, expr{std::move(e)} { }
+
+    PatternPtr pattern;
+    Pack(PatternPtr pat = nullptr) noexcept
+    : pattern{std::move(pat)} { }
 };
 
 
@@ -466,7 +470,8 @@ inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t
     else if (auto pack = dynamic_cast<const unpack::Pack*>(pattern)) {
         s += "...";
 
-        if (pack->expr) s+= pack->expr->stringify();
+        // if (pack->expr) s += pack->expr->stringify(indent + 4);
+        if (pack->pattern) s += stringifyPattern(pack->pattern.get(), indent + 4);
     }
     else util::error();
 
@@ -495,18 +500,12 @@ inline bool patternInvolves(const unpack::Pattern *pattern, const std::string_vi
     //     }
     // }
     else if (auto pack = dynamic_cast<const unpack::Pack*>(pattern)) {
-        return pack->expr->involvesName(sv);
+        // return pack->expr->involvesName(sv);
+        if (pack->pattern) return patternInvolves(pack->pattern.get(), sv);
     }
     else util::error();
 
     return false;
-}
-
-
-inline ExprPtr boundExprOf(const Pattern *pattern) {
-    if (auto e = dynamic_cast<const unpack::Expr*>(pattern)) return e->expr;
-    if (auto p = dynamic_cast<const unpack::Pack*>(pattern)) return p->expr;
-    return nullptr;
 }
 
 
@@ -515,6 +514,21 @@ inline void forEach(const Pattern *pattern, const auto& fn) {
 
     if (auto list = dynamic_cast<const unpack::List*>(pattern))
         for (const auto& sub : list->patterns) forEach(sub.get(), fn);
+}
+
+inline void forEachName(const Pattern *pattern, const auto& fn) {
+    if (auto e = dynamic_cast<const unpack::Expr*>(pattern)) {
+        if (e->expr) fn(e->expr);
+        return;
+    }
+
+    if (auto p = dynamic_cast<const unpack::Pack*>(pattern)) {
+        if (p->pattern) forEachName(p->pattern.get(), fn);
+        return;
+    }
+
+    if (auto l = dynamic_cast<const unpack::List*>(pattern))
+        for (const auto& sub : l->patterns) forEachName(sub.get(), fn);
 }
 
 } // namespace unpack
@@ -1480,6 +1494,8 @@ struct Closure : Expr {
         std::string s = "(";
 
         if (not params.empty()) {
+            if (variadic_index and *variadic_index == 0) s += "...";
+
             if (std::holds_alternative<RegularParam>(params.front()))
                 s += get<RegularParam>(params.front()).expr->stringify();
             else
@@ -1496,7 +1512,11 @@ struct Closure : Expr {
 
 
 
-        for(size_t i{params.size() - 1}; const auto& [param, type] : std::views::zip(params, type.params) | std::views::drop(1)) {
+        const size_t v_ind = variadic_index ? *variadic_index : 0;
+        for(size_t i{1}, j{params.size() - 1}; const auto& [param, type] : std::views::zip(params, type.params) | std::views::drop(1)) {
+
+            if (i == v_ind) s += "...";
+
             s += ", ";
 
             if (std::holds_alternative<RegularParam>(param))
@@ -1509,11 +1529,11 @@ struct Closure : Expr {
                 s+= ": " + type->text(indent);
 
             // s += ", " + name.expr->stringify() + (type::shouldReassign(type) ? "" : ": " + type->text());
-            if (i <= defaults.size()) {
-                s += " `=` " + defaults[defaults.size() - i]->stringify();
+            if (j <= defaults.size()) {
+                s += " `=` " + defaults[defaults.size() - j]->stringify();
             }
 
-            --i; // will underflow during the last iteration, but that's fine
+            --j; // will underflow during the last iteration, but that's fine
         }
 
         return s + ")" + (type::shouldReassign(type.ret)? + "" : ": " + type.ret->text()) + " => " + body->stringify(indent);

@@ -28,7 +28,7 @@ namespace pie {
 namespace util {
 
 
-template <typename Except = std::runtime_error, bool print_loc = true>
+template <typename Except = std::runtime_error>
 [[noreturn]] inline void error(
     std::string_view msg = " ",
     [[maybe_unused]] const std::source_location& location = std::source_location::current()
@@ -42,11 +42,12 @@ template <typename Except = std::runtime_error, bool print_loc = true>
 
 
     #if PIE_DEBUG
-    if constexpr (print_loc) {
+    // if constexpr (print_loc)
+    {
         std::string err_loc = std::format("\033[1m{}:{}:{}: \033[31merror:\033[0m ", location.file_name(), location.line(), location.column());
         throw Except{err_loc + std::string{msg}};
     }
-    else // attaches the throw expression bellow
+    // else // attaches the throw expression bellow
     #endif
 
 

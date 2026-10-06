@@ -59,11 +59,14 @@ space std {
     };
  
 
-    mixfix(LOW +) if : : else : =
-        (cond, `thn`, `els`) =>
-            __builtin_eval(
-                __builtin_conditional(cond, thn, els)
-            );
+    .: mixfix(LOW +) if : : else : =
+    .:     (cond, `thn`, `els`) =>
+    .:         __builtin_eval(
+    .:             __builtin_conditional(cond, thn, els)
+    .:         );
+
+    infix(keyword) if = (`expr`, cond) =>
+        __builtin_conditional(cond, eval(expr), 0);
 
 
     mixfix(LOW +) : ? : else : =

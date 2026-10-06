@@ -49,7 +49,11 @@ inline std::string renderSpan(const util::SourceSpan& span) {
 
 
 inline std::string render(const std::exception& e) {
+    #if PIE_DEBUG
+    std::string out = std::format("{}{}{}\n", BOLD, e.what(), RESET);
+    #else
     std::string out = std::format("{}{}error:{}{} {}{}\n", BOLD, RED, RESET, BOLD, e.what(), RESET);
+    #endif
 
     if (const auto located = dynamic_cast<const except::LocatedError*>(&e)) {
         if (located->span.span.first.line != 0)

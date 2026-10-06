@@ -116,13 +116,6 @@ list = {1, 2, 3};
 Note that packs may be empty!
 
 
-For maps, the syntax differs to match the map syntax in Pie:
-```pie
-map = {"one": 1, "two": 2, "three": 3};
-{key1: val1, key2: val2} = map;
-```
-Map unpackments may **NOT** introduce a pack.
-
 Unpackments may be used with the walrus operator to infer the type of the RHS.
 
 <!--
@@ -483,15 +476,15 @@ __builtin_print(x);
 The `use x::` directive pulls operators the names in from a namespace into the current namespace. It works as if all the names inside the given namespace had a `use` declaration applied on them:
 ```pie
 space ns {
-    x = 1;
-    y = "hi";
-    z = 3.14;
+    infix + = (a, b) => __builtin_add(a, b);
+    a = 1;
 };
 
-use space ns;
+use ns::;
 
-__builtin_print(x);
+__builtin_print(1 + 2);
 ```
+Note that `use ns::` does not pull the names, so `a` is not available outside of namespace `ns`.
 
 
 ## Scopes
@@ -827,11 +820,12 @@ a = 5; .: Error!
 ```
 Concepts also allow for what's known as "Design by Contract" where pre-conditions are the types of the arguments, and the post-condition is the return type.
 
-<!-- 
-#### Syntax Type
-The `Syntax` type is a special type that gives a handle onto the AST node used to represent an expression.\
-Take this example:
 
+#### Syntax Type
+The `Syntax` type is a special type that gives a handle onto the AST node used to represent an expression.
+
+##### Explicit Syntax Objects
+Explicit Syntax objects are expressions surrounded by backticks (\`)
 ```pie
 infix + = (a, b) => __builtin_add(a, b);
 
@@ -853,7 +847,33 @@ result = __builtin_eval(x);
 __builtin_print(result);
 ```
 
-`6` will be printed. -->
+`6` will be printed.
+
+##### Implicit Syntax Objects
+Implicit Syntax objects work in a similar way as to explicit Syntax objects, except they make for a nicer user experience.
+
+Implicit Syntax objects are created when the receiver is surrounded by backticks:
+```pie
+log = (`expr`) => {
+    __builtin_print(expr, "evaluates to:");
+    __builtin_print(__builtin_eval(expr));
+};
+```
+
+Notice the backticks surrounding the parameter. Now if I call this function with an expression:
+```pie
+infix + = (a, b) => __builtin_add(a, b);
+
+log(1 + 2);
+```
+Notice how `1 + 2` is not surrouned by backticks at the call site. The example prints:
+```
+Syntax {
+    (1 + 2)
+}
+evaluates to:
+3
+```
 
 
 ## Comments
