@@ -315,6 +315,7 @@ struct Assignment : Expr {
     ExprPtr rhs;
 
     bool is_syntax;
+    bool declares = false;
 
 
     Assignment(ExprPtr l, type::TypePtr t, ExprPtr r, const bool s = false, util::SourceSpan sp = {}) noexcept

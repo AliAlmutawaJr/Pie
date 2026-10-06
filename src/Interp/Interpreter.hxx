@@ -33,12 +33,13 @@
 #endif
 
 
-#include "../Functions/BuiltinFunctions.hxx"
-#include "../Functions/ConstexprLookup.hxx"
+#include "../Builtins/BuiltinFunctions.hxx"
+#include "../Builtins/ConstexprLookup.hxx"
 #include "../Utils/utils.hxx"
 #include "../Diagnostic/Exceptions.hxx"
 #include "../Lex/Lexer.hxx"
 #include "../Analysis/LexicalAnalysis.hxx"
+#include "../Builtins/Builtins.hxx"
 #include "../Expr/Expr.hxx"
 #include "../Type/Type.hxx"
 #include "../Parser/Parser.hxx"
@@ -98,12 +99,18 @@ class Visitor {
 
     std::vector<size_t> import_indices;
 
+
 public:
 
 
-    Visitor(std::vector<size_t> indices, std::filesystem::path r = ".") noexcept
-    : root{r.parent_path()}, env{{std::make_shared<value::Env>()}}, deferred{{}}, import_indices{std::move(indices)}
-    { }
+    Visitor(std::vector<size_t> indices, std::filesystem::path r = ".", const size_t v_index = 0) noexcept :
+    root{r.parent_path()},
+    env{{std::make_shared<value::Env>()}},
+    deferred{{}},
+    import_indices{std::move(indices)}
+    {
+        addBuiltinGlobals(v_index);
+    }
 
 
     ~Visitor() noexcept(false) {
@@ -303,11 +310,6 @@ public:
 
 
     ValueType operator()(const expr::Name *n) {
-        // what should builtins evaluate to?
-        // If I return the string back, then expressions like `"__builtin_neg"(1)` are valid now :))))
-        // interesting!
-        // how about a special value?
-
         if (const auto& var = getVar(n->var_ID, liftName(n)); var) {
             if (isRef(n->var_ID)) return fetchRef(n);
 
@@ -319,21 +321,6 @@ public:
         if (n->name == "self" and not selves.empty()) return {selves.back(), typeOf(selves.back())};
 
 
-        // for now, buitlin functions just return their names as strings...
-        // maybe i need to return some builtin type or smth. IDK
-        if (isBuiltin(n->name)) return {value::BuiltinFunction{n->name}, type::builtins::BuiltinFunction()};
-
-
-        if (n->name == "Any"   ) return {type::builtins::Any   (), type::builtins::Type()};
-        if (n->name == "Int"   ) return {type::builtins::Int   (), type::builtins::Type()};
-        if (n->name == "Double") return {type::builtins::Double(), type::builtins::Type()};
-        if (n->name == "String") return {type::builtins::String(), type::builtins::Type()};
-        if (n->name == "Bool"  ) return {type::builtins::Bool  (), type::builtins::Type()};
-        if (n->name == "Type"  ) return {type::builtins::Type  (), type::builtins::Type()};
-        if (n->name == "Syntax") return {type::builtins::Syntax(), type::builtins::Type()};
-
-
-        // printEnv(env);
         #ifdef PIE_DEBUG
             util::error("Name `" + n->name + "`, with ID [" + std::to_string(n->var_ID) + "] is not defined!");
         #else
@@ -646,13 +633,6 @@ public:
         }
 
 
-
-        // // can't have any syntax type since the pack consists of values, not expressions..
-        // // unless...!
-        // // TODO: allow for folding over syntax...maybe
-
-        // checkNoSyntaxType(op->funcs);
-
         type::TypePtr ret_type;
         const size_t  first_idx = 1 - l2r;
         const size_t second_idx =     l2r;
@@ -683,69 +663,6 @@ public:
             ScopeGuard sg{this, args_env};
             ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
         }
-
-
-        // // no overload resolution required
-        // if (op->funcs.size() == 1) {
-        //     func = dynamic_cast<expr::Closure*>(op->funcs[0].get());
-        //     func->type.ret                = validateType(std::move(func)->type.ret               );
-        //     func->type.params[ first_idx] = validateType(std::move(func)->type.params[ first_idx]);
-        //     func->type.params[second_idx] = validateType(std::move(func)->type.params[second_idx]);
-
-
-
-        //     for (const auto& value : values) {
-
-        //         typeCheck(ret, func->type.params[first_idx],
-        //             "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
-        //             "', parameter '" + func->params[0].name +
-        //             "' expected: " + func->type.params[0]->text() +
-        //             ", got: " + stringify(ret) + " which is " + typeOf(ret)->text()
-        //         );
-
-        //         typeCheck(ret, func->type.params[second_idx],
-        //             "Type mis-match in Fold expressions with Infix operator '" + fold->op + 
-        //             "', parameter '" + func->params[1].name +
-        //             "' expected: " + func->type.params[1]->text() +
-        //             ", got: " + stringify(ret) + " which is " + typeOf(ret)->text()
-        //         );
-
-
-        //         value::Environment args_env;
-        //         args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
-        //         args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
-
-
-        //         ScopeGuard sg{this, args_env};
-
-        //         ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
-        //     }
-        // }
-        // else { // fuck me
-        //     // checkNoSyntaxType(op->funcs);
-
-        //     for (const auto& value : values) {
-
-        //         func = resolveOverloadSet(op->OpName(), op->funcs, {ret, value});
-        //         // I think these lines are needed. Have to check 
-        //         func->type.ret                = validateType(std::move(func)->type.ret             );
-        //         func->type.params[ first_idx] = validateType(std::move(func)->type.params[ first_idx]);
-        //         func->type.params[second_idx] = validateType(std::move(func)->type.params[second_idx]);
-
-
-        //         value::Environment args_env;
-        //         args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].name}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
-        //         args_env[func->params[second_idx].ID] = {{func->params[second_idx].name}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
-
-
-        //         ScopeGuard sg{this, args_env};
-
-        //         ret = checkReturnType(std::visit(*this, func->body->variant()).value, func->type.ret);
-        //     }
-        // }
-
-        // return {ret, typeOf(ret)};
-        // return {ret, func->type.ret};
 
         return {ret, ret_type};
     }
@@ -984,39 +901,24 @@ public:
 
 
     ValueType nameAssign(const expr::Assignment *ass, const expr::Name* name) {
-
-        // * walrus assignment may need to propogate the type here
         type::TypePtr type = ass->type;
-        bool change{};
 
+        if (ass->declares) {
+            type = type::shouldReassign(type) ? type::builtins::Any() : validateType(std::move(type));
+        }
+        else { // var already exists. Confirmed by static analysis
+            auto var = getVar(name->var_ID, liftName(name));
+            if (not var) util::error();
 
-        constexpr auto STRICT = true;
-        // variable already exists. Check that type matches the rhs type
-        if (const auto& var = getVar<STRICT>(name->var_ID, liftName(name)); var) {
             if (isRef(name->var_ID)) return refAssign(ass, name);
 
             if (type::shouldReassign(type)) {
                 // no need to check if it's a valid type since that already was checked when it was creeated
                 type = var->type;
-                change = true;
             }
         }
-        // if (checkMemberInThisObject(name->name)) {
-        //     const value::Value val = std::visit(*this, ass->rhs->variant()).value;
-        //     return changeThis(name->name, val);
-        // }
-        else { // New var
-            type = type::shouldReassign(type) ? type::builtins::Any() : validateType(std::move(type));
-        }
-
-
-        // if (type->text() == "Syntax")
-        //     return addVar(name->stringify(), name->ID, std::make_shared<value::Value>(ass->rhs->variant()), type);
-
 
         value::Value value = std::visit(*this, ass->rhs->variant()).value;
-
-
         value = typeCheck(value, type,
             "In assignment: " + ass->stringify() +
             "\nType mis-match! Expected: " + type->text() + ", got: " + typeOf(value)->text()
@@ -1029,16 +931,13 @@ public:
             // we verified types are compatible so this is fine..should be...I hope
             if (const auto *t = type::isFunction(type))
                 closure.type = *t;
-            else if (not type::isAny(type))
-                util::error();
-            // else error("Again, Incompatible types. This should never happen. File a bug report!");
+            else if (not type::isAny(type)) util::error();
         }
 
 
-        if (change) {
-            if (not changeVar(name->var_ID, value)) util::error();
-        }
-        else addVar(name->stringify(), name->var_ID, std::make_shared<value::Value>(value), type);
+        if (ass->declares) addVar(name->stringify(), name->var_ID, std::make_shared<value::Value>(value), type);
+        else if (not changeVar(name->var_ID, value)) util::error();
+
 
         return {value, type};
     }
@@ -2627,7 +2526,12 @@ There are no mistakes with art.)";
 
 
         value::Value value;
-        Visitor v{std::move(ls).indeces};
+        Visitor v{std::move(ls).indeces, ".", import_index};
+
+        for (size_t i{}; i < builtins::NAMES.size(); ++i)
+            // reference the same global
+            v.env.front()->env[i] = env.front()->env[i];
+
         for (const auto& expr : exprs)
             value = std::visit(v, std::move(expr)->variant()).value;
 
@@ -7063,7 +6967,6 @@ There are no mistakes with art.)";
     // }
 
 
-    template <bool STRICT = false>
     std::optional<ValueType> getVar(const ssize_t id, auto name) const {
         if (id == -1) return {};
 
@@ -7082,14 +6985,14 @@ There are no mistakes with art.)";
         }
 
         // a variable from an enclosing call: readable, but never found by assignment
-        if constexpr (not STRICT) {
-            for (const auto& e : std::views::reverse(env)) {
-                if (e->env.contains(id)) {
-                    const auto& [_, value_ptr, type_ptr] = e->env.at(id);
-                    return {{*value_ptr, type_ptr}};
-                }
+        // if constexpr (not STRICT)
+        for (const auto& e : std::views::reverse(env)) {
+            if (e->env.contains(id)) {
+                const auto& [_, value_ptr, type_ptr] = e->env.at(id);
+                return {{*value_ptr, type_ptr}};
             }
         }
+
 
         return {};
     }
@@ -7097,35 +7000,35 @@ There are no mistakes with art.)";
 
 
     bool changeVar(const size_t ID, const value::Value& v) {
-        for (size_t i = env.size(); i-- > 0; ) {
-            if (env[i]->env.contains(ID)) {
-                // const auto& [_, value_ptr, type] = env[i]->env.at(ID);
-                *get<1>(env[i]->env.at(ID)) = v;
-                return true;
-            }
-
-            if (env[i]->tag == value::EnvTag::FUNC) break;
-        }
-
-        if (env.front()->env.contains(ID)) {
-            // const auto& [_, value_ptr, type] = env.front()->env.at(ID);
-            *get<1>(env.front()->env.at(ID)) = v;
-            return true;
-        }
-
-        return false;
-
-        // for (auto rev_it = env.rbegin(); rev_it != env.rend(); ++rev_it)
-        //     if ((*rev_it)->env.contains(ID)) {
-        //         // const auto& t = rev_it->first.at(ID);
-        //         // (*rev_it).first[name] = {std::make_shared<value::Value>(v), t};
-        //         // get<1>(rev_it->first.at(ID)) = std::make_shared<value::Value>(v);
-        //         *get<1>((*rev_it)->env.at(ID)) = v;
-
+        // for (size_t i = env.size(); i-- > 0; ) {
+        //     if (env[i]->env.contains(ID)) {
+        //         // const auto& [_, value_ptr, type] = env[i]->env.at(ID);
+        //         *get<1>(env[i]->env.at(ID)) = v;
         //         return true;
         //     }
 
+        //     if (env[i]->tag == value::EnvTag::FUNC) break;
+        // }
+
+        // if (env.front()->env.contains(ID)) {
+        //     // const auto& [_, value_ptr, type] = env.front()->env.at(ID);
+        //     *get<1>(env.front()->env.at(ID)) = v;
+        //     return true;
+        // }
+
         // return false;
+
+        for (auto rev_it = env.rbegin(); rev_it != env.rend(); ++rev_it)
+            if ((*rev_it)->env.contains(ID)) {
+                // const auto& t = rev_it->first.at(ID);
+                // (*rev_it).first[name] = {std::make_shared<value::Value>(v), t};
+                // get<1>(rev_it->first.at(ID)) = std::make_shared<value::Value>(v);
+                *get<1>((*rev_it)->env.at(ID)) = v;
+
+                return true;
+            }
+
+        return false;
     }
 
     // std::optional<std::pair<value::Value, type::TypePtr>> globalLookup(const std::string& name) const {
@@ -7176,13 +7079,180 @@ There are no mistakes with art.)";
     }
 
 
-    // static void printEnv(const std::vector<std::pair<value::Environment, EnvTag>>& env) noexcept {
-    //     const auto& e = envStackToEnvMap(env);
-    //     for (const auto& [ID, v] : e) {
-    //         const auto& [name, value, type] = v;
-    //         std::println("[{}] {}: {} = {}", ID, name.space->name, name.name, type->text(), stringify(*value));
-    //     }
-    // }
+
+    void addBuiltinGlobals(const size_t ID) {
+
+        auto nextID =  [ID = ID] mutable {
+            auto index = ID++;
+            // skip reserved IDs
+            if (index == std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::UNNAMED)) {
+                index += analysis::LexicalAnalysis::RESERVED_IDS_SIZE;
+                ID = index + 1;
+            }
+
+            return index;
+        };
+
+
+        auto& globals = env.front()->env;
+
+        constexpr auto global_namespace = nullptr;
+
+        globals.insert({
+            nextID(),
+            {
+                {"Any", global_namespace},
+                std::make_shared<value::Value>(type::builtins::Any()),
+                type::builtins::Any()
+            }
+        });
+        globals.insert({
+            nextID(),
+            {
+                {"Int", global_namespace},
+                std::make_shared<value::Value>(type::builtins::Int()),
+                type::builtins::Any()
+            }
+        });
+        globals.insert({
+            nextID(),
+            {
+                {"Double", global_namespace},
+                std::make_shared<value::Value>(type::builtins::Double()),
+                type::builtins::Any()
+            }
+        });
+        globals.insert({
+            nextID(),
+            {
+                {"String", global_namespace},
+                std::make_shared<value::Value>(type::builtins::String()),
+                type::builtins::Any()
+            }
+        });
+        globals.insert({
+            nextID(),
+            {
+                {"Bool", global_namespace},
+                std::make_shared<value::Value>(type::builtins::Bool()),
+                type::builtins::Any()
+            }
+        });
+        globals.insert({
+            nextID(),
+            {
+                {"Syntax", global_namespace},
+                std::make_shared<value::Value>(type::builtins::Syntax()),
+                type::builtins::Any()
+            }
+        });
+        globals.insert({
+            nextID(),
+            {
+                {"Type", global_namespace},
+                std::make_shared<value::Value>(type::builtins::Type()),
+                type::builtins::Any()
+            }
+        });
+
+
+        const auto builtins = {
+            "__builtin_rand_int",
+
+            "__builtin_print",
+            "__builtin_concat",
+
+            "__builtin_create_class",
+            "__builtin_parse",
+
+            "__builtin_defer",
+
+            "__builtin_print_env",
+            "__builtin_panic",
+            "__builtin_id",
+            "__builtin_input_str",
+            "__builtin_input_int",
+            "__builtin_decltype",
+            "__builtin_type",
+            "__builtin_len",
+            "__builtin_reset",
+            "__builtin_eval",
+            "__builtin_neg",
+            "__builtin_abs",
+            "__builtin_not",
+            "__builtin_to_int",
+            "__builtin_to_double",
+            "__builtin_to_string",
+            "__builtin_get",
+            "__builtin_set",
+            "__builtin_push",
+            "__builtin_reverse",
+            "__builtin_pop",
+            "__builtin_pop_front",
+            "__builtin_insert_at",
+            "__builtin_remove_at",
+            "__builtin_object_has",
+            "__builtin_into_pack",
+            "__builtin_add",
+            "__builtin_sub",
+            "__builtin_mul",
+            "__builtin_div",
+            "__builtin_mod",
+            "__builtin_pow",
+            "__builtin_gt",
+            "__builtin_geq",
+            "__builtin_eq",
+            "__builtin_leq",
+            "__builtin_lt",
+            "__builtin_and",
+            "__builtin_or",
+            "__builtin_conditional",
+            "__builtin_str_slice",
+            "__builtin_str_split",
+
+            // //* File IO
+            "__builtin_open_file",
+            "__builtin_is_file_open",
+            "__builtin_close_file",
+            "__builtin_write_file",
+            "__builtin_read_file",
+            "__builtin_read_line",
+            "__builtin_read_word",
+
+            //* FFI shit
+            "__builtin_dlopen",
+            "__builtin_dlsym",
+            "__builtin_ffi_call",
+            "__builtin_ffi_type_void",
+            "__builtin_ffi_type_int",
+            "__builtin_ffi_type_float",
+            "__builtin_ffi_type_double",
+            "__builtin_ffi_type_uint8",
+            "__builtin_ffi_type_sint8",
+            "__builtin_ffi_type_uint16",
+            "__builtin_ffi_type_sint16",
+            "__builtin_ffi_type_uint32",
+            "__builtin_ffi_type_sint32",
+            "__builtin_ffi_type_uint64",
+            "__builtin_ffi_type_sint64",
+            "__builtin_ffi_type_struct",
+            "__builtin_ffi_type_pointer",
+            "__builtin_ffi_type_cstring",
+            "__builtin_ffi_type_complex",
+
+            "__builtin_ptr_to_string",
+        };
+
+        for (const auto& builtin : builtins)
+            globals.insert({
+                nextID(),
+                {
+                    {builtin, global_namespace},
+                    std::make_shared<value::Value>(value::BuiltinFunction{builtin}),
+                    type::builtins::Any()
+                }
+            });
+    }
 
 };
 

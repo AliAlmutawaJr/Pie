@@ -73,7 +73,7 @@ public:
 
     std::vector<size_t> indeces;
 
-    LexicalAnalysis(const size_t = 0, const size_t = 0);
+    LexicalAnalysis(const size_t = 0);
 
 
     // void operator()(auto *node) { }

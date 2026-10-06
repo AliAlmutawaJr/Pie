@@ -34,8 +34,8 @@
 
 
 namespace pie {
-inline namespace funcs {
 inline namespace builtins {
+inline namespace funcs {
 
 
 inline auto handleNums(const auto& a, const auto& b, const auto& op) {

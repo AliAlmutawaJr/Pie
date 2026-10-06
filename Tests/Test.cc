@@ -11,6 +11,269 @@
 
 
 
+TEST_CASE("Unpackment Pack Matching", "[Unpack]") {
+{
+    const auto src = R"(
+makePack = (...args) => args;
+
+{...{y, z} = makePack({1, 2})} = {{1, 2}};
+{...{y = 1, z}} = {{1, 2}};
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+makePack = (...args) => args;
+
+{a, b, c, d, ...x = makePack(5)} = {1, 2, 3, 4, 5};
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+{
+    const auto src = R"(
+{a, b, c, d, ...x = 5} = {1, 2, 3, 4, 5};
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+{a, b, c, d, x = 5} = {1, 2, 3, 4, 5};
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+{
+    const auto src = R"(
+makePack = (...args) => args;
+
+{a, b, c, d, x = makePack(5)} = {1, 2, 3, 4, 5};
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+{...x: ...Int} = {1, "two"};
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+{...x: ...Int} = {1, 2};
+)";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+}
+
+
+TEST_CASE("Nested List Flattening", "[Unpack]") {
+{
+    const auto src = R"(
+{... {...x}} = {{1}, {10, 20}, {100, 200, 300}};
+__builtin_print({x...});
+)";
+
+    REQUIRE(pie::test::run(src) == "{1, 10, 20, 100, 200, 300}");
+}
+}
+
+
+
+TEST_CASE("Pack Unpackment", "[Pack][Unpack]") {
+{
+    const auto src = R"(
+Human = class { name = ""; age = 0; };
+
+l = {Human("one", 1), Human("two", 2)};
+{...{names, ages}} = l;
+__builtin_print(names);
+)";
+
+    REQUIRE(pie::test::run(src) == "one, two");
+}
+{
+    const auto src = R"(
+{...{first, ...rest}} = {{1, 2, 3}, {4, 5}};
+__builtin_print(first, "|", rest);
+)";
+
+    REQUIRE(pie::test::run(src) == "1, 4 | 2, 3, 5");
+}
+{
+    const auto src = R"(
+{...{x, ...{y, z}}} = {{1, {2, 3}}, {4, {5, 6}}};
+__builtin_print(x, "|", y, "|", z);
+)";
+
+    REQUIRE(pie::test::run(src) == "1, 4 | 2, 5 | 3, 6");
+}
+}
+
+
+
+TEST_CASE("Variadic Unpackmeter", "[Variadic][Unpack]") {
+{
+    const auto src = R"(
+Human = class { name = ""; age = 0; };
+
+func = (...{names, ages}) => __builtin_print(names, sep = "\n", ages);
+func(Human("one", 1), Human("two", 2));
+)";
+
+    REQUIRE(pie::test::run(src) == "one, two\n1, 2");
+}
+{
+    const auto src = R"(
+f = (...{first, ...rest}) => __builtin_print(first, "|", rest...);
+f({1, 2, 3}, {4, 5});
+)";
+
+    REQUIRE(pie::test::run(src) == "1, 4 | 2, 3 5");
+}
+{
+    const auto src = R"(
+g = (...{x, ...{y, z}}) => __builtin_print(x, "|", y, "|", z);
+g({1, {2, 3}}, {4, {5, 6}});
+)";
+
+    REQUIRE(pie::test::run(src) == "1, 4 | 2, 5 | 3, 6");
+}
+}
+
+
+
+TEST_CASE("Member Assignment", "[Class][Assign]") {
+{
+    const auto src = R"(
+C = class {
+    func = (cond) => {
+        a = "first call";
+
+        __builtin_conditional(
+            cond,
+            (a = "recursive"),
+            {
+                func(true);
+                __builtin_print(a);
+            }
+        );
+    };
+};
+C().func(false);
+)";
+
+    REQUIRE(pie::test::run(src) == "first call");
+}
+{
+    const auto src = R"(
+C = class {
+    a = "meow";
+    func = (cond) => {
+        a = "first call";
+
+        __builtin_conditional(
+            cond,
+            (a = "recursive"),
+            {
+                func(true);
+                __builtin_print(a);
+            }
+        );
+    };
+};
+C().func(false);
+)";
+
+    REQUIRE(pie::test::run(src) == "recursive");
+}
+}
+
+
+
+TEST_CASE("Local Assignment", "[Var][Assign]") {
+{
+    const auto src = R"(
+outer = () => {
+    a = 0;
+    f = () => a = 1;
+    f();
+    __builtin_print(a);
+};
+outer();
+)";
+
+    REQUIRE(pie::test::run(src) == "1");
+}
+{
+    const auto src = R"(
+outer = () => {
+    a = 0;
+    f = () => a: Any = 1;
+    f();
+    __builtin_print(a);
+};
+outer();
+)";
+
+    REQUIRE(pie::test::run(src) == "0");
+}
+}
+
+
+TEST_CASE("Assigning to Literals", "[Assign]") {
+{
+    const auto src = R"(
+{
+    1 = 2;
+    __builtin_print(1);
+};
+__builtin_print(1);
+)";
+
+    REQUIRE(pie::test::run(src) == "2\n1");
+}
+}
+
+
+
+TEST_CASE("Assigning to Builtins", "[Builtin][Assign]") {
+{
+    const auto src = R"(
+changeAny = () => Any = 1;
+__builtin_print(Any);
+changeAny();
+__builtin_print(Any);
+)";
+
+    REQUIRE(pie::test::run(src) == "Any\n1");
+}
+{
+    const auto src = R"(
+changeAny = () => Any: Int = 1;
+__builtin_print(Any);
+changeAny();
+__builtin_print(Any);
+)";
+
+    REQUIRE(pie::test::run(src) == "Any\nAny");
+}
+{
+    const auto src = R"(
+changeAny = () => Any: Any = 1;
+__builtin_print(Any);
+changeAny();
+__builtin_print(Any);
+)";
+
+    REQUIRE(pie::test::run(src) == "Any\nAny");
+}
+}
+
 
 TEST_CASE("Flatten List", "[Algorithm]") {
 {
@@ -289,7 +552,9 @@ Human = class {
     age = 0;
 };
 
-h = (...{name = std::Pack("Pie", "C++")}: ...Human) => 0;
+makePack = (...args) => args;
+
+h = (...{name = makePack("Pie", "C++")}: ...Human) => 0;
 h(Human("C++", 40), Human("Pie", 3));
 )";
 
