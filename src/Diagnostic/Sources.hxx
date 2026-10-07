@@ -8,10 +8,12 @@
 
 namespace pie::util {
 
-inline std::unordered_map<std::string, std::string> sources = {{"", "<unnamed>"}};
+inline std::unordered_map<std::string, std::string> sources = {{"<unnamed>", ""}};
 
 [[nodiscard]] inline std::optional<std::string_view> fileAtLine(const std::string& fname, const size_t line) {
     if (not line) return {};
+
+    if (not sources.contains(fname)) return {};
 
     const std::string_view content = sources.at(fname);
     if (content.empty()) return {};

@@ -473,7 +473,7 @@ __builtin_print(x);
 
 ### `use x::` directive
 
-The `use x::` directive pulls operators the names in from a namespace into the current namespace. It works as if all the names inside the given namespace had a `use` declaration applied on them:
+The `use x::` directive pulls operators in from a namespace into the current namespace. It works as if all the names inside the given namespace had a `use` declaration applied on them:
 ```pie
 space ns {
     infix + = (a, b) => __builtin_add(a, b);
@@ -630,7 +630,7 @@ infix(+) + = (a: String, b: String): String => __builtin_concat(a, b);
 The `1 + 2` calls the first operator. `"Hi" + "Bye"` calls the second!
 
 ## Packs
-Packs in Pie are analogous to C++'s packs. One can only declare a pack as a function parameter:
+Packs in Pie are analogous to C++'s packs. One can only declare a pack as a function parameters **OR** in an [unpackment](#unpackments):
 ```pie
 func = (...pack) => __builtin_print(pack);
 func(1, "Hello", 3.14);
@@ -735,10 +735,7 @@ Pie reserves the names starting with `__builtin_`.
 
 ## Types
 
-#### Pie has 13 types.
-
-
-##### 7 builtin types
+#### 7 builtin types
 - `Int`
 - `Double`
 - `Bool`
@@ -747,11 +744,11 @@ Pie reserves the names starting with `__builtin_`.
 - `Type`
 - `Syntax`
 
-##### 2 collection types
+#### 2 collection types
 - `{type}`: list type
 - `{type1: type2}`: map type
 
-##### Functions types
+#### Functions types
 - `(T1, T2): T3`
 
 ```pie
@@ -760,14 +757,14 @@ one: (Int): Int = (x: Int): Int => 1;
 
 If something is left un-typed, it will be given the `Any` type.
 
-##### Pack Types
+#### Pack Types
 - `...Type`
 Read more about packs in the [packs sections](#packs)
 
-#### Custom Types
+### Custom Types
 See [Unions](#unions) and [Classes](#classes)
 
-#### Types as Values
+### Types as Values
 Types are values in Pie. A simple use case to demonstrate this is `Type Aliases`:
 ```pie
 Num = Int;
@@ -780,7 +777,7 @@ Some types, like function types, are not valid expressions, and therefore, the p
 Func = :(Int, Any): String;
 f: Func = (x, y): String => "hi";
 ```
-#### Values as Types
+### Values as Types
 Values as types (AKA: Literal Types in TypeScript) is a feature that allows you to use values as, well, ...types!
 
 
@@ -809,7 +806,7 @@ x = false;
 x = true;  .: Error!
 ```
 
-#### Concepts
+### Concepts
 Concepts (taken from C++) are unary predicate functions which are used as types. The value assigned to a variable with such type is checked by the unary function in order to type check.
 ```pie
 infix > = (a, b) => __builtin_gt(a, b);

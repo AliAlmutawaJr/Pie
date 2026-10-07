@@ -11,6 +11,93 @@
 
 
 
+TEST_CASE("Include Ordering and Variable IDs", "[Space][Var]") {
+{
+    const auto src = R"(
+import Tests/ns1;
+import Tests/ns2;
+
+use space ns1;
+use space ns2;
+
+print = __builtin_print;
+print(a);
+print(x);
+
+print(ns1::a);
+print(ns2::a);
+a = 30;
+print(ns1::a);
+print(ns2::a);
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(11
+10
+1
+11
+1
+30)");
+}
+{
+    const auto src = R"(
+import Tests/ns1;
+import Tests/ns2;
+
+use space ns2;
+use space ns1;
+
+print = __builtin_print;
+print(a);
+print(x);
+
+print(ns1::a);
+print(ns2::a);
+a = 30;
+print(ns1::a);
+print(ns2::a);
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"(1
+10
+1
+11
+30
+11)");
+}
+}
+
+
+
+TEST_CASE("Loop Controls Assignment", "[Loop]") {
+{
+    const auto src = R"(
+loop 10 {
+    (break 5) = 10;
+    __builtin_print(_);
+    break _;
+};
+)";
+
+    REQUIRE(pie::test::run(src) == "0");
+}
+{
+    const auto src = R"(
+loop 10 {
+    continue = 10;
+    __builtin_print(_);
+    break _;
+};
+)";
+
+    REQUIRE(pie::test::run(src) == "0");
+}
+}
+
+
+
+
 TEST_CASE("Unpackment Pack Matching", "[Unpack]") {
 {
     const auto src = R"(

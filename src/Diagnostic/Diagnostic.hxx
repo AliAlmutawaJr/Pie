@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <algorithm>
 
 #include "../Lex/Token.hxx"
 #include "../Diagnostic/Sources.hxx"
@@ -28,11 +29,15 @@ inline std::string renderSpan(const util::SourceSpan& span) {
     const auto number = std::to_string(start.line);
     const std::string gutter(number.size(), ' ');
 
-    // columns are 1-based and the end is inclusive.
-    // a span that continues onto later lines is underlined to the end of its first line.
+
+    // a span that continues onto later lines
+    // is underlined to the end of its first line.
     const size_t first = std::max<size_t>(start.column, 1);
-    size_t last = end.line == start.line ? end.column : line->size();
-    last = std::clamp(last, first, std::max(first, line->size()));
+    const size_t last = std::clamp(
+        end.line == start.line ? end.column : line->size(),
+        first,
+        std::max(first, line->size())
+    );
 
     // copy tabs from the source line so the carets line up under them
     std::string marker;

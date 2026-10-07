@@ -94,11 +94,7 @@ class Visitor {
     bool broken{}, continued{};
 
 
-    // v_table ahh name
-    std::unordered_map<std::string, std::vector<size_t>> co_map;
-
     std::vector<size_t> import_indices;
-
 
 public:
 

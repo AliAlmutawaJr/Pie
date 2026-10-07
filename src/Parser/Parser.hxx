@@ -28,6 +28,7 @@
 #include "../Utils/utils.hxx"
 #include "../Analysis/ExprContains.hxx"
 #include "Declarations.hxx"
+#include "Diagnostic/Sources.hxx"
 #include "Type/Type.hxx"
 
 
@@ -802,7 +803,6 @@ public:
 
 
         fname += ".pie";
-        // path.append(consume(NAME).text);
         std::filesystem::path path = util::getPiePath().parent_path(); // root;
         if (std::filesystem::exists(path / "std" / fname)) {
             path.append("std").append(std::move(fname));
@@ -812,7 +812,9 @@ public:
         }
 
         const auto src = util::readFile(path);
-        const token::Tokens tokens = lex::lex(src);
+        util::sources.insert({path, src});
+
+        const token::Tokens tokens = lex::lex(src, true, path);
         if (tokens.empty()) util::error("Can't import an empty file!");
 
         Parser p{std::move(tokens), path};
