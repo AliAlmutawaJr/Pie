@@ -364,7 +364,7 @@ if(EMCC_EXECUTABLE)
             -sASSERTIONS
             -sENVIRONMENT=web
             -sSTACK_SIZE=8388608
-            -INVOKE_RUN_AT_START=0
+            -sINVOKE_RUN=0
             -sEXIT_RUNTIME=0
             -sNO_DISABLE_EXCEPTION_CATCHING
             -std=c++23
@@ -374,7 +374,7 @@ if(EMCC_EXECUTABLE)
             "-I${boost_assert_SOURCE_DIR}/include/"
             "-I${boost_integer_SOURCE_DIR}/include/"
             "-I${boost_static_assert_SOURCE_DIR}/include/"
-            "-I${boost_type_traits_assert_SOURCE_DIR}/include/"
+            "-I${boost_type_traits_SOURCE_DIR}/include/"
             "-I${random_SOURCE_DIR}/include/"
             "-I${multiprecision_SOURCE_DIR}/include/"
             "-I${cpp_std_extensions_SOURCE_DIR}/include/"
