@@ -15,12 +15,7 @@
 
 
 
-#ifdef WEB_PIE
-using BigInt = long long;
-#else
-// using BigInt = ssize_t;
 using BigInt = boost::multiprecision::cpp_int;
-#endif
 
 namespace pie {
 

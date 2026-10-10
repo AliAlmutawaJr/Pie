@@ -20,7 +20,7 @@ space std {
     };
 
     Pack = (...args) => args;
-    PackOf = (T: Type, ...args: ...T): ...T => args;
+    PackOf = (T: Type) => (...args: ...T): ...T => args;
 
 
     infix + = (a: String, b: String) => __builtin_concat(a, b);
@@ -79,7 +79,7 @@ space std {
     .:     __builtin_conditional(
     .:     );
 
-    mixfix([]) : [ : ] = (cont, at) => __builtin_get(cont, at);
+    .: mixfix([]) : [ : ] = (cont, at) => __builtin_get(cont, at);
 
 
 

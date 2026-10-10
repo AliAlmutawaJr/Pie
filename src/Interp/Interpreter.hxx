@@ -1,8 +1,5 @@
 #pragma once
 
-#include "Declarations.hxx"
-#include "Diagnostic/Sources.hxx"
-#include "Lex/Token.hxx"
 #include <limits>
 #include <string>
 #include <string_view>
@@ -33,17 +30,20 @@
 #endif
 
 
-#include "../Builtins/BuiltinFunctions.hxx"
-#include "../Builtins/ConstexprLookup.hxx"
+#include "../Declarations.hxx"
 #include "../Utils/utils.hxx"
 #include "../Diagnostic/Exceptions.hxx"
+#include "../Diagnostic/Sources.hxx"
+#include "../Lex/Token.hxx"
 #include "../Lex/Lexer.hxx"
 #include "../Analysis/LexicalAnalysis.hxx"
 #include "../Builtins/Builtins.hxx"
 #include "../Expr/Expr.hxx"
-#include "../Type/Type.hxx"
 #include "../Parser/Parser.hxx"
 #include "../Value/Value.hxx"
+#include "../Type/Type.hxx"
+#include "../Builtins/ConstexprLookup.hxx"
+#include "../Builtins/BuiltinFunctions.hxx"
 #include "TreeMaker.hxx"
 
 
@@ -4063,7 +4063,12 @@ There are no mistakes with art.)";
             return {std::move(value), std::move(type)};
         }
 
-        if (std::holds_alternative<type::TypePtr>(var)) return {constructorCall(call, var), get<type::TypePtr>(var)};
+        if (std::holds_alternative<type::TypePtr>(var)) {
+            // todo
+            if (not call->named_args.empty()) util::error("");
+
+            return {constructorCall(call, var), get<type::TypePtr>(var)};
+        }
 
 
         if (std::holds_alternative<expr::Closure>(var)) {
@@ -6103,7 +6108,8 @@ There are no mistakes with art.)";
 
 
     value::Value builtinConcat(std::vector<expr::ExprPtr> args) {
-        if (args.size() < 2) util::error("'concat' requires at least 2 argument passed!");
+        if (args.size() < 2) util::error("`__builtin_concat` requires at least 2 arguments!");
+
 
         // we try to avoid repetitive appends
         // so we reserve the space beforehand
@@ -6115,7 +6121,7 @@ There are no mistakes with art.)";
             const value::Value& v = std::visit(*this, arg->variant()).value;
 
             // in the future, make this accept lists, (packs?), and maps
-            if (not std::holds_alternative<std::string>(v)) util::error("'concat' only accepts strings as arguments: " + stringify(v));
+            if (not std::holds_alternative<std::string>(v)) util::error("`__builtin_concat` only accepts strings as arguments: " + stringify(v));
 
             auto& string = std::move(get<std::string>(v));
             size += string.size();
