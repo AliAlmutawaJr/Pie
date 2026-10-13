@@ -1,14 +1,15 @@
 #include "Lexer.hxx"
 
 #include <cstdio>
+#include <exception>
+#include <stdexcept>
 
 #include "Token.hxx"
 #include "../Utils/utils.hxx"
 #include "../Diagnostic/Exceptions.hxx"
 
 
-namespace pie {
-namespace lex {
+namespace pie::lex{
 
 
 token::TokenKind keyword(const std::string_view word) noexcept {
@@ -29,8 +30,7 @@ token::TokenKind keyword(const std::string_view word) noexcept {
 
     else if (word == "import") return IMPORT;
     else if (word == "space" ) return NAMESPACE;
-
-    else if (word == "use") return USE;
+    else if (word == "use"   ) return USE;
 
     else if (word == "true"  ) return BOOL;
     else if (word == "false" ) return BOOL;
@@ -149,11 +149,6 @@ token::Tokens lex(const std::string& src, const bool check_for_semis, const std:
             return lines.back().emplace_back(std::forward<decltype(args)>(args)...);
     };
 
-    // const auto push = [&] (token::Token token) {
-    //     return lines.back().push_back(std::move(token));
-    // };
-
-
 
     for (size_t index{}; index < src.length(); ++index, ++to_column) {
         // catch up!
@@ -164,7 +159,6 @@ token::Tokens lex(const std::string& src, const bool check_for_semis, const std:
         try {
         switch (classify(src[index])) {
             using enum token::TokenKind;
-            // using enum CharClass;
             using CC = CharClass;
             using util::SourceSpan;
 
@@ -353,6 +347,11 @@ token::Tokens lex(const std::string& src, const bool check_for_semis, const std:
                         // find the closing `}`
                         size_t closing_brace = index;
                         for (size_t i{index + 1}, balance{}; i < src.size(); ++i) {
+
+                            if (src[i] == '\\') { ++i; continue; }
+                            // haha if while if
+                            if (src[i] == '"') while (++i < src.size() and src[i] != '"') if (src[i] == '\\') ++i;
+
                             if (src[i] == '{') {
                                 ++balance;
                                 continue;
@@ -374,17 +373,26 @@ token::Tokens lex(const std::string& src, const bool check_for_semis, const std:
                         to_column += closing_brace - index;
 
                         for (size_t i{}; i < substr.size(); ++i) {
-                            if (substr[i] == ';' or substr[i] == '}' or substr[i] == ')')
-                                util::error<except::LexerError>("Invalid Expression Inside f-string!");
+                            if (substr[i] == ';' or substr[i] == '}')
+                                util::error<except::LexerError>("Invalid Expression Inside f-string: " + std::string{substr[i]});
 
 
-                            size_t balance = substr[i] == '{';
-                            while (++i < substr.size() and balance) {
-                                balance += substr[i] == '{';
-                                balance -= substr[i] == '}';
+                            // skip nested strings
+                            if (substr[i] == '\\') { ++i; continue; }
+                            if (substr[i] == '"') while (++i < substr.size() and substr[i] != '"') if (src[i] == '\\') ++i;
+
+
+                            // doesn't account for nested strings
+                            if (size_t balance = substr[i] == '{'; balance) {
+                                while (++i < substr.size() and balance) {
+                                    balance += substr[i] == '{';
+                                    balance -= substr[i] == '}';
+                                }
+                                --i;
+
+                                if (balance) util::error<except::LexerError>("Imbalanced braces inside f-string");
                             }
 
-                            if (balance) util::error<except::LexerError>("Imbalanced braces inside ");
                         }
 
                         index = closing_brace;
@@ -392,8 +400,8 @@ token::Tokens lex(const std::string& src, const bool check_for_semis, const std:
                     }
                     else {
                         // if (c == '\n') {
-                            // ++to_line;
-                            // to_column = 0
+                        //     ++to_line;
+                        //     to_column = 0
                         // };
 
                         to_line += (c == '\n');
@@ -409,20 +417,28 @@ token::Tokens lex(const std::string& src, const bool check_for_semis, const std:
                 if (fstring_tokens.empty())
                     emplace(STRING, str);
                 else
-                    emplace(FSTRING, str, SourceSpan{{{from_line, from_column}, {to_line, to_column}}, file}, fstring_tokens);
+                    emplace(
+                        FSTRING,
+                        str,
+                        SourceSpan{{{from_line, from_column}, {to_line, to_column}}, file},
+                        fstring_tokens
+                    );
             } break;
 
 
             default:
-            // ++to_column;
                 break;
         }
         }
         catch(const except::LexerError& e) {
             throw;
         }
-        catch (...) {
-            util::error("Lexer Error!");
+        catch (const std::exception& e) {
+            std::cerr << "e.what(): " << e.what() << std::endl;
+            if (index < src.size()) {
+                util::error({{{from_line, from_column}, {to_line, to_column}}, file}, "Lexer Error at: " + std::string{src[index]});
+            }
+            else util::error("Lexer out of character!");
         }
         // catch(const std::exception& err) {
         //     util::error();
@@ -435,7 +451,7 @@ token::Tokens lex(const std::string& src, const bool check_for_semis, const std:
         util::error("Last line doesn't end with a ';'!");
 
 
-    if (lines.size() > 1) {
+    if (check_for_semis and lines.size() > 1) {
         lines.pop_back();
         emplace(token::TokenKind::END, "EOF");
     }
@@ -450,5 +466,5 @@ token::Tokens lex(const std::string& src, const bool check_for_semis, const std:
 }
 
 
-} // namespace lex
-} // namespace pie
+} // namespace pie::lex
+

@@ -160,7 +160,8 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
     if (token.kind == TokenKind::FSTRING) {
         os << '"' << token.text << '"' << ", [";
         for (const auto& [ind, tokens] : token.fstring_tokens) {
-            // guaranteed by the lexer to have at least one element
+            if (tokens.empty()) continue;
+
             os << "{" << ind << ": " << tokens.front() << "}";
             for (const auto& token : tokens | std::views::drop(1)) {
                 os << ", {" << ind << ": " << token << "}";
@@ -181,6 +182,12 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
     return os << '}';
 }
 
+
+inline std::string stringify(const Token& token) {
+    std::stringstream ss;
+    ss << token;
+    return ss.str();
+}
 
 } // namespace token
 } // namespace pie

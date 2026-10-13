@@ -10,6 +10,204 @@
 
 
 
+TEST_CASE("Fun FString", "[FString]") {
+{
+    const auto src = R"(
+x = "WOW: {{
+    x = {
+        1;
+        2;
+        3;
+    };
+
+    __builtin_print(x);
+}}";
+
+__builtin_print(x);
+)";
+
+    REQUIRE(pie::test::run(src) == R"(3
+WOW: 3)");
+}
+}
+
+
+TEST_CASE("FString Calls and Grouping", "[FString]") {
+{
+    const auto src = R"(
+f = (a) => a;
+g = (a, b) => b;
+h = (a, b, c) => __builtin_add(a, __builtin_add(b, c));
+x = 7;
+
+__builtin_print("{f( 1 )}");
+__builtin_print("{f(10)}");
+__builtin_print("{h(f(1), g(2, 3), (4))}");
+__builtin_print("{((x))}");
+__builtin_print("{ (x)}");
+__builtin_print("{f(f(f(f(1))))}");
+__builtin_print("{f(1)}{g(1, 2)}");
+__builtin_print("[{f(1)}] and [{g(1, 2)}]");
+)";
+
+    REQUIRE(pie::test::run(src) == R"(1
+10
+8
+7
+7
+1
+12
+[1] and [2])");
+}
+}
+
+
+
+TEST_CASE("FString Operators and Members", "[FString]") {
+{
+    const auto src = R"(
+infix + = (a, b) => __builtin_add(a, b);
+infix * = (a, b) => __builtin_mul(a, b);
+f = (a) => a;
+x = 7;
+
+C = class {
+    v = 3;
+    get = (a, b) => __builtin_add(v, __builtin_add(a, b));
+};
+c = C();
+
+__builtin_print("{(1 + 2) * 3}");
+__builtin_print("{x + 1} | {f(x)}");
+__builtin_print("{c.get(1, 2)}");
+)";
+
+    REQUIRE(pie::test::run(src) == R"(9
+8 | 7
+6)");
+}
+}
+
+
+TEST_CASE("FString Collections and Blocks", "[FString]") {
+{
+    const auto src = R"(
+__builtin_print("{ {1, 2, 3} }");
+__builtin_print("{__builtin_len({1, 2, 3})}");
+__builtin_print("{ {"a": 1} }");
+__builtin_print("{ {1; 2;} }");
+)";
+
+    REQUIRE(pie::test::run(src) == R"({1, 2, 3}
+3
+{a: 1}
+2)");
+}
+}
+
+
+TEST_CASE("FString Strings Inside Interpolations", "[FString]") {
+{
+    const auto src = R"PIE(
+f = (a) => a;
+g = (a, b) => b;
+x = 7;
+
+__builtin_print("{g("a, b", "c)")}");
+__builtin_print("{f("(")}");
+__builtin_print("{ "in {f(1)}" }");
+__builtin_print("a{ "b{ "c{x}" }" }d");
+__builtin_print("\{{x}\}");
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(c)
+(
+in 1
+abc7d
+{7})");
+}
+
+
+
+    REQUIRE(pie::test::run(R"(__builtin_print("{ "a}b" }");)") == R"(a}b)");
+    REQUIRE_THROWS(pie::test::run(R"(__builtin_print("{ "a{b" }");)"));
+}
+
+
+TEST_CASE("Invalid FString 2", "[FString]") {
+    REQUIRE_THROWS(pie::test::run(R"(__builtin_print("{(}");)"));
+    REQUIRE_THROWS(pie::test::run(R"(__builtin_print("{)(}");)"));
+    REQUIRE_THROWS(pie::test::run(R"(__builtin_print("{ ) }");)"));
+    REQUIRE_THROWS(pie::test::run(R"(__builtin_print("{f(1}");)"));
+    REQUIRE_THROWS(pie::test::run(R"(__builtin_print("{f 1)}");)"));
+    REQUIRE_THROWS(pie::test::run(R"(__builtin_print("abc{");)"));
+    REQUIRE_THROWS(pie::test::run(R"(__builtin_print("{ }");)"));
+    REQUIRE_THROWS(pie::test::run(R"(__builtin_print("{1; 2}");)"));
+}
+
+
+TEST_CASE("Invalid FString", "[FString]") {
+{
+    const auto src = R"(
+    __builtin_print("{1}");
+    __builtin_print("{(1)}");
+    __builtin_print("{((1) )}");
+)";
+
+    REQUIRE(pie::test::run(src) == R"(1
+1
+1)");
+}
+{
+    const auto src = R"(
+    __builtin_print("{1)}");
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+__builtin_print("{(1}");
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+__builtin_print("{(1) )}");
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"(
+__builtin_print("{((1) }");
+)";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
+
+
+TEST_CASE("FString Lexing", "[Lex][FString]") {
+{
+    const auto src = R"(
+func = (a, b, c) => 0;
+
+__builtin_print("{func(1)}");
+__builtin_print("{func(1, 2)}");
+__builtin_print("{func(1, 2, 3)}");
+
+)";
+
+    REQUIRE(pie::test::run(src) == R"((b: Any, c: Any): Any => 0
+(c: Any): Any => 0
+0)");
+}
+}
+
+
 
 TEST_CASE("Include Ordering and Variable IDs", "[Space][Var]") {
 {
@@ -1936,9 +2134,15 @@ x: U = class { name = ".."; }("Yo");
 
 )";
 
-    REQUIRE(pie::test::run(src) == R"(union { 1; String; Bool; class {
+    REQUIRE(pie::test::run(src) ==
+R"(union {
+    1;
+    String;
+    Bool;
+    class {
         name: Any = "";
-    }; })");
+    };
+})");
 }
 
 // nested union case
@@ -3059,7 +3263,10 @@ __builtin_print(__builtin_decltype(y));
 )";
 
     REQUIRE(pie::test::run(src2) == R"(String
-union { Int; String; })");
+union {
+    Int;
+    String;
+})");
 
 
     const auto src3 = R"(
@@ -4666,7 +4873,11 @@ U = union {
 __builtin_print(U);
 )";
 
-    REQUIRE(pie::test::run(src) == R"(union { Int; Int; })");
+    REQUIRE(pie::test::run(src) ==
+R"(union {
+    Int;
+    Int;
+})");
 }
 
 
@@ -5966,10 +6177,16 @@ Object {
     s = "hi";
 }
 a string
-union { union { Int; Double; }; class {
+union {
+    union {
+        Int;
+        Double;
+    };
+    class {
         x: Int = 0;
         s: String = "";
-    }; })");
+    };
+})");
 
 }
 
