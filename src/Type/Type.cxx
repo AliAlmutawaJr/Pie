@@ -218,14 +218,14 @@ namespace type {
 
     // * Union Type * //
     std::string UnionType::text(const size_t indent) const {
-        std::string s = "union { ";
+        std::string s = "union {\n";
 
+        const std::string space(indent + 4, ' ');
         for (std::string pipe{}; const auto& t : types) {
-
-            s += t->text(indent + 4) + "; ";
+            s += space + t->text(indent + 4) + ";\n";
         }
 
-        return s + '}';
+        return s + std::string(indent, ' ') + '}';
     }
 
     bool UnionType::involvesT(const Type& T) const {
