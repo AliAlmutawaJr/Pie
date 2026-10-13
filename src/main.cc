@@ -15,7 +15,6 @@
 #if WEB_PIE
 #include <emscripten.h>
 
-
 extern "C" EMSCRIPTEN_KEEPALIVE void execute(const char *code) try {
     pie::cli::run(std::string{code}, false, false, false);
 }
