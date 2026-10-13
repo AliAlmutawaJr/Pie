@@ -962,7 +962,16 @@ void LexicalAnalysis::operator()(expr::Use *use) {
 void LexicalAnalysis::operator()(expr::SpaceAccess *acc) {
     const auto space = findSpace(acc->spaces, acc->global);
 
-    if (not space) util::error();
+
+    if (not space) { // global access
+        const auto& globals = env.front().first.vars;
+        if (const auto it = globals.find(acc->name.name); it != globals.end()) {
+            acc->name.ID = it->second;
+            return;
+        }
+        util::error<except::NameLookup>("Name `" + acc->name.name + "` not found in the global scope");
+    }
+
 
     // for (const auto& [var, id] : namespaces[fullName(space)]) {
     for (const auto& [var, id] : space->members) {

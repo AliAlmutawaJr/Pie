@@ -10,6 +10,29 @@
 
 
 
+TEST_CASE("Global Scope Resolution Operator", "[Space]") {
+{
+    const auto src = R"(
+x = 1;
+
+func = () => {
+    x: Int = 10;
+    __builtin_print(::x);
+    __builtin_print(x);
+    ::x = 20;
+    x = 100;
+    __builtin_print(::x);
+    __builtin_print(x);
+};
+
+func();
+)";
+
+    REQUIRE(pie::test::run(src) == "1\n10\n20\n100");
+}
+}
+
+
 TEST_CASE("Fun FString", "[FString]") {
 {
     const auto src = R"(
