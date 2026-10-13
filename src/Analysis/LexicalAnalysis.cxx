@@ -798,6 +798,20 @@ void LexicalAnalysis::operator()(const expr::Access *acc) {
 
 
 
+void LexicalAnalysis::operator()(expr::Cascade *cas) {
+    if (auto id = findVariable(cas->stringify())) {
+        cas->var_ID = *id;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
+    }
+
+    ScopeGuard sg{this};
+
+    for (const auto& e : cas->lines)
+        std::visit(*this, e->variant());
+}
+
+
+
 void LexicalAnalysis::operator()(expr::Import *import) {
     if (auto id = findVariable(import->stringify())) {
         import->var_ID = *id;

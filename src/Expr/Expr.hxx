@@ -945,6 +945,7 @@ struct Access : Expr {
 
 
 
+
 struct Namespace : Expr {
     std::string name;
     std::vector<ExprPtr> space;
@@ -1595,6 +1596,50 @@ struct Block : Expr {
 
     Node variant() override { return this; }
 };
+
+
+
+
+struct Cascade : Expr {
+    std::vector<ExprPtr> lines;
+
+    explicit Cascade(std::vector<ExprPtr> l, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    lines{std::move(l)}
+    { }
+
+
+    std::string stringify(const size_t indent = 0) const override {
+        std::string s = dynamic_cast<expr::Assignment*>(lines.front().get())->rhs->stringify();
+
+                                            // skip first and last elements
+        for (const auto& cascader : lines | std::views::take(lines.size() - 1) | std::views::drop(1)) {
+            if (auto acc = dynamic_cast<expr::Access*>(cascader.get())) {
+                s += ".." + acc->name;
+            }
+            else if (auto call = dynamic_cast<expr::Call*>(cascader.get())) {
+                auto copy = *call;
+                if (auto acc = dynamic_cast<expr::Access*>(call->func.get())) {
+                    copy.func = std::make_shared<Name>(acc->name);
+                    s += ".." + copy.stringify(indent + 4);
+                }
+                else util::error();
+            }
+            else util::error();
+        }
+
+        return s;
+    }
+
+    bool involvesName(const std::string_view sv) const override {
+        return sv == stringify();
+    }
+
+    Node variant() override { return this; }
+};
+
+
 
 // defintions of operators. Usage is BinOp or UnaryOp
 struct Fix : Expr {

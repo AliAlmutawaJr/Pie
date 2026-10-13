@@ -103,6 +103,7 @@ using Node = std::variant<
     struct Break             *,
     struct Continue          *,
     struct Access            *,
+    struct Cascade           *,
     struct Namespace         *,
     struct Use               *,
     struct UseSpace          *,

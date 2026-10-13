@@ -2050,6 +2050,15 @@ public:
 
 
 
+
+    ValueType operator()(const expr::Cascade *cas) {
+        if (const auto& var = getVar(cas->var_ID, liftName(cas)); var) return *var;
+
+        return evalBlock(cas->lines);
+    }
+
+
+
     NameSpace* matchChain(const std::vector<std::string>& names, NameSpace *space) {
         if (names.empty()) return nullptr;
         if (names[0] != space->name) return nullptr;
@@ -2558,187 +2567,6 @@ There are no mistakes with art.)";
         return *getVar(sa->name.ID, LIFT(sa->name.name));
 
     }
-
-
-
-    // bool match(const value::Value& value, const expr::Match::Case::Pattern& pattern) {
-    //     if (std::holds_alternative<expr::Match::Case::Pattern::Single>(pattern.pattern)) {
-    //         const auto& [pat, typ, val_expr] = get<expr::Match::Case::Pattern::Single>(pattern.pattern);
-    //         const auto type = validateType(typ);
-
-    //         // not gonna use typeCheck for now. Let's see how it goes
-    //         if (not (*type >= *typeOf(value))) return false;
-
-    //         if (val_expr) {
-    //             const value::Value val = std::visit(*this, val_expr->variant()).value;
-    //             if (value != val) return false;
-    //         }
-
-    //         constexpr auto INFERRED = true;
-    //         bindPattern<INFERRED>(LIFT(std::string{}), pat.get(), {std::move(value), std::move(type)});
-    //         // if (name.name.length() != 0) {
-    //         //     addVar(name.name, name.ID, std::make_shared<value::Value>(value), type);
-    //         // }
-
-    //         return true;
-    //     }
-
-    //     const auto& [type_name, patterns] = get<expr::Match::Case::Pattern::Structure>(pattern.pattern);
-
-    //     std::optional<ValueType> var;
-    //     if (dynamic_cast<expr::Name*>(type_name.get())) {
-    //         var = getVar(type_name->var_ID, liftName(type_name.get()));
-    //     }
-    //     else {
-    //         auto sa = dynamic_cast<expr::SpaceAccess*>(type_name.get());
-
-    //         const auto space = findNS(sa->spaces, sa->global);
-    //         const auto& member = space->members[sa->name.ID];
-    //         var = {*get<value::ValuePtr>(member), get<type::TypePtr>(member)};
-    //     }
-
-    //     // shouldn't happen now that we have lexical analysis
-    //     if (not var)
-    //         util::error("Name `" + type_name->stringify() + "` in match expression does not name a constructor");
-
-
-    //     if (not std::holds_alternative<type::TypePtr>(var->value) and not type::isClass(get<type::TypePtr>(var->value)))
-    //         util::error("Name `" + type_name->stringify() + "` in match expression does not name a constructor");
-
-
-    //     const auto& type = get<type::TypePtr>(var->value);
-    //     if (not (*type == *typeOf(value))) return false;
-
-    //     if (
-    //         type::isClass(type) and
-    //         patterns.size() > dynamic_cast<type::LiteralType*>(type.get())->cls->blueprint->fields.size()
-    //     )
-    //         util::error("Number of singles is greater than number of fields in class " + stringify(type));
-
-
-    //     const auto& obj = get<value::Object>(value);
-    //     if (obj.second->members.size() != obj.second->members.size()) util::error("idek what error message this should be..!");
-
-    //     for (const auto& [member, pat] : std::views::zip(get<value::Object>(value).second->members, patterns)) {
-    //         if (not match(*get<value::ValuePtr>(member), *pat)) return false;
-    //     }
-
-    //     return true;
-    // }
-
-
-
-    // bool testBindPattern(
-    //     const auto& expr_str,
-    //     const expr::unpack::Pattern *pattern,
-    //     ValueType valuetype
-    // ) {
-    //     using Expr = expr::unpack::Expr;
-    //     using List = expr::unpack::List;
-    //     using Pack = expr::unpack::Pack;
-    //     // using Map  = expr::unpack::Map;
-
-
-    //     if (pattern->value and std::visit(*this, pattern->value->variant()).value != valuetype.value)
-    //         return false;
-
-    //     if (pattern->type) {
-    //         auto type = validateType(pattern->type);
-    //         // not using typeCheck so that structural sub-typing doesn't happen
-    //         // `==` instead of `<=` to diallow structural sub-typing.
-    //         // Should I, tho?
-    //         if (not (*type == *typeOf(valuetype.value))) return false;
-    //     }
-
-    //     // supposedly I don't need to check if the expression is a name
-    //     // since LexicalAnalysis should've done it..i think :)
-    //     if (auto expr_ptr = dynamic_cast<const Expr*>(pattern)) {
-    //         constexpr auto INFERRED = true;
-    //         bindExpr<INFERRED>(expr_str, expr_ptr, valuetype);
-    //     }
-    //     else if (auto list = dynamic_cast<const List*>(pattern)) {
-    //         const auto pack_index = [list] -> std::optional<size_t> {
-    //             for (size_t i{}; const auto& pattern : list->patterns)
-    //                 if (++i; dynamic_cast<Pack*>(pattern.get())) return i - 1;
-
-    //             return {};
-    //         }();
-
-    //         std::vector<ValueType> valuetypes;
-    //         if (
-    //             constexpr auto TEST = true;
-    //             not unpackIntoList<TEST>(
-    //                 expr_str,
-    //                 valuetypes, // out param
-    //                 valuetype.value,
-    //                 list->patterns.size() - pack_index.has_value(),
-    //                 pack_index.has_value()
-    //             )
-    //         ) return false;
-
-    //         const size_t size = valuetypes.size(); // true size
-
-    //         if (not pack_index) {
-    //             for (const auto& [pattern, valuetype] : std::views::zip(list->patterns, valuetypes)) {
-    //                 if (not testBindPattern(expr_str,pattern.get(), valuetype)) return false;
-    //             }
-    //         }
-    //         else {
-    //             const size_t leading_count = *pack_index;
-    //             const size_t trailing_count = list->patterns.size() - leading_count - 1; // minus 1 for the pack
-
-    //             for (
-    //                 const auto& [pattern, valuetype] :
-    //                 std::views::zip(list->patterns, valuetypes) | std::views::take(leading_count)
-    //             ) {
-    //                 if (not testBindPattern(expr_str,pattern.get(), valuetype)) return false;
-    //             }
-
-
-    //             if (auto pack_pattern = dynamic_cast<Pack*>(list->patterns[*pack_index].get()); pack_pattern->expr) {
-    //                 auto pack = value::makePack(
-    //                     valuetypes
-    //                     | std::views::drop(leading_count)
-    //                     | std::views::take(size - leading_count - trailing_count)
-    //                     | std::views::transform([] (const auto& valuetype) { return valuetype.value; })
-    //                     | std::ranges::to<std::vector<value::Value>>()
-    //                 );
-    //                 auto type = typeOf(pack);
-
-    //                 addVar(
-    //                     pack_pattern->expr->stringify(),
-    //                     pack_pattern->expr->var_ID,
-    //                     std::make_shared<value::Value>(std::move(pack)),
-    //                     std::move(type)
-    //                 );
-    //             }
-
-
-    //             for (
-    //                 size_t pat_size = list->patterns.size();
-
-    //                 const auto& [pattern, valuetype] :
-    //                 std::views::zip(
-    //                     list->patterns | std::views::drop(pat_size - trailing_count),
-    //                     valuetypes     | std::views::drop(size     - trailing_count)
-    //                 )
-    //             ) {
-    //                 if (not testBindPattern(expr_str,pattern.get(), valuetype)) return false;
-    //             }
-    //         }
-    //     }
-    //     // else if (auto map = dynamic_cast<const Map*>(pattern)) {
-    //     //     std::vector<std::pair<ValueType, ValueType>> valuetype_pairs;
-    //     //     unpackIntoMap(expr_str, valuetype_pairs, valuetype.value, map->patterns.size());
-
-    //     //     for (const auto& [pattern, pair] : std::views::zip(map->patterns, valuetype_pairs)) {
-    //     //         bindPattern<INFERRED>(expr_str, pattern.first .get(), pair.first );
-    //     //         bindPattern<INFERRED>(expr_str, pattern.second.get(), pair.second);
-    //     //     }
-    //     // }
-
-    //     return true;
-    // }
 
 
 
@@ -5305,18 +5133,15 @@ There are no mistakes with art.)";
     }
 
 
-    ValueType operator()(const expr::Block *block) {
-        if (const auto& var = getVar(block->var_ID, liftName(block)); var) return *var;
 
-
+    ValueType evalBlock(const std::vector<expr::ExprPtr>& lines) {
         ScopeGuard sg{this};
-
 
         bool last_expr_is_block{};
 
         value::Value ret;
         type::TypePtr type;
-        for (const auto& line : block->lines) {
+        for (const auto& line : lines) {
             last_expr_is_block = dynamic_cast<const expr::Block*>(line.get());
 
             auto [v, t] = std::visit(*this, line->variant()); // a scope's value is the last expression
@@ -5333,6 +5158,13 @@ There are no mistakes with art.)";
             captureEnvForReturnedClosure(get<expr::Closure>(ret));
 
         return {ret, type};
+
+    }
+
+    ValueType operator()(const expr::Block *block) {
+        if (const auto& var = getVar(block->var_ID, liftName(block)); var) return *var;
+
+        return evalBlock(block->lines);
     }
 
 

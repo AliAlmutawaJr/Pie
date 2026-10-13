@@ -102,7 +102,6 @@ public:
 
     void operator()(expr::Name*);
 
-
     void operator()(expr::Block*);
 
     void operator()(expr::Closure*);
@@ -140,6 +139,7 @@ public:
 
 
     void operator()(const expr::Access*);
+    void operator()(expr::Cascade*);
 
 
     void operator()(expr::Import*);

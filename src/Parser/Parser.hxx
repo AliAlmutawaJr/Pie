@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdio>
+#include <new>
 #include <optional>
 #include <print>
 #include <filesystem>
@@ -454,15 +455,27 @@ public:
 
 
     expr::ExprPtr fstring(token::Token token) {
+        auto t = token;
+
         std::vector<std::pair<size_t, expr::ExprPtr>> inners;
 
         auto snapshot = checkpoint();
 
         for (auto& [ind, tokens] : token.fstring_tokens) {
+
             tokens.emplace_back(token::TokenKind::SEMI, ";"  );
             tokens.emplace_back(token::TokenKind::END , "EOF");
             resetTokens(std::move(tokens));
-            inners.emplace_back(ind, parseExpr());
+
+            try {
+                inners.emplace_back(ind, parseExpr());
+            }
+            catch (const std::bad_alloc&) { throw; } // to avoid catching malloc's error
+            catch (...) {
+                util::error(t.span, "Invalid FString: " + token::stringify(t));
+            }
+
+            if (not atEnd()) util::error(t.span, "Invalid FString: " + token::stringify(t));
         }
 
         restore(std::move(snapshot));
@@ -535,7 +548,8 @@ public:
             )
         };
 
-        for (auto& cascader : cascaders) {
+        // const so I don't move anymore
+        for (const auto& cascader : cascaders) {
             if (auto n = dynamic_cast<expr::Name*>(cascader.get())) {
                 cas.push_back(std::make_shared<expr::Access>(name, n->name));
             }
@@ -558,90 +572,8 @@ public:
 
         cas.push_back(name);
 
-        return std::make_shared<expr::Block>(std::move(cas));
+        return std::make_shared<expr::Cascade>(std::move(cas));
     }
-
-
-    // expr::Match::Case::PatternPtr parseMatchPattern() {
-    //     using enum token::TokenKind;
-    //     using Pattern   = expr::Match::Case::Pattern;
-    //     using Single    = expr::Match::Case::Pattern::Single;
-    //     using Patterns  = expr::Match::Case::Pattern::Patterns;
-
-    //     bool has_name{}, has_type{}, has_valu{}, is_unpackment{};
-    //     bool is_qualified{};
-
-    //     // std::string name;
-    //     // if (check(NAME)) {
-    //     //     name = consume(NAME).text;
-    //     //     has_name = true;
-    //     // }
-
-
-    //     expr::ExprPtr name;
-    //     if (check(NAME) and check(SCOPE_RESOLVE, 1)) {
-    //         constexpr auto NOT_GLOBAL_ACCESS = false;
-    //         auto text = consume(NAME).text;
-    //         consume(SCOPE_RESOLVE);
-    //         name = namespaceAccess<NOT_GLOBAL_ACCESS>(std::move(text));
-    //         has_name = true;
-    //     }
-    //     else if (check(NAME)) { // just a name
-    //         auto token = consume(NAME);
-    //         name = std::make_shared<expr::Name>(std::move(token).text, std::move(token).span);
-    //         has_name = true;
-    //         is_qualified = true;
-    //     }
-    //     else if (match(SCOPE_RESOLVE)) {
-    //         constexpr auto GLOBAL_ACCESS = true;
-    //         name = namespaceAccess<GLOBAL_ACCESS>(consume(NAME).text);
-    //         has_name = true;
-    //     }
-    //     else if (match(L_BRACE)) {
-    //         is_unpackment = true;
-    //     }
-
-
-    //     // base case
-    //     if (not match(L_PAREN)) {
-    //         // trying to write code that avoids move
-
-    //         if (has_name and not is_qualified)
-    //             util::error<except::SyntaxError>("Cannot introduce a qualified name in a pattern: " + name->stringify());
-
-    //         auto type = type::builtins::_();
-    //         if (match(COLON)) {
-    //             type = parseType();
-    //             has_type = true;
-    //         }
-
-    //         expr::ExprPtr value;
-    //         if (match(ASSIGN)) {
-    //             value = parseExpr();
-    //             has_valu = true;
-    //         }
-
-    //         if (not (has_name or has_type or has_valu or is_unpackment))
-    //             util::error<except::SyntaxError>("Match expression case doesn't contain a pattern!");
-
-    //         // structure
-    //         return std::make_unique<Pattern>(
-    //             std::make_shared<expr::unpack::Expr>(std::make_shared<expr::Name>(name ? name->stringify() : "")),
-    //             std::move(type),
-    //             std::move(value)
-    //         );
-    //     }
-
-
-    //     Patterns patterns{};
-    //     if (match(R_PAREN)) return std::make_unique<Pattern>(std::move(name), std::move(patterns));
-
-    //     do patterns.push_back(parseMatchPattern()); while (match(COMMA));
-
-
-    //     consume(R_PAREN);
-    //     return std::make_unique<Pattern>(std::move(name), std::move(patterns));
-    // }
 
 
     expr::ExprPtr match() {
@@ -1257,27 +1189,6 @@ public:
             nullptr,
             match(FAT_ARROW) ? parseExpr() : nullptr
         );
-
-        // auto kind = match(FAT_ARROW) ? nullptr : parseExpr();
-
-        // if (kind) consume(FAT_ARROW);
-
-        // auto var_or_body = parseExpr();
-
-        // if (match(FAT_ARROW))
-        //     return std::make_shared<expr::Loop>(std::move(var_or_body), "", std::move(kind), parseExpr());
-
-        // if (check(SEMI))
-        //     return std::make_shared<expr::Loop>(std::move(var_or_body), "", std::move(kind));
-
-
-        // auto& var = var_or_body;
-        // auto body = parseExpr();
-
-        // if (match(FAT_ARROW))
-        //     return std::make_shared<expr::Loop>(std::move(body), std::move(var)->stringify(), std::move(kind), parseExpr());
-
-        // return std::make_shared<expr::Loop>(std::move(body), std::move(var)->stringify(), std::move(kind));
     }
 
 
@@ -1756,24 +1667,6 @@ public:
                 util::error<except::SyntaxError>("Can't introduce a pack of packs directly!");
 
             return std::make_unique<Pack>(parseUnpackmentPattern<CTX>());
-
-            // // nameless pack
-            // if (check(L_BRACE) or check(COMMA)) {
-            //     return std::make_unique<Pack>(nullptr);
-            // }
-
-            // auto expr = parseExpr<not PARSE_TYPE, CTX>();
-            // type::TypePtr type  = nullptr;
-            // expr::ExprPtr value = nullptr;
-
-            // if constexpr (CTX != Context::FOLLOWED_BY_COLON) {
-            //     if (match(COLON )) type  = parseType();
-            // }
-            // if constexpr (CTX == Context::ALLOW_ASSIGNMENT) {
-            //     if (match(ASSIGN)) value = parseExpr();
-            // }
-
-            // return std::make_unique<Pack>(std::move(expr), std::move(type), std::move(value));
         }
         else { // name pattern
             expr::ExprPtr name  = nullptr;
