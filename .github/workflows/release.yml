@@ -44,14 +44,14 @@ jobs:
             make test_dylib_lnx CC=g++-14
             mkdir build
             cd build
-            cmake ..
+            cmake -DCMAKE_CXX_COMPILER=g++-15 ..
             make
             mv Pie ../Pie-${{ matrix.name }}
           else
             make test_dylib_mac CC=clang++
             mkdir build
             cd build
-            cmake ..
+            cmake  -DCMAKE_CXX_COMPILER=clang++ ..
             make
             mv Pie ../Pie-${{ matrix.name }}
           fi
