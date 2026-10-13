@@ -44,7 +44,7 @@ jobs:
             make test_dylib_lnx CC=g++-14
             mkdir build
             cd build
-            cmake -DCMAKE_CXX_COMPILER=g++-15 ..
+            cmake -DCMAKE_CXX_COMPILER=g++-14 ..
             make
             mv Pie ../Pie-${{ matrix.name }}
           else
