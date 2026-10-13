@@ -42,12 +42,18 @@ jobs:
         run: |
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             make test_dylib_lnx CC=g++-14
-            make CC=g++-14
-            mv Pie Pie-${{ matrix.name }}
+            mkdir build
+            cd build
+            cmake ..
+            make
+            mv Pie ../Pie-${{ matrix.name }}
           else
             make test_dylib_mac CC=clang++
-            make CC=clang++
-            mv Pie Pie-${{ matrix.name }}
+            mkdir build
+            cd build
+            cmake ..
+            make
+            mv Pie ../Pie-${{ matrix.name }}
           fi
 
       - name: Upload binary
