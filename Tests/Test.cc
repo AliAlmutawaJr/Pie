@@ -235,8 +235,8 @@ __builtin_print("{func(1, 2, 3)}");
 TEST_CASE("Include Ordering and Variable IDs", "[Space][Var]") {
 {
     const auto src = R"(
-import Tests/ns1;
-import Tests/ns2;
+import Tests::ns1;
+import Tests::ns2;
 
 use space ns1;
 use space ns2;
@@ -262,8 +262,8 @@ print(ns2::a);
 }
 {
     const auto src = R"(
-import Tests/ns1;
-import Tests/ns2;
+import Tests::ns1;
+import Tests::ns2;
 
 use space ns2;
 use space ns1;
@@ -3530,7 +3530,7 @@ if (false) 1 else 2;
 
 TEST_CASE("Importing Operators Filter By Type", "[Operator]") {
     const auto src1 = R"(
-import Tests/module;
+import Tests::module;
 
 use prefix std::-;
 
@@ -3540,7 +3540,7 @@ std::print(- 1);
     REQUIRE(pie::test::run(src1) == "-1");
 
     const auto src2 = R"(
-import Tests/module;
+import Tests::module;
 
 use infix std::-;
 
@@ -3550,7 +3550,7 @@ std::print(1 - 1);
     REQUIRE(pie::test::run(src2) == "0");
 
     const auto src3 = R"(
-import Tests/module;
+import Tests::module;
 
 use infix std::-;
 
@@ -3560,7 +3560,7 @@ std::print(- 1);
     REQUIRE_THROWS(pie::test::run(src3));
 
     const auto src4 = R"(
-import Tests/module;
+import Tests::module;
 
 use prefix std::-;
 
@@ -3574,7 +3574,7 @@ std::print(1 - 1);
 
 TEST_CASE("Importing All Operators", "[Operator]") {
     const auto src1 = R"(
-import Tests/module;
+import Tests::module;
 use std::;
 
 std::print(- 10);
@@ -3589,7 +3589,7 @@ std::print(3 - 4);
 
 TEST_CASE("Importing Operators Filter By Symbol", "[Operator]") {
     const auto src1 = R"(
-import Tests/module;
+import Tests::module;
 
 use infix std::+;
 
@@ -3601,7 +3601,7 @@ std::print("1" + "2");
 
 
     const auto src2 = R"(
-import Tests/module;
+import Tests::module;
 use infix std::+;
 
 std::print(3 - 4);
@@ -3736,7 +3736,7 @@ print = __builtin_print;
 
 space g {
     space sheesh {
-        import Tests/module;
+        import Tests::module;
     };
 };
 
@@ -3761,7 +3761,7 @@ print = __builtin_print;
 
 space g {
     space sheesh {
-        import Tests/module;
+        import Tests::module;
     };
 };
 

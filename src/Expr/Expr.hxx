@@ -1107,13 +1107,16 @@ struct Import : Expr {
     { }
 
     std::string stringify(const size_t = 0) const override {
-        // auto path_str = path.string();
-        // std::string s = path_str[0] == '/' ? "" : std::string{path_str[0]};
+        std::string s = path.begin()->c_str();
+        if (s == "/") s = "::";
 
-        // for (const char c : path.string() | std::views::drop(1)) 
-        //     s.push_back(c == '/' ? '.' : c);
+        for (const auto& p : path | std::views::drop(1)) {
+            if (s == "::") s +=        p.string();
+            else           s += "::" + p.string();
+        }
 
-        return "import " + path.string();
+
+        return "import " + s;
     }
 
     bool involvesName(const std::string_view) const override { return false; }

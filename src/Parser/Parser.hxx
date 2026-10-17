@@ -213,7 +213,7 @@ public:
                 return std::make_shared<expr::Continue>();
                 // return std::make_shared<expr::Continue>(parseExpr());
 
-            case IMPORT   : return import_directive(); // not calling the method "import" in case I update to C++ modules
+            case IMPORT   : return import_directive(std::move(token)); // not calling the method "import" in case I update to C++ modules
             case NAMESPACE: return nameSpace();
             case USE      :
                 if (match(NAMESPACE)) return useSpace();
@@ -725,23 +725,49 @@ public:
     }
 
 
-    expr::ExprPtr import_directive() {
+    expr::ExprPtr import_directive(token::Token token) {
         using enum token::TokenKind;
 
-        auto fname = consume(NAME).text;
+
+        std::filesystem::path path;
+        while (not check(SEMI)) {
+            if (check(NAME)) {
+                auto name = consume().text;
+                if (name.contains('/')) util::error(token.span, "Import directive path cannot include '/': " + token.text);
+
+                // path.append(std::move(name));
+                path /= std::move(name);
+            }
+            else if (match(SCOPE_RESOLVE)) {
+                if (path.empty()) path /= "/";
+            }
+            else if (match(CASCADE)) {
+                // this case is currently impossible
+                // it gets interpreted as a comment :))))))
+                // FUCK
+                path /= "..";
+            }
+        }
+        // std::clog << "path is: " << path << std::endl;
 
         // Zen of Pie!
-        if (fname == "self") return std::make_shared<expr::Import>(std::move(fname));
+        if (path == "self") return std::make_shared<expr::Import>("self");
 
 
-        fname += ".pie";
-        std::filesystem::path path = util::getPiePath().parent_path(); // root;
-        if (std::filesystem::exists(path / "std" / fname)) {
-            path.append("std").append(std::move(fname));
+        if (not path.has_filename()) util::error(token.span, "Import directive does not have a file name: " + token.text);
+
+    
+        path.replace_extension(".pie");
+
+        if (not path.is_absolute()) { // check the std libs
+            std::filesystem::path root = util::getPiePath().parent_path();
+
+            if (auto std_path = root / "std" / path; std::filesystem::exists(std_path)) {
+                // path.append("std").append(std::move(fname));
+                path = std::move(std_path);
+            }
         }
-        else {
-            path = std::filesystem::canonical(root / std::move(fname));
-        }
+
 
         const auto src = util::readFile(path);
         util::sources.insert({path, src});
