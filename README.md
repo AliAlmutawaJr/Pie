@@ -48,7 +48,9 @@ make
 ```
 
 ### Build from source (Windows)
-fuck windows (for now)
+Pie uses CMake for its build system. I'm pretty sure it should work with Windows. As I am NOT a windows developer, I haven't tried the process of installing Pie.
+
+If you're a windows dev and would like to contribute to Pie, writing a guide on how to install Pie on Windows is a good start.
 
 
 ### Todo (in order of priority)
@@ -157,9 +159,6 @@ fuck windows (for now)
 - [DerkT](https://github.com/DrkWithT)
 - [TheDevConnor](https://github.com/TheDevConnor)
 - [aesmail](https://github.com/aesmail)
-
-
-##### Website forked from:
 - [TheDevConnor](https://github.com/TheDevConnor)
 
 

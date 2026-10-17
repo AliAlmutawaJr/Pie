@@ -756,15 +756,17 @@ public:
 
         if (not path.has_filename()) util::error(token.span, "Import directive does not have a file name: " + token.text);
 
-    
+
         path.replace_extension(".pie");
 
         if (not path.is_absolute()) { // check the std libs
-            std::filesystem::path root = util::getPiePath().parent_path();
+            std::filesystem::path pie_root = util::getPiePath().parent_path();
 
-            if (auto std_path = root / "std" / path; std::filesystem::exists(std_path)) {
-                // path.append("std").append(std::move(fname));
+            if (auto std_path = pie_root / "std" / path; std::filesystem::exists(std_path)) {
                 path = std::move(std_path);
+            }
+            else if (auto rel_path = root / path; std::filesystem::exists(rel_path)) {
+                path = std::move(rel_path);
             }
         }
 
