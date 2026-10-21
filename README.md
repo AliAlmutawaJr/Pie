@@ -56,6 +56,7 @@ If you're a windows dev and would like to contribute to Pie, writing a guide on 
 ### Todo (in order of priority)
 
 - [ ] Improve error messages (add line and column numbers)
+- [ ] Add generators/coroutines!
 - [ ] Fix defer throwing (inside destructor)
 - [ ] Make `=` and `=>` overloadable
 - [ ] Better File IO

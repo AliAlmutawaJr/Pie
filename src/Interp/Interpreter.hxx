@@ -2102,39 +2102,6 @@ public:
 
 
         util::error("Namespace `" + analysis::stringify(names) + "` not found!");
-
-        // auto fixed_spaces = current_space;
-
-        // // * append_range only available in gcc-15
-        // // * GH Actions doesn't support gcc-15
-        // #if 0
-        // fixed_spaces.append_range(spaces);
-        // #else
-        // for (const auto& space : spaces) fixed_spaces.push_back(space);
-        // #endif
-
-
-        // std::string name = NSName(spaces);
-        // while (not namespaces.contains(name)) {
-        //     fixed_spaces.erase(fixed_spaces.end() - spaces.size(), fixed_spaces.end());
-
-        //     if (fixed_spaces.empty()) util::error("couldn't find space: " + name);
-
-        //     fixed_spaces.pop_back();
-
-        //     // * append_range only available in gcc-15
-        //     // * GH Actions doesn't support gcc-15
-        //     #if 0
-        //     fixed_spaces.append_range(spaces);
-        //     #else
-        //     for (const auto& space : spaces) fixed_spaces.push_back(space);
-        //     #endif
-
-        //     name = NSName(fixed_spaces);
-        // }
-
-
-        // return name;
     }
 
 
@@ -3820,7 +3787,6 @@ There are no mistakes with art.)";
 
         checkReturnType(ret, func->type.ret);
         return {ret, func->type.ret};
-        // return checkReturnType(std::visit(*this, func->body->variant()), func->type.ret);
     }
 
     std::optional<value::Value> objectIsCallable(const value::Object& obj) {
@@ -3839,7 +3805,6 @@ There are no mistakes with art.)";
     ValueType operator()(const expr::Call *call) {
         if (const auto& var = getVar(call->var_ID, liftName(call)); var) return *var;
 
-        // const auto args = std::move(call)->args;
         const auto args = call->args;
 
 

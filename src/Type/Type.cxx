@@ -2,13 +2,14 @@
 #include "../Interp/Interpreter.hxx"
 #include "Value/Value.hxx"
 
-#include <ranges>
+#include <algorithm>
 #include <variant>
 
 
 namespace pie {
 
 namespace type {
+
 
     // * Any Expression * //
     std::string ExprType::text(const size_t indent) const {
@@ -24,7 +25,7 @@ namespace type {
     }
 
     bool ExprType::operator>(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        if (shouldReassign(other)) return true;
         // if (not dynamic_cast<const ExprType   *>(&other)) return false;
 
         return false;
@@ -33,7 +34,8 @@ namespace type {
     }
 
     bool ExprType::operator>=(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        if (shouldReassign(other)) return true;
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
 
         return text() == other.text(); // only check for equality since ExprType is never greater than any other ExprType
         // const auto& type = text();
@@ -44,40 +46,49 @@ namespace type {
 
     // * Builtins * //
     bool BuiltinType::operator>(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        if (shouldReassign(other)) return true;
 
         const auto type = text();
         return type == "Any" and other.text() != "Any";
     }
 
     bool BuiltinType::operator>=(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        if (shouldReassign(other)) return true;
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
 
         const auto& type = text();
-        return type == "Any" or type == other.text();
+        if (type == "Any") return true;
+
+        // a value used as a type: `String >= "large"` because "large" is a String.
+        // (comparing text would make the string "Int" equal to the type Int)
+        if (const auto v = isValue(other)) return type == builtinNameOf(*v->val);
+
+        return type == other.text();
     }
 
 
     // * BuiltinFunction * //
     bool BuiltinFunctionType::operator>(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        if (shouldReassign(other)) return true;
         return false;
     }
 
     bool BuiltinFunctionType::operator>=(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        if (shouldReassign(other)) return true;
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
         return dynamic_cast<const BuiltinFunctionType*>(&other);
     }
 
 
     // * Address * //
     bool AddressType::operator>(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        if (shouldReassign(other)) return true;
         return false;
     }
 
     bool AddressType::operator>=(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        if (shouldReassign(other)) return true;
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
         return dynamic_cast<const AddressType*>(&other);
     }
 
@@ -87,13 +98,22 @@ namespace type {
     std::string ValueType::text(const size_t indent) const { return stringify(*val, indent); }
 
     bool ValueType::typeCheck(interp::Visitor*, const value::Value& v, const TypePtr& other) const {
-        if (std::holds_alternative<expr::Closure>(*val)) { // concept case. test the upcoming value
-            util::error();
-        }
+        if (std::holds_alternative<expr::Closure>(*val)) // concepts are ConceptType, so this shouldn't happen
+            util::error("A function was used as a value type: " + stringify(*val));
 
         if (*val == v) return true;
 
         return *this >= *other;
+    }
+
+    bool ValueType::operator>=(const Type& other) const {
+        if (shouldReassign(other)) return true;
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
+
+        // the same value, compared as values: the string "42" is not the number 42
+        if (const auto v = isValue(other)) return *val == *v->val;
+
+        return false;
     }
 
 
@@ -111,24 +131,11 @@ namespace type {
 
 
         // concepts are unary functions, meaning 1 parameter only!
-
         {
             value::Environment env;
             visitor->bindParam(f.params[0], {v, other}, env);
             sg.addEnv(std::move(env));
         }
-
-        // sg.addEnv({
-        // {f.params[0].ID,
-
-        //         {
-        //             {f.params[0].expr->stringify()},
-        //             std::make_shared<value::Value>(v),
-        //             other
-        //         }
-        //     }
-        // });
-
 
         auto ret = visitor->checkReturnType(std::visit(*visitor, f.body->variant()).value, f.type.ret);
         if (std::holds_alternative<bool>(ret)) return get<bool>(ret);
@@ -137,9 +144,16 @@ namespace type {
     }
 
 
+    bool ConceptType::operator>=(const Type& other) const {
+        if (shouldReassign(other)) return true;
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
+
+        return *this == other;
+    }
+
+
     // * Class Type * //
     std::string LiteralType::text(const size_t indent) const {
-        // return stringify(*cls, indent);
         std::string s;
 
         if (cls->blueprint->fields.empty())
@@ -165,31 +179,14 @@ namespace type {
 
 
     bool LiteralType::operator>(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
-
-        if (const auto other_cls = dynamic_cast<const LiteralType*>(&other)) {
-            for (const auto& [name, type, _] : cls->blueprint->fields) {
-                const auto& iter = std::ranges::find_if(other_cls->cls->blueprint->fields, [&name] (const auto& member) {
-                    const auto& [n, _, __] = member;
-                    return n.name == name.name;
-                });
-
-                if (iter == other_cls->cls->blueprint->fields.cend()) return false;
-
-                const auto& [__, t, ___] = *iter;
-                if (not (*type > *t)) return false;
-            }
-
-            return true;
-        }
-
-        const auto type = text();
-        return type == "Any" and other.text() != "Any";
+        if (shouldReassign(other)) return true;
+        return strictlyGreater(*this, other);
     }
 
 
     bool LiteralType::operator>=(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        if (shouldReassign(other)) return true;
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
         // if (not dynamic_cast<const LiteralType*>(&other)) return false;
 
         if (const auto other_cls = dynamic_cast<const LiteralType*>(&other)) {
@@ -240,12 +237,21 @@ namespace type {
     }
 
     bool UnionType::operator> (const Type& other) const {
-        return std::ranges::any_of(types, [&other](const auto& type) { return *type > other; });
-    };
+        if (shouldReassign(other)) return true;
+        return strictlyGreater(*this, other);
+    }
 
     bool UnionType::operator>=(const Type& other) const {
-        return std::ranges::any_of(types, [&other](const auto& type) { return *type >= other; });
-    };
+        if (shouldReassign(other)) return true;
+
+        // union vs union: every member of the other union must be accepted by this one.
+        // Order doesn't matter, and it works for unions written separately
+        // (comparing shared_ptrs only matched when both sides were the very same object).
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
+
+        // anything else: a union accepts a type if *any* of its members does
+        return std::ranges::any_of(types, [&other](const TypePtr& type) { return *type >= other; });
+    }
 
 
 
@@ -266,24 +272,13 @@ namespace type {
     }
 
     bool FuncType::operator>(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
-        if (not dynamic_cast<const FuncType*>(&other)) return false;
-
-        // this might throw, but it technically shouldn't
-        const auto& that = dynamic_cast<const FuncType&>(other);
-
-        for (const auto& [type1, type2] : std::views::zip(params, that.params)) {
-            // if (*type1 >= *type2) return false; // args have an inverse relationship
-
-            if (not (*type2 > *type1)) return false; // args have an inverse relationship
-        }
-
-
-        return *ret > *that.ret;
+        if (shouldReassign(other)) return true;
+        return strictlyGreater(*this, other);
     }
 
     bool FuncType::operator>=(const Type& other) const {
-        if (dynamic_cast<const TryReassign*>(&other)) return true;
+        if (shouldReassign(other)) return true;
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
         if (not dynamic_cast<const FuncType*>(&other)) return false;
 
         // this could throw, but it should never do since we check it above
@@ -311,6 +306,7 @@ namespace type {
     }
 
     bool VariadicType::operator>=(const Type& other) const {
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
         if (auto that = dynamic_cast<const VariadicType*>(&other)) return *type >= *that->type;
 
         return *type >= other;
@@ -340,6 +336,7 @@ namespace type {
     }
 
     bool ListType::operator>=(const Type& other) const {
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
         if (auto that = dynamic_cast<const ListType*>(&other)) return *type >= *that->type;
 
         return false;
@@ -377,11 +374,23 @@ namespace type {
     }
 
     bool MapType::operator>=(const Type& other) const {
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
         if (auto that = dynamic_cast<const MapType*>(&other))
             return *key_type >= *that->key_type and *val_type >= *that->val_type;
 
         return false;
     }
 
+
+
+
+    std::string builtinNameOf(const value::Value& v) {
+        if (std::holds_alternative<BigInt       >(v)) return "Int";
+        if (std::holds_alternative<double       >(v)) return "Double";
+        if (std::holds_alternative<bool         >(v)) return "Bool";
+        if (std::holds_alternative<std::string  >(v)) return "String";
+        if (std::holds_alternative<type::TypePtr>(v)) return "Type";
+        return "";
+    }
 } // namespace type
 } // namespace pie

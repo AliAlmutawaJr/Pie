@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <concepts>
 #include <string>
+#include <variant>
 #include <vector>
 #include <memory>
 
@@ -118,12 +120,11 @@ namespace type {
         bool involvesT(const Type& T) const override { return T == *this; }
         bool typeCheck(interp::Visitor*, const value::Value&, const TypePtr&) const override;
 
-        // // no value is greater than another value
+        // no value is greater than another type
         bool operator>(const Type&) const override { return false; }
-        // // since no value is greater than another, >= checks for equality only
-        bool operator>=(const Type& other) const override {
-            return *this == other; // I think that's fine
-        }
+
+        // since no value is greater than another, >= checks for equality only
+        bool operator>=(const Type& other) const override;
 
         TypePtr clone() const override { return std::make_shared<ValueType>(*this); }
     };
@@ -138,10 +139,11 @@ namespace type {
         bool involvesT(const Type& T) const override { return T == *this; }
         bool typeCheck(interp::Visitor*, const value::Value&, const TypePtr&) const override;
 
-        // // no value is greater than another value
+
+        // No concept is greater than another type...
+        // or at least, that can't really be checked here
         bool operator>(const Type&) const override { return false; }
-        // // since no value is greater than another, >= checks for equality only
-        bool operator>=(const Type& other) const override { return *this == other; }
+        bool operator>=(const Type& other) const override;
 
         TypePtr clone() const override { return std::make_shared<ConceptType>(*this); }
     };
@@ -308,6 +310,21 @@ namespace type {
     }
 
 
+
+    // `T >= union { A; B; }` holds when T accepts every member: T >= A and T >= B.
+    // Every non-union operator>= should start with this
+    // so a union on the right is never compared by its text.
+    inline bool acceptsEvery(const Type& self, const UnionType& u) {
+        return std::ranges::all_of(u.types, [&self](const TypePtr& member) { return self >= *member; });
+    }
+
+    // "strictly greater" means "accepts everything the other does, and the other doesn't accept all of mine"
+    inline bool strictlyGreater(const Type& self, const Type& other) {
+        return self >= other and not (other >= self);
+    }
+
+    std::string builtinNameOf(const value::Value& v);
+
     inline TypePtr VariadicOf(TypePtr type) {
         return std::make_shared<VariadicType>(std::move(type));
     }
@@ -331,35 +348,44 @@ namespace type {
 
 
 
+
+
     inline ExprType* isExpr(const TypePtr& t) noexcept {
         return dynamic_cast<ExprType*>(t.get());
     }
 
-    inline FuncType* isFunction(const TypePtr& t) noexcept {
+    inline const FuncType* isFunction(const TypePtr& t) noexcept {
         return dynamic_cast<FuncType*>(t.get());
     }
 
-    inline LiteralType* isClass(const TypePtr& t) noexcept {
+    inline const LiteralType* isClass(const TypePtr& t) noexcept {
         return dynamic_cast<LiteralType*>(t.get());
     }
 
-    inline ValueType* isValue(const TypePtr& t) noexcept {
+    inline const ValueType* isValue(const TypePtr& t) noexcept {
         return dynamic_cast<ValueType*>(t.get());
     }
+    inline const ValueType* isValue(const Type& t) noexcept {
+        return dynamic_cast<const ValueType*>(&t);
+    }
 
-    inline UnionType* isUnion(const TypePtr& t) noexcept {
+    inline const UnionType* isUnion(const TypePtr& t) noexcept {
         return dynamic_cast<UnionType*>(t.get());
     }
 
-    inline VariadicType* isVariadic(const TypePtr& t) noexcept {
+    inline const UnionType* isUnion(const Type& t) noexcept {
+        return dynamic_cast<const UnionType*>(&t);
+    }
+
+    inline const VariadicType* isVariadic(const TypePtr& t) noexcept {
         return dynamic_cast<VariadicType*>(t.get());
     }
 
-    inline ListType* isList(const TypePtr& t) noexcept {
+    inline const ListType* isList(const TypePtr& t) noexcept {
         return dynamic_cast<ListType*>(t.get());
     }
 
-    inline MapType* isMap(const TypePtr& t) noexcept {
+    inline const MapType* isMap(const TypePtr& t) noexcept {
         return dynamic_cast<MapType*>(t.get());
     }
 
@@ -381,6 +407,9 @@ namespace type {
 
     inline bool shouldReassign(const TypePtr& t) {
         return dynamic_cast<const TryReassign*>(t.get());
+    }
+    inline bool shouldReassign(const Type& t) noexcept {
+        return dynamic_cast<const TryReassign*>(&t);
     }
 }
 

@@ -9,6 +9,80 @@
 
 
 
+TEST_CASE("Contravariant Parameters and Covariant Returns", "[Type][Func]") {
+    // a function that accepts *more* can stand in for one that accepts less
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int): Any = (x: Any): Int => x;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Any): Any = (x: Int): Int => x;)PIE"), pie::except::TypeMismatch);
+
+    // a function that returns *less* can stand in for one that returns more
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int): Any = (x: Int): Int => x;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Int): Int = (x: Int): Any => x;)PIE"), pie::except::TypeMismatch);
+
+    // both at once
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int): Any = (x: Any): Int => 1;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Any): Int = (x: Int): Any => x;)PIE"), pie::except::TypeMismatch);
+
+    // the number of parameters has to match
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Int): Int = (x: Int, y: Int): Int => x;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Int, Int): Int = (x: Int): Int => x;)PIE"), pie::except::TypeMismatch);
+}
+
+
+TEST_CASE("Higher-Order-Parameters", "[Type][Func][Param]") {
+    const auto prelude = std::string{R"PIE(
+Role = union { "user"; "admin"; };
+
+greetAnyone = (names: String) => names;
+greetUsers  = (names: Role  ) => names;
+
+register       = (fun: (Role  ): Any) => 0;
+registerAnyone = (fun: (String): Any) => 0;
+)PIE"};
+
+
+    REQUIRE_NOTHROW(pie::test::run((prelude + "register(greetAnyone);").c_str()));
+    REQUIRE_NOTHROW(pie::test::run((prelude + "register(greetUsers);").c_str()));
+    REQUIRE_NOTHROW(pie::test::run((prelude + "registerAnyone(greetAnyone);").c_str()));
+
+
+    REQUIRE_THROWS_AS(pie::test::run((prelude + "registerAnyone(greetUsers);").c_str()), pie::except::TypeMismatch);
+
+
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(apply: ((Any): Any): Any = (f: (Int): Any) => 0;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(apply: ((Int): Any): Any = (f: (Any): Any) => 0;)PIE"), pie::except::TypeMismatch);
+}
+
+
+TEST_CASE("Member-wise Union Comparison", "[Type][Union]") {
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int): union { Int; String; } = (x: Int): Int => x;)PIE"));
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int): Any = (x: union { Int; String; }) => x;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (union { Int; String; }): Any = (x: Int) => x;)PIE"), pie::except::TypeMismatch);
+
+
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { Int; String; }): Any = (x: union { Int; String; }) => x;)PIE"));
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { Int; String; }): Any = (x: union { String; Int; }) => x;)PIE"));
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { Int; String; }): Any = (x: union { Int; String; Bool; }) => x;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (union { Int; String; Bool; }): Any = (x: union { Int; String; }) => x;)PIE"), pie::except::TypeMismatch);
+
+    // unions of values
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { "user"; "admin"; }): Any = (x: union { "admin"; "user"; }) => x;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (union { "user"; "admin"; }): Any = (x: union { "user"; }) => x;)PIE"), pie::except::TypeMismatch);
+}
+
+
+TEST_CASE("Value Types are Compared as Values", "[Type][Value]") {
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(g: ("Int"): Any = (a: Int) => a;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(g: (42): Any = (a: "42") => a;)PIE"), pie::except::TypeMismatch);
+
+    // a value is accepted by the type it belongs to
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(g: (42): Any = (a: Int) => a;)PIE"));
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(g: ("large"): Any = (a: String) => a;)PIE"));
+
+    // and plain assignment still works as before
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(size: union { "small"; "large"; } = "large";)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(size: union { "small"; "large"; } = "medium";)PIE"), pie::except::TypeMismatch);
+}
+
 
 TEST_CASE("Global Scope Resolution Operator", "[Space]") {
 {
