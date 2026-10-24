@@ -35,6 +35,61 @@
 */
 
 
+TEST_CASE("Eager Unpackmeters", "[Param][Type]") {
+{
+    const auto src = R"PIE(
+func = ({T1, T2}, x: T2) => __builtin_print(x);
+func((String, Int), 1);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(1)");
+}
+{
+    const auto src = R"PIE(
+func = ({T1, T2}, x: T2) => __builtin_print(x);
+func((String, Double), 1);
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+    func = ({T1, T2}, x: T2) => __builtin_print(x);
+    func((String, Int), "1");
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+    func = ({T1, T2}, x: T2) => __builtin_print(x);
+    f = func((String, Int));
+    f(1);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(1)");
+}
+{
+    const auto src = R"PIE(
+    func = ({T1, T2}, x: T2) => __builtin_print(x);
+    f = func((String, Int));
+    f("1");
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+    func = ({T1, T2}, x: T2) => __builtin_print(x);
+    f = func((Int, Bool));
+    f("1");
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+}
+
+
 TEST_CASE("Tuple Types Compare Types, Not Pointers", "[Tuple][Type]") {
 {
     // regression: operator>= used to compare TypePtrs (addresses), so this failed at random

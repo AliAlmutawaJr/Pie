@@ -113,7 +113,6 @@ public:
 
     ~Visitor() try
     {
-        puts("Executing defers!");
         // no need to mess with captured envs since this is global scope
         for (const auto& [expr, env] : deferred[0] | std::views::reverse) {
             ScopeGuard sg{this, env->env};
@@ -121,12 +120,14 @@ public:
             sg.addOps(env->op_env);
             std::visit(*this, expr->variant());
         }
-        puts("done!");
     }
     catch (...) {
         std::println(std::cerr, "An exception was thrown when evaluating expression inside `__builtin_defer()`. Aborting!");
         // program was exiting anyways
         // just the last couple deferred probably didn't run
+        // but if a module failed to run it's deferred
+        // maybe `exit` is waranted since we don't know if
+        // the module has completed normally or not
         exit(3);
     }
 
@@ -2449,7 +2450,6 @@ There are no mistakes with art.)";
 
         for (const auto& expr : exprs)
             value = std::visit(v, std::move(expr)->variant()).value;
-
 
 
         addNamespaces(current_space.empty() ? global_spaces : current_space.back()->children, v.global_spaces);
@@ -5047,7 +5047,21 @@ There are no mistakes with art.)";
                         break;
                     }
                 }
-                else; // check unpackmeters
+                else {
+                    const auto& param = get<expr::unpack::PatternPtr>(closure.params[j]);
+                    expr::unpack::forEachName(
+                        param.get(),
+                        [&type, &found] (const auto& expr) {
+                            if (
+                                type->involvesT(
+                                    type::ExprType{std::make_shared<expr::Name>(expr->stringify(), util::SourceSpan{})}
+                                )
+                            ) {
+                                found = true;
+                            }
+                        }
+                    );
+                }
             }
 
             if (not found) {
