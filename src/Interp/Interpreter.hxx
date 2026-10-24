@@ -83,6 +83,8 @@ class Visitor {
     std::vector<std::vector<std::pair<expr::ExprPtr, std::shared_ptr<value::Env>>>> deferred;
 
     std::unordered_map<std::string, std::shared_ptr<NameSpace>> global_spaces;
+
+    // non-owning pointers
     std::vector<NameSpace*> current_space;
 
     // _this_ (or self) context
@@ -109,7 +111,9 @@ public:
     }
 
 
-    ~Visitor() noexcept(false) {
+    ~Visitor() try
+    {
+        puts("Executing defers!");
         // no need to mess with captured envs since this is global scope
         for (const auto& [expr, env] : deferred[0] | std::views::reverse) {
             ScopeGuard sg{this, env->env};
@@ -117,6 +121,13 @@ public:
             sg.addOps(env->op_env);
             std::visit(*this, expr->variant());
         }
+        puts("done!");
+    }
+    catch (...) {
+        std::println(std::cerr, "An exception was thrown when evaluating expression inside `__builtin_defer()`. Aborting!");
+        // program was exiting anyways
+        // just the last couple deferred probably didn't run
+        exit(3);
     }
 
     // void addOperators(Operators os) {

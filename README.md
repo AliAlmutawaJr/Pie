@@ -57,7 +57,7 @@ If you're a windows dev and would like to contribute to Pie, writing a guide on 
 
 - [ ] Improve error messages (add line and column numbers)
 - [ ] Add generators/coroutines!
-- [ ] Fix defer throwing (inside destructor)
+
 - [ ] Make `=` and `=>` overloadable
 - [ ] Better File IO
 - [ ] Move from Make to Bake
@@ -73,6 +73,8 @@ If you're a windows dev and would like to contribute to Pie, writing a guide on 
 ---
 
 ### Done
+- [ ] Fix defer throwing (inside destructor) ((mostly));
+- [x] Add Tuples!
 - [x] Use Big Int instead of `int64_t`
 - [x] Simplify Pack Expansion (internal)
 - [x] Add default values to function parameters
