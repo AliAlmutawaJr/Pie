@@ -99,13 +99,13 @@ class Visitor {
 public:
 
 
-    Visitor(std::vector<size_t> indices, std::filesystem::path r = ".", const size_t v_index = 0) noexcept :
+    Visitor(std::vector<size_t> indices, std::filesystem::path r = ".") noexcept :
     root{r.parent_path()},
     env{{std::make_shared<value::Env>()}},
     deferred{{}},
     import_indices{std::move(indices)}
     {
-        addBuiltinGlobals(v_index);
+        addBuiltinGlobals(0);
     }
 
 
@@ -286,22 +286,44 @@ public:
         util::error("Name '" + name + "' not found in object: " + stringify(selves.back()));
     }
 
-    ValueType fetchRef(const expr::Name *n) {
-        for (const auto& e : std::views::reverse(env)) {
-            if (e->env.contains(n->var_ID)) {
-                const auto& [named_ref, value_ptr, type_ptr] = e->env.at(n->var_ID);
-                const auto& [_, space] = named_ref;
+    // ValueType fetchRef(const expr::Name *n) {
+    //     for (const auto& e : std::views::reverse(env)) {
+    //         if (e->env.contains(n->var_ID)) {
+    //             const auto& [named_ref, value_ptr, type_ptr] = e->env.at(n->var_ID);
+    //             const auto& [_, space] = named_ref;
 
-                if (not space or not space->members.contains(n->var_ID)) 
-                    util::error();
+    //             if (not space or not space->members.contains(n->var_ID)) 
+    //                 util::error();
 
-                const auto& member = space->members[n->var_ID];
-                return {*get<value::ValuePtr>(member), get<type::TypePtr>(member)};
-            }
+    //             const auto& member = space->members[n->var_ID];
+    //             return {*get<value::ValuePtr>(member), get<type::TypePtr>(member)};
+    //         }
+    //     }
+
+
+    //     util::error();
+    // }
+
+    NameSpace* refSpace(const size_t ID) const {
+        const auto spaceOf = [ID](const value::Environment& e) {
+            const auto& [named_ref, _, __] = e.at(ID);
+            if (not named_ref.isRef() or not named_ref.space->members.contains(ID)) util::error();
+            return named_ref.space;
+        };
+
+        for (size_t i = env.size(); i-- > 0; ) {
+            if (env[i]->env.contains(ID)) return spaceOf(env[i]->env);
+            if (env[i]->tag == value::EnvTag::FUNC) break;
         }
 
+        if (env.front()->env.contains(ID)) return spaceOf(env.front()->env);
 
         util::error();
+    }
+
+    ValueType fetchRef(const expr::Name *n) {
+        const auto& member = refSpace(n->var_ID)->members[n->var_ID];
+        return {*get<value::ValuePtr>(member), get<type::TypePtr>(member)};
     }
 
 
@@ -359,6 +381,37 @@ public:
     }
 
 
+    ValueType operator()(const expr::Tuple *tuple) {
+        if (const auto& var = getVar(tuple->var_ID, liftName(tuple)); var) return *var;
+
+        std::vector<value::Value> values;
+
+        for (auto& elt : tuple->elts) {
+            // pack expansion
+            if (auto exp = expr::is<expr::Expansion>(elt.get())) {
+                auto pack = std::visit(*this, std::move(exp)->pack->variant()).value;
+
+                if (not std::holds_alternative<value::Pack>(pack))
+                    util::error(
+                        "Expansion applied on a non-pack variable `" + elt->stringify() +
+                        "\nWhich evaluated to: " + stringify(pack)
+                    );
+
+
+
+                for (const auto& v : get<value::Pack>(pack)->values) values.push_back(v);
+            }
+            else values.push_back(std::visit(*this, std::move(elt)->variant()).value);
+        }
+
+
+        auto tuple_value = value::makeTuple(std::move(values));
+        auto type = typeOf(tuple_value);
+
+        return {std::move(tuple_value), std::move(type)};
+    }
+
+
     ValueType operator()(const expr::Map *map) {
         value::Map map_value{std::make_shared<value::Items>()};
 
@@ -385,7 +438,7 @@ public:
 
         if (not type->typeCheck(this, value, value_type)) util::error<except::TypeMismatch>(err_msg, location);
 
-        if (const auto cls = type::isClass(type)) {
+        if (const auto *cls = type::isClass(type)) {
             auto obj = get<value::Object>(value);
             obj.second = std::make_shared<value::Members>(obj.second->members);
 
@@ -402,6 +455,15 @@ public:
             obj.first = type;
 
             return obj;
+        }
+
+        if (const auto *prod = type::isTuple(type)) {
+            auto tup = get<value::Tuple>(value);
+
+            // for (; tup.elts->values.size() > prod->types.size(); tup.elts->values.pop_back());
+            while (tup.elts->values.size() > prod->types.size()) tup.elts->values.pop_back();
+
+            return tup;
         }
 
         if (const auto uni = type::isUnion(type)) {
@@ -1165,6 +1227,18 @@ public:
                 valuetypes.emplace_back(value, typeOf(value));
             }
         }
+        else if (std::holds_alternative<value::Tuple>(value)) {
+            const auto& tuple = get<value::Tuple>(value);
+
+            if (tuple.elts->values.size() < at_least) {
+                if constexpr (TEST) return false;
+                else util::error("Unpacking more elements than available: " + expr_str());
+            }
+
+            for (const auto& value : tuple.elts->values) {
+                valuetypes.emplace_back(value, typeOf(value));
+            }
+        }
         else if (std::holds_alternative<value::Map>(value)) {
             const auto& map = get<value::Map>(value);
 
@@ -1297,148 +1371,6 @@ public:
             }
         }
     }
-
-
-    // template <bool INFERRED>
-    // void bindPattern(
-    //     const auto& expr_str,
-    //     const expr::unpack::Pattern *pattern,
-    //     ValueType valuetype
-    // ) {
-    //     using Expr = expr::unpack::Expr;
-    //     using List = expr::unpack::List;
-    //     using Pack = expr::unpack::Pack;
-    //     // using Map  = expr::unpack::Map;
-
-
-    //     if (pattern->value) {
-    //         if (std::visit(*this, pattern->value->variant()).value != valuetype.value) {
-    //             util::error(
-    //                 "In Unpackment:\n" + expr_str() +
-    //                 "\nPattern: " + expr::unpack::stringifyPattern(pattern) +
-    //                 "\nValue: `" + pattern->value->stringify() +
-    //                 "` didn't match value: " + value::stringify(valuetype.value)
-    //             );
-    //         }
-    //     }
-
-    //     if (pattern->type) {
-    //         valuetype.type = validateType(pattern->type);
-    //         valuetype.value = typeCheck(
-    //             valuetype.value,
-    //             valuetype.type,
-    //             "Type mis-match in Unpackment:\n" + expr_str() +
-    //             "\nPattern: " + expr::unpack::stringifyPattern(pattern) +
-    //             "\nType: `" + valuetype.type->text() +
-    //             "` didn't match value: " + value::stringify(valuetype.value)
-    //         );
-    //     }
-
-    //     // supposedly I don't need to check if the expression is a name
-    //     // since LexicalAnalysis should've done it..i think :)
-    //     if (auto expr_ptr = dynamic_cast<const Expr*>(pattern)) {
-    //         bindExpr<INFERRED>(expr_str, expr_ptr, valuetype);
-    //     }
-    //     else if (auto list = dynamic_cast<const List*>(pattern)) {
-    //         const auto pack_index = [list] -> std::optional<size_t> {
-    //             for (size_t i{}; const auto& pattern : list->patterns)
-    //                 if (++i; dynamic_cast<Pack*>(pattern.get())) return i - 1;
-
-    //             return {};
-    //         }();
-
-
-    //         std::vector<ValueType> valuetypes;
-    //         unpackIntoList(expr_str, valuetypes, valuetype.value, list->patterns.size() - pack_index.has_value(), pack_index.has_value());
-    //         const size_t size = valuetypes.size(); // true size
-
-    //         if (not pack_index) {
-    //             for (const auto& [pattern, valuetype] : std::views::zip(list->patterns, valuetypes)) {
-    //                 bindPattern<INFERRED>(expr_str,pattern.get(), valuetype);
-    //             }
-    //         }
-    //         else {
-    //             const size_t leading_count = *pack_index;
-    //             const size_t trailing_count = list->patterns.size() - leading_count - 1; // minus 1 for the pack
-
-    //             for (
-    //                 const auto& [pattern, valuetype] :
-    //                 std::views::zip(list->patterns, valuetypes) | std::views::take(leading_count)
-    //             ) {
-    //                 bindPattern<INFERRED>(expr_str,pattern.get(), valuetype);
-    //             }
-
-
-    //             if (auto pack_pattern = dynamic_cast<Pack*>(list->patterns[*pack_index].get()); pack_pattern->expr) {
-    //                 auto pack = value::makePack(
-    //                     valuetypes
-    //                     | std::views::drop(leading_count)
-    //                     | std::views::take(size - leading_count - trailing_count)
-    //                     | std::views::transform([] (const auto& valuetype) { return valuetype.value; })
-    //                     | std::ranges::to<std::vector<value::Value>>()
-    //                 );
-    //                 auto type = typeOf(pack);
-
-    //                 // packs were not checked up there. Check them now!
-    //                 if (pack_pattern->value) {
-    //                     if (std::visit(*this, pack_pattern->value->variant()).value != pack) {
-    //                         util::error(
-    //                             "In Unpackment:\n" + expr_str() +
-    //                             "\nPattern: " + expr::unpack::stringifyPattern(pack_pattern) +
-    //                             "\nValue: `" + pack_pattern->value->stringify() +
-    //                             "` didn't match value (pack): " + value::stringify(pack)
-    //                             // + (pack->values.size() == 1 ? " (which is a pack)" : "")
-    //                         );
-    //                     }
-    //                 }
-
-    //                 if (pack_pattern->type) {
-    //                     // pack =  // might be unecessary
-    //                     auto packtype = validateType(pack_pattern->type);
-    //                     typeCheck(
-    //                         pack,
-    //                         packtype,
-    //                         "Type mis-match in Unpackment:\n" + expr_str() +
-    //                         "\nPattern: " + expr::unpack::stringifyPattern(pack_pattern) +
-    //                         "\nType: `" + packtype->text() +
-    //                         "` didn't match value: " + value::stringify(pack) +
-    //                         "\nwhich is of type: " + type->text()
-    //                     );
-    //                 }
-    
-    //                 addVar(
-    //                     pack_pattern->expr->stringify(),
-    //                     pack_pattern->expr->var_ID,
-    //                     std::make_shared<value::Value>(std::move(pack)),
-    //                     std::move(type)
-    //                 );
-    //             }
-
-
-    //             for (
-    //                 size_t pat_size = list->patterns.size();
-
-    //                 const auto& [pattern, valuetype] :
-    //                 std::views::zip(
-    //                     list->patterns | std::views::drop(pat_size - trailing_count),
-    //                     valuetypes     | std::views::drop(size     - trailing_count)
-    //                 )
-    //             ) {
-    //                 bindPattern<INFERRED>(expr_str,pattern.get(), valuetype);
-    //             }
-    //         }
-    //     }
-    //     // else if (auto map = dynamic_cast<const Map*>(pattern)) {
-    //     //     std::vector<std::pair<ValueType, ValueType>> valuetype_pairs;
-    //     //     unpackIntoMap(expr_str, valuetype_pairs, valuetype.value, map->patterns.size());
-
-    //     //     for (const auto& [pattern, pair] : std::views::zip(map->patterns, valuetype_pairs)) {
-    //     //         bindPattern<INFERRED>(expr_str, pattern.first .get(), pair.first );
-    //     //         bindPattern<INFERRED>(expr_str, pattern.second.get(), pair.second);
-    //     //     }
-    //     // }
-    // }
-
 
     enum class PatternMode {
         INFER,    // declare new variables              (was bindPattern<true>)
@@ -2498,7 +2430,7 @@ There are no mistakes with art.)";
 
 
         value::Value value;
-        Visitor v{std::move(ls).indeces, ".", import_index};
+        Visitor v{std::move(ls).indeces, "."};
 
         for (size_t i{}; i < builtins::NAMES.size(); ++i)
             // reference the same global
@@ -2591,12 +2523,13 @@ There are no mistakes with art.)";
         const auto& expr_str
     ) {
 
-        enum class Type { NONE = 0, INT, BOOL, LIST, STR, PACK, OBJECT };
+        enum class Type { NONE = 0, INT, BOOL, LIST, TUPLE, STR, PACK, OBJECT };
         const auto classify = [](const value::Value& v) {
             if (std::holds_alternative<BigInt          >(v)) return Type::INT   ;
             if (std::holds_alternative<bool            >(v)) return Type::BOOL  ;
             if (std::holds_alternative<  std::string   >(v)) return Type::STR   ;
             if (std::holds_alternative<value::List     >(v)) return Type::LIST  ;
+            if (std::holds_alternative<value::Tuple    >(v)) return Type::TUPLE  ;
             if (std::holds_alternative<value::Pack     >(v)) return Type::PACK  ;
             if (std::holds_alternative<value::Object   >(v)) return Type::OBJECT; // iterators
 
@@ -2747,6 +2680,51 @@ There are no mistakes with art.)";
                         if (broken) break;
                     }
                 } break;
+
+                case Type::TUPLE: {
+                    const auto& tuple = get<value::Tuple>(kind_value);
+                    if (tuple.elts->values.empty()) {
+                        if (not els) util::error("Loop which didn't run doesn't have else branch: " + expr_str());
+                        handle(els->variant());
+                        return;
+                    }
+
+
+                    auto tuple_type = type::isTuple(kind_type); // this is effectively a cast
+                    // a place for the type to live in so that it doesn't "die" before `list_type`
+                    type::TypePtr memory;
+                    if (not tuple_type) {
+                        memory = typeOf(kind_value);
+                        tuple_type = type::isTuple(memory);
+                    }
+
+                    if (var) {
+                        for (const auto& [elt, type] : std::views::zip(tuple.elts->values, tuple_type->types)) {
+                            continued = false;
+
+                            bindPattern<CREATE_NEW_VAR>(expr_str, var, {elt, type});
+
+                            handle(body->variant());
+
+                            if (broken) break;
+                        }
+
+                    }
+                    else for (const auto& [elt, type] : std::views::zip(tuple.elts->values, tuple_type->types)) {
+                        continued = false;
+
+                        addVar(
+                            "_",
+                            std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::UNNAMED),
+                            std::make_shared<value::Value>(elt),
+                            type
+                        );
+                        handle(body->variant());
+
+                        if (broken) break;
+                    }
+                } break;
+
 
                 case Type::STR: {
                     const auto& str = get<std::string>(kind_value);
@@ -3229,7 +3207,10 @@ There are no mistakes with art.)";
 
         auto old_spaces = std::move(current_space);
         current_space = std::move(func->spaces);
-        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+        util::Deferred d2{[this, &old_spaces, func] {
+            func->spaces = std::move(current_space);
+            current_space = std::move(old_spaces);
+        }};
 
 
         ScopeGuard sg{this, args_env};
@@ -3413,7 +3394,10 @@ There are no mistakes with art.)";
 
         auto old_spaces = std::move(current_space);
         current_space = std::move(func->spaces);
-        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+        util::Deferred d2{[this, &old_spaces, func] {
+            func->spaces = std::move(current_space);
+            current_space = std::move(old_spaces);
+        }};
 
 
         ScopeGuard sg{this, args_env};
@@ -3529,7 +3513,10 @@ There are no mistakes with art.)";
 
         auto old_spaces = std::move(current_space);
         current_space = std::move(func->spaces);
-        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+        util::Deferred d2{[this, &old_spaces, func] {
+            func->spaces = std::move(current_space);
+            current_space = std::move(old_spaces);
+        }};
 
 
         ScopeGuard sg{this, args_env};
@@ -3646,7 +3633,10 @@ There are no mistakes with art.)";
 
         auto old_spaces = std::move(current_space);
         current_space = std::move(func->spaces);
-        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+        util::Deferred d2{[this, &old_spaces, func] {
+            func->spaces = std::move(current_space);
+            current_space = std::move(old_spaces);
+        }};
 
 
         ScopeGuard sg{this, args_env};
@@ -3766,7 +3756,10 @@ There are no mistakes with art.)";
 
         auto old_spaces = std::move(current_space);
         current_space = std::move(func->spaces);
-        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+        util::Deferred d2{[this, &old_spaces, func] {
+            func->spaces = std::move(current_space);
+            current_space = std::move(old_spaces);
+        }};
 
 
         ScopeGuard sg{this, args_env};
@@ -4678,7 +4671,10 @@ There are no mistakes with art.)";
 
         auto old_spaces = std::move(current_space);
         current_space = std::move(func.spaces);
-        util::Deferred d2{[this, &old_spaces] { current_space = std::move(old_spaces); }};
+        util::Deferred d2{[this, &old_spaces, &func] {
+            func.spaces = std::move(current_space);
+            current_space = std::move(old_spaces);
+        }};
 
 
         // check for invalid named arguments
@@ -5294,7 +5290,7 @@ There are no mistakes with art.)";
             "reset", "eval",
             "neg", "abs",
             "not",
-            "to_int", "to_double", "to_string",
+            "to_int", "to_double", "to_string", "as_pack",
 
             //* binary
             "get", "push", "pop", "pop_front", "insert_at", "remove_at", "object_has",
@@ -5357,7 +5353,7 @@ There are no mistakes with art.)";
 
 
     std::vector<value::Value> expandArgs(
-        std::vector<expr::ExprPtr> args,
+        const std::vector<expr::ExprPtr>& args,
         std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at
     ) {
         std::vector<value::Value> values;
@@ -5390,8 +5386,13 @@ There are no mistakes with art.)";
 
 
         auto name = std::move(func).func_name.substr(10); // cutout the "__builtin_"
-        const auto arity_check = [&name, &args] (const size_t arity) {
-            if (args.size() != arity) util::error("Wrong arity with call to \"__builtin_" + name + "\"");
+
+        const auto arity_check = [&name] (const size_t arity, const auto& args) {
+            if (args.size() != arity) {
+                // for (const auto& arg : args)
+                //     std::cerr << "Arg: " << arg->stringify() << std::endl;
+                util::error("Wrong arity with call to \"__builtin_" + name + "\": " + std::to_string(args.size()));
+            }
         };
 
 
@@ -5416,7 +5417,7 @@ There are no mistakes with art.)";
         }
 
         if (name == "id") {
-            arity_check(1);
+            arity_check(1, args);
             return args[0]->var_ID;
         }
 
@@ -5559,7 +5560,8 @@ There are no mistakes with art.)";
         };
 
         if (std::ranges::find(nullary_funcs, name) != nullary_funcs.end()) {
-            arity_check(0);
+            auto expanded = expandArgs(args, std::move(expand_at));
+            arity_check(0, expanded);
             if (name == "input_str"           ) return execute<0>(stdx::get<S<"input_str"       >>(functions).value, {}, this);
             if (name == "input_int"           ) return execute<0>(stdx::get<S<"input_int"       >>(functions).value, {}, this);
 
@@ -5612,6 +5614,7 @@ There are no mistakes with art.)";
             "to_int"       ,
             "to_double"    ,
             "to_string"    ,
+            "as_pack"      ,
             "dlopen"       ,
             "ptr_to_string",
             "open_file"    ,
@@ -5622,16 +5625,12 @@ There are no mistakes with art.)";
             "read_word"    ,
         };
 
-        if (std::ranges::find(unary_funcs, name) != unary_funcs.end()) arity_check(1); // just for now..
-
-
-        // evaluating arguments from left to right as needed
-        // first argument is always evaluated
-        const value::Value value1 = std::visit(*this, args[0]->variant()).value;
 
         // Since this is a meta function that operates on AST nodes rather than values
         // it gets its special treatment here..
         if (name == "reset") {
+            auto value1 = std::visit(*this, args[0]->variant()).value;
+
             if (const auto& v = getVar(args[0]->var_ID, liftName(args[0].get())); not v) util::error("Reseting an unset value: " + args[0]->stringify());
             else removeVar(args[0]->var_ID);
 
@@ -5639,46 +5638,55 @@ There are no mistakes with art.)";
         }
 
 
-        if (name == "type"         ) return execute<1>(stdx::get<S<"type"      >>(functions).value, {value1}, this);
-        if (name == "len"          ) return execute<1>(stdx::get<S<"len"       >>(functions).value, {value1}, this);
-        if (name == "reverse"      ) return execute<1>(stdx::get<S<"reverse"   >>(functions).value, {value1}, this);
-        if (name == "into_pack"    ) return execute<1>(stdx::get<S<"into_pack" >>(functions).value, {value1}, this);
-        if (name == "eval"         ) return execute<1>(stdx::get<S<"eval"      >>(functions).value, {value1}, this);
-        if (name == "abs"          ) return execute<1>(stdx::get<S<"abs"       >>(functions).value, {value1}, this);
-        if (name == "neg"          ) return execute<1>(stdx::get<S<"neg"       >>(functions).value, {value1}, this);
-        if (name == "not"          ) return execute<1>(stdx::get<S<"not"       >>(functions).value, {value1}, this);
-        if (name == "pop"          ) return execute<1>(stdx::get<S<"pop"       >>(functions).value, {value1}, this);
-        if (name == "pop_front"    ) return execute<1>(stdx::get<S<"pop_front" >>(functions).value, {value1}, this);
-        if (name == "to_int"       ) return execute<1>(stdx::get<S<"to_int"    >>(functions).value, {value1}, this);
-        if (name == "to_double"    ) return execute<1>(stdx::get<S<"to_double" >>(functions).value, {value1}, this);
-        if (name == "to_string"    ) return execute<1>(stdx::get<S<"to_string" >>(functions).value, {value1}, this);
+        if (std::ranges::find(unary_funcs, name) != unary_funcs.end()) {
+            auto expanded = expandArgs(args, std::move(expand_at));
+            arity_check(1, expanded);
 
-        if (name == "open_file") {
-            // gotta normalize the file path first
 
-            if (not std::holds_alternative<std::string>(value1))
-                util::error<except::InvalidArgument>(
-                    "`__builtin_open_file` expected a string for the first argument, got `" +
-                    stringify(value1) + "`:\n" + call->stringify()
-                );
+            // evaluating arguments from left to right as needed
+            // first argument is always evaluated
+            // const value::Value value1 = std::visit(*this, args[0]->variant()).value;
 
-            std::filesystem::path path = get<std::string>(value1);
+            if (name == "type"         ) return execute<1>(stdx::get<S<"type"      >>(functions).value, {expanded[0]}, this);
+            if (name == "len"          ) return execute<1>(stdx::get<S<"len"       >>(functions).value, {expanded[0]}, this);
+            if (name == "reverse"      ) return execute<1>(stdx::get<S<"reverse"   >>(functions).value, {expanded[0]}, this);
+            if (name == "into_pack"    ) return execute<1>(stdx::get<S<"into_pack" >>(functions).value, {expanded[0]}, this);
+            if (name == "eval"         ) return execute<1>(stdx::get<S<"eval"      >>(functions).value, {expanded[0]}, this);
+            if (name == "abs"          ) return execute<1>(stdx::get<S<"abs"       >>(functions).value, {expanded[0]}, this);
+            if (name == "neg"          ) return execute<1>(stdx::get<S<"neg"       >>(functions).value, {expanded[0]}, this);
+            if (name == "not"          ) return execute<1>(stdx::get<S<"not"       >>(functions).value, {expanded[0]}, this);
+            if (name == "pop"          ) return execute<1>(stdx::get<S<"pop"       >>(functions).value, {expanded[0]}, this);
+            if (name == "pop_front"    ) return execute<1>(stdx::get<S<"pop_front" >>(functions).value, {expanded[0]}, this);
+            if (name == "to_int"       ) return execute<1>(stdx::get<S<"to_int"    >>(functions).value, {expanded[0]}, this);
+            if (name == "to_double"    ) return execute<1>(stdx::get<S<"to_double" >>(functions).value, {expanded[0]}, this);
+            if (name == "to_string"    ) return execute<1>(stdx::get<S<"to_string" >>(functions).value, {expanded[0]}, this);
+            if (name == "as_pack"      ) return execute<1>(stdx::get<S<"as_pack"   >>(functions).value, {expanded[0]}, this);
+            if (name == "open_file"    ) {
+                std::clog << "name: " << name << std::endl;
+                // gotta normalize the file path first
+                if (not std::holds_alternative<std::string>(expanded[0]))
+                    util::error<except::InvalidArgument>(
+                        "`__builtin_open_file` expected a string for the first argument, got `" +
+                        stringify(expanded[0]) + "`:\n" + call->stringify()
+                    );
 
-            if (not path.is_absolute()) path = root / path;
+                std::filesystem::path path = get<std::string>(expanded[0]);
 
-            return execute<1>(stdx::get<S<"open_file" >>(functions).value, {value::Value(path.string())}, this);
+                if (not path.is_absolute()) path = root / path;
+
+                return execute<1>(stdx::get<S<"open_file" >>(functions).value, {value::Value(path.string())}, this);
+            }
+            if (name == "close_file"  ) return execute<1>(stdx::get<S<"close_file"  >>(functions).value, {expanded[0]}, this);
+            if (name == "is_file_open") return execute<1>(stdx::get<S<"is_file_open">>(functions).value, {expanded[0]}, this);
+            if (name == "read_file"   ) return execute<1>(stdx::get<S<"read_file"   >>(functions).value, {expanded[0]}, this);
+            if (name == "read_line"   ) return execute<1>(stdx::get<S<"read_line"   >>(functions).value, {expanded[0]}, this);
+            if (name == "read_word"   ) return execute<1>(stdx::get<S<"read_word"   >>(functions).value, {expanded[0]}, this);
+
+            #if not WEB_PIE
+            if (name == "dlopen"       ) return execute<1>(stdx::get<S<"dlopen"    >>(functions).value, {expanded[0]}, this);
+            if (name == "ptr_to_string") return execute<1>(stdx::get<S<"ptr_to_string">>(functions).value, {expanded[0]}, this);
+            #endif
         }
-        if (name == "close_file"  ) return execute<1>(stdx::get<S<"close_file"  >>(functions).value, {value1}, this);
-        if (name == "is_file_open") return execute<1>(stdx::get<S<"is_file_open">>(functions).value, {value1}, this);
-        if (name == "read_file"   ) return execute<1>(stdx::get<S<"read_file"   >>(functions).value, {value1}, this);
-        if (name == "read_line"   ) return execute<1>(stdx::get<S<"read_line"   >>(functions).value, {value1}, this);
-        if (name == "read_word"   ) return execute<1>(stdx::get<S<"read_word"   >>(functions).value, {value1}, this);
-
-
-        #if not WEB_PIE
-        if (name == "dlopen"       ) return execute<1>(stdx::get<S<"dlopen"    >>(functions).value, {value1}, this);
-        if (name == "ptr_to_string") return execute<1>(stdx::get<S<"ptr_to_string">>(functions).value, {value1}, this);
-        #endif
 
         // all the rest of those funcs expect 2 arguments
 
@@ -5708,8 +5716,11 @@ There are no mistakes with art.)";
         };
 
         if (std::ranges::find(eager, name) != eager.end()) {
-            arity_check(2);
-            const value::Value value2 = std::visit(*this, args[1]->variant()).value;
+            auto expanded = expandArgs(args, std::move(expand_at));
+            arity_check(2, expanded);
+
+            const auto& value1 = expanded[0];
+            const auto& value2 = expanded[1];
 
             // this is disgusting..I know
             if (name == "write_file") return execute<2>(stdx::get<S<"write_file">>(functions).value, {value1, value2}, this);
@@ -5719,22 +5730,21 @@ There are no mistakes with art.)";
             if (name == "remove_at" ) return execute<2>(stdx::get<S<"remove_at" >>(functions).value, {value1, value2}, this);
             if (name == "object_has") return execute<2>(stdx::get<S<"object_has">>(functions).value, {value1, value2}, this);
             if (name == "str_split" ) return execute<2>(stdx::get<S<"str_split" >>(functions).value, {value1, value2}, this);
-
-            if (name == "add"     ) return execute<2>(stdx::get<S<"add"     >>(functions).value, {value1, value2}, this);
-            if (name == "sub"     ) return execute<2>(stdx::get<S<"sub"     >>(functions).value, {value1, value2}, this);
-            if (name == "mul"     ) return execute<2>(stdx::get<S<"mul"     >>(functions).value, {value1, value2}, this);
-            if (name == "div"     ) return execute<2>(stdx::get<S<"div"     >>(functions).value, {value1, value2}, this);
-            if (name == "mod"     ) return execute<2>(stdx::get<S<"mod"     >>(functions).value, {value1, value2}, this);
-            if (name == "pow"     ) return execute<2>(stdx::get<S<"pow"     >>(functions).value, {value1, value2}, this);
-            if (name == "bit_and" ) return execute<2>(stdx::get<S<"bit_and" >>(functions).value, {value1, value2}, this);
-            if (name == "bit_or"  ) return execute<2>(stdx::get<S<"bit_or"  >>(functions).value, {value1, value2}, this);
-            if (name == "xor"     ) return execute<2>(stdx::get<S<"xor"     >>(functions).value, {value1, value2}, this);
-            if (name == "rand_int") return execute<2>(stdx::get<S<"rand_int">>(functions).value, {value1, value2}, this);
-            if (name == "gt"      ) return execute<2>(stdx::get<S<"gt"      >>(functions).value, {value1, value2}, this);
-            if (name == "geq"     ) return execute<2>(stdx::get<S<"geq"     >>(functions).value, {value1, value2}, this);
-            if (name == "eq"      ) return execute<2>(stdx::get<S<"eq"      >>(functions).value, {value1, value2}, this);
-            if (name == "leq"     ) return execute<2>(stdx::get<S<"leq"     >>(functions).value, {value1, value2}, this);
-            if (name == "lt"      ) return execute<2>(stdx::get<S<"lt"      >>(functions).value, {value1, value2}, this);
+            if (name == "add"       ) return execute<2>(stdx::get<S<"add"     >>(functions).value, {value1, value2}, this);
+            if (name == "sub"       ) return execute<2>(stdx::get<S<"sub"     >>(functions).value, {value1, value2}, this);
+            if (name == "mul"       ) return execute<2>(stdx::get<S<"mul"     >>(functions).value, {value1, value2}, this);
+            if (name == "div"       ) return execute<2>(stdx::get<S<"div"     >>(functions).value, {value1, value2}, this);
+            if (name == "mod"       ) return execute<2>(stdx::get<S<"mod"     >>(functions).value, {value1, value2}, this);
+            if (name == "pow"       ) return execute<2>(stdx::get<S<"pow"     >>(functions).value, {value1, value2}, this);
+            if (name == "bit_and"   ) return execute<2>(stdx::get<S<"bit_and" >>(functions).value, {value1, value2}, this);
+            if (name == "bit_or"    ) return execute<2>(stdx::get<S<"bit_or"  >>(functions).value, {value1, value2}, this);
+            if (name == "xor"       ) return execute<2>(stdx::get<S<"xor"     >>(functions).value, {value1, value2}, this);
+            if (name == "rand_int"  ) return execute<2>(stdx::get<S<"rand_int">>(functions).value, {value1, value2}, this);
+            if (name == "gt"        ) return execute<2>(stdx::get<S<"gt"      >>(functions).value, {value1, value2}, this);
+            if (name == "geq"       ) return execute<2>(stdx::get<S<"geq"     >>(functions).value, {value1, value2}, this);
+            if (name == "eq"        ) return execute<2>(stdx::get<S<"eq"      >>(functions).value, {value1, value2}, this);
+            if (name == "leq"       ) return execute<2>(stdx::get<S<"leq"     >>(functions).value, {value1, value2}, this);
+            if (name == "lt"        ) return execute<2>(stdx::get<S<"lt"      >>(functions).value, {value1, value2}, this);
 
             #if not WEB_PIE
             if (name == "dlsym"   ) return execute<2>(stdx::get<S<"dlsym"   >>(functions).value, {value1, value2}, this);
@@ -5745,7 +5755,9 @@ There are no mistakes with art.)";
 
 
         if (name == "and") {
-            arity_check(2);
+            arity_check(2, args);
+
+            const auto value1 = std::visit(*this, args[0]->variant()).value;
 
             if (not std::holds_alternative<bool>(value1)) return value1; // return first falsy value
             if (not get<bool>(value1)) return value1; // first falsey value
@@ -5755,7 +5767,9 @@ There are no mistakes with art.)";
         }
 
         if (name == "or" ) {
-            arity_check(2);
+            arity_check(2, args);
+            const auto value1 = std::visit(*this, args[0]->variant()).value;
+
             if (not std::holds_alternative<bool>(value1)) return std::visit(*this, args[1]->variant()).value; // last falsey value
 
 
@@ -5765,7 +5779,8 @@ There are no mistakes with art.)";
 
 
         if (name == "conditional") {
-            arity_check(3);
+            arity_check(3, args);
+            const auto value1 = std::visit(*this, args[0]->variant()).value;
             const auto& then      = args[1]->variant();
             const auto& otherwise = args[2]->variant();
 
@@ -5778,26 +5793,26 @@ There are no mistakes with art.)";
         }
 
         if (name == "set") {
-            arity_check(3);
-            const auto value2 = std::visit(*this, args[1]->variant()).value;
-            const auto value3 = std::visit(*this, args[2]->variant()).value;
+            auto expanded = expandArgs(args, std::move(expand_at));
+            arity_check(3, expanded);
 
-            return execute<3>(stdx::get<S<"set">>(functions).value, {value1, value2, value3}, this);
+            return execute<3>(stdx::get<S<"set">>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
         }
 
         if (name == "insert_at") {
-            arity_check(3);
-            const auto value2 = std::visit(*this, args[1]->variant()).value;
-            const auto value3 = std::visit(*this, args[2]->variant()).value;
+            auto expanded = expandArgs(args, std::move(expand_at));
+            arity_check(3, expanded);
 
-            return execute<3>(stdx::get<S<"insert_at">>(functions).value, {value1, value2, value3}, this);
+            return execute<3>(stdx::get<S<"insert_at">>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
         }
 
         if (name == "str_slice") {
-            arity_check(4);
-            const value::Value start_v  = std::visit(*this, args[1]->variant()).value;
-            const value::Value end_v    = std::visit(*this, args[2]->variant()).value;
-            const value::Value stride_v = std::visit(*this, args[3]->variant()).value;
+            auto expanded = expandArgs(args, std::move(expand_at));
+            arity_check(4, expanded);
+            const auto& value1   = expanded[0];
+            const auto& start_v  = expanded[1];
+            const auto& end_v    = expanded[2];
+            const auto& stride_v = expanded[3];
 
             if (
                 not std::holds_alternative<std::string>(value1  ) or
@@ -6307,7 +6322,6 @@ There are no mistakes with art.)";
 
         if (const auto var_type = dynamic_cast<type::ExprType*>(type.get())) {
             // if (type::isBuiltin(type)) return type;
-
             value::Value value = std::visit(*this, var_type->t->variant()).value; // evaluate type expression
 
             if (std::holds_alternative<type::TypePtr>(value))
@@ -6321,9 +6335,7 @@ There are no mistakes with art.)";
 
         else if (type::isClass(type) or type::isUnion(type)) return type;
 
-        else if (type::isFunction(type)) {
-            const auto func_type = dynamic_cast<type::FuncType*>(type.get());
-
+        else if (const auto *func_type = type::isFunction(type)) {
             std::vector<type::TypePtr> params;
             for (auto& param : func_type->params) {
                 params.push_back(validateType(param));
@@ -6334,49 +6346,23 @@ There are no mistakes with art.)";
 
             return std::make_shared<type::FuncType>(std::move(params), validateType(func_type->ret));
         }
-        else if (type::isVariadic(type)) {
-            const auto variadic_type = dynamic_cast<type::VariadicType*>(type.get());
-
-            // // todo: allow this in the future
-            // if (variadic_type->type->text() == "Syntax") util::error("Variadics of 'Syntax' is not allowed!");
-
+        else if (const auto *variadic_type = type::isVariadic(type)) {
             return std::make_shared<type::VariadicType>(validateType(std::move(variadic_type)->type));
         }
-        else if (type::isList(type)) {
-            const auto list_type = dynamic_cast<type::ListType*>(type.get());
-
-            // todo: allow this in the future
-            // if (list_type->type->text() == "Syntax") util::error("List of 'Syntax' is not allowed!");
-
-
-            // if (type::isVariadic(list_type->type)) util::error("Lists of variadics types are not allowed!");
-
-
-            // list_type->type = validateType(std::move(list_type)->type);
-            // return type;
-
+        else if (const auto *list_type = type::isList(type)) {
             return std::make_shared<type::ListType>(validateType(list_type->type));
         }
-        else if (type::isMap(type)) {
-            const auto map_type = dynamic_cast<type::MapType*>(type.get());
-
-            // todo: allow this in the future
-            // if (map_type->key_type->text() == "Syntax") util::error("Map of 'Syntax' is not allowed!");
-            // if (map_type->val_type->text() == "Syntax") util::error("Map of 'Syntax' is not allowed!");
-
-
-            // if (type::isVariadic(map_type->key_type)) util::error("Map of variadics types are not allowed!");
-            // if (type::isVariadic(map_type->val_type)) util::error("Map of variadics types are not allowed!");
-
-
-            // map_type->key_type = validateType(std::move(map_type)->key_type);
-            // map_type->val_type = validateType(std::move(map_type)->val_type);
-
-            // return type;
-
+        else if (const auto *map_type = type::isMap(type)) {
             return std::make_shared<type::MapType>(validateType(map_type->key_type), validateType(map_type->val_type));
         }
+        else if (const auto* tuple_type = type::isTuple(type)) {
+            std::vector<type::TypePtr> types;
 
+            for (const auto& type : tuple_type->types)
+                types.push_back(validateType(type));
+
+            return type::TupleOf(std::move(types));
+        }
 
 
         util::error("'" + type->text() + "' does not name a type!");
@@ -6429,7 +6415,6 @@ There are no mistakes with art.)";
         }
 
         if (std::holds_alternative<value::Object>(value)) {
-            // ! check if type isn't a class value | not sure what this comment is about
             return std::make_shared<type::LiteralType>(
                 std::make_shared<value::ClassValue>(
                     *dynamic_cast<const type::LiteralType*>(get<value::Object>(value).first.get())->cls
@@ -6536,6 +6521,21 @@ There are no mistakes with art.)";
             return type::MapOf(type::builtins::Any(), type::builtins::Any());
             // return type::MapOf(type::UnionOf(std::move(keys)), type::UnionOf(std::move(values)));
         }
+
+        if (std::holds_alternative<value::Tuple>(value)) {
+            auto values = std::ranges::fold_left(
+                get<value::Tuple>(value).elts->values,
+                std::vector<type::TypePtr>{},
+                [this] (auto acc, const auto& elt) {
+                    acc.push_back(typeOf(elt));
+                    return acc;
+                }
+            );
+
+
+            return type::TupleOf(std::move(values));
+        }
+
 
         if (std::holds_alternative<value::Address>(value)) {
             return type::builtins::Address();
@@ -6954,95 +6954,7 @@ There are no mistakes with art.)";
             }
         });
 
-
-        const auto builtins = {
-            "__builtin_rand_int",
-
-            "__builtin_print",
-            "__builtin_concat",
-
-            "__builtin_create_class",
-            "__builtin_parse",
-
-            "__builtin_defer",
-
-            "__builtin_print_env",
-            "__builtin_panic",
-            "__builtin_id",
-            "__builtin_input_str",
-            "__builtin_input_int",
-            "__builtin_decltype",
-            "__builtin_type",
-            "__builtin_len",
-            "__builtin_reset",
-            "__builtin_eval",
-            "__builtin_neg",
-            "__builtin_abs",
-            "__builtin_not",
-            "__builtin_to_int",
-            "__builtin_to_double",
-            "__builtin_to_string",
-            "__builtin_get",
-            "__builtin_set",
-            "__builtin_push",
-            "__builtin_reverse",
-            "__builtin_pop",
-            "__builtin_pop_front",
-            "__builtin_insert_at",
-            "__builtin_remove_at",
-            "__builtin_object_has",
-            "__builtin_into_pack",
-            "__builtin_add",
-            "__builtin_sub",
-            "__builtin_mul",
-            "__builtin_div",
-            "__builtin_mod",
-            "__builtin_pow",
-            "__builtin_gt",
-            "__builtin_geq",
-            "__builtin_eq",
-            "__builtin_leq",
-            "__builtin_lt",
-            "__builtin_and",
-            "__builtin_or",
-            "__builtin_conditional",
-            "__builtin_str_slice",
-            "__builtin_str_split",
-
-            // //* File IO
-            "__builtin_open_file",
-            "__builtin_is_file_open",
-            "__builtin_close_file",
-            "__builtin_write_file",
-            "__builtin_read_file",
-            "__builtin_read_line",
-            "__builtin_read_word",
-
-            //* FFI shit
-            "__builtin_dlopen",
-            "__builtin_dlsym",
-            "__builtin_ffi_call",
-            "__builtin_ffi_type_void",
-            "__builtin_ffi_type_int",
-            "__builtin_ffi_type_float",
-            "__builtin_ffi_type_double",
-            "__builtin_ffi_type_uint8",
-            "__builtin_ffi_type_sint8",
-            "__builtin_ffi_type_uint16",
-            "__builtin_ffi_type_sint16",
-            "__builtin_ffi_type_uint32",
-            "__builtin_ffi_type_sint32",
-            "__builtin_ffi_type_uint64",
-            "__builtin_ffi_type_sint64",
-            "__builtin_ffi_type_struct",
-            "__builtin_ffi_type_pointer",
-            "__builtin_ffi_type_cstring",
-            "__builtin_ffi_type_complex",
-
-            "__builtin_ptr_to_string",
-        };
-
-        for (const auto& builtin : builtins)
+        for (const auto& builtin : NAMES | std::views::drop(7)) // drop the first 6 names, which are the builtin types, not functions
             globals.insert({
                 nextID(),
                 {

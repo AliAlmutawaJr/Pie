@@ -67,6 +67,7 @@ inline constexpr auto NAMES = {
     "__builtin_conditional",
     "__builtin_str_slice",
     "__builtin_str_split",
+    "__builtin_as_pack",
 
     // //* File IO
     "__builtin_open_file",

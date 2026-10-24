@@ -500,6 +500,8 @@ void LexicalAnalysis::operator()(expr::Call *call) {
 
 
 void LexicalAnalysis::operator()(expr::List *list) {
+    // this should never be true
+    // since assigning to a list is basically an unpackment
     if (auto id = findVariable(list->stringify())) {
         list->var_ID = *id;
         if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
@@ -519,6 +521,18 @@ void LexicalAnalysis::operator()(expr::Map *map) {
 
     for (const auto& [key, value] : map->items)
         std::visit(*this, key->variant()), std::visit(*this, value->variant());
+}
+
+
+
+void LexicalAnalysis::operator()(expr::Tuple *tuple) {
+    if (auto id = findVariable(tuple->stringify())) {
+        tuple->var_ID = *id;
+        if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
+    }
+
+    for (const auto& e : tuple->elts)
+        std::visit(*this, e->variant());
 }
 
 
@@ -1081,9 +1095,11 @@ void LexicalAnalysis::visitType(const type::TypePtr& type) {
         for (const auto& param_type : func->params) visitType(param_type);
         visitType(func->ret);
     }
-
     else if(const auto var = type::isList(type)) {
         visitType(var->type);
+    }
+    else if(const auto var = type::isTuple(type)) {
+        for (const auto& type : var->types) visitType(type);
     }
     else if(const auto var = type::isMap(type)) {
         visitType(var->key_type);

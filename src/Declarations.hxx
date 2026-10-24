@@ -83,6 +83,7 @@ using Node = std::variant<
     struct FString           *,
     struct Name              *,
  // struct Pack              *,
+    struct Tuple             *,
     struct List              *,
     struct Map               *,
     struct ListComp          *,

@@ -193,19 +193,21 @@ namespace type {
     };
 
 
-    // struct SpaceType : Type {
+    struct TupleType final : Type {
+        std::vector<TypePtr> types;
 
-    //     std::string text(const size_t = 0) const override { return "Space"; }
-    //     bool involvesT(const Type& T) const override { return T == *this; }
-    //     bool typeCheck(interp::Visitor*, [[maybe_unused]] const value::Value& v, const TypePtr& other) const override { return *this >= *other; }
+        explicit TupleType(std::vector<TypePtr> ts) : types{std::move(ts)} {}
 
-    //     // a namespace is only not greater than any other type...
-    //     bool operator>(const Type&) const override { return false; }
-    //     // ...so >= only needs to check for equality!
-    //     bool operator>=(const Type& other) const override { return *this == other; }
+        std::string text(const size_t = 0) const override;
+        bool involvesT(const Type& T) const override;
+        bool typeCheck(interp::Visitor*, const value::Value&, const TypePtr& other) const override;
 
-    //     TypePtr clone() const override { return std::make_shared<SpaceType>(*this); }
-    // };
+        bool operator>(const Type&) const override;
+        bool operator>=(const Type&) const override;
+
+        TypePtr clone() const override { return std::make_shared<TupleType>(*this); }
+    };
+
 
 
     struct FuncType final : Type {
@@ -224,6 +226,7 @@ namespace type {
         TypePtr clone() const override { return std::make_shared<FuncType>(*this); }
     };
 
+
     struct VariadicType final : Type {
         TypePtr type;
 
@@ -239,6 +242,7 @@ namespace type {
         TypePtr clone() const override { return std::make_shared<VariadicType>(*this); }
     };
 
+
     struct ListType final : Type {
         TypePtr type;
 
@@ -246,7 +250,7 @@ namespace type {
 
         std::string text(const size_t = 0) const override;
         bool involvesT(const Type& T) const override { return type->involvesT(T); }
-        bool typeCheck(interp::Visitor*, const value::Value&, const TypePtr& other) const override; // return *this >= *other;
+        bool typeCheck(interp::Visitor*, const value::Value&, const TypePtr& other) const override;
 
 
         bool operator>(const Type& other) const override;
@@ -323,8 +327,6 @@ namespace type {
         return self >= other and not (other >= self);
     }
 
-    std::string builtinNameOf(const value::Value& v);
-
     inline TypePtr VariadicOf(TypePtr type) {
         return std::make_shared<VariadicType>(std::move(type));
     }
@@ -344,6 +346,19 @@ namespace type {
 
     inline TypePtr UnionOf(std::vector<TypePtr> types) {
         return std::make_shared<UnionType>(std::move(types));
+    }
+
+    template <std::same_as<TypePtr>... Ts>
+    inline TypePtr TupleOf(Ts... types) {
+        return std::make_shared<TupleType>(std::vector<TypePtr>{std::move(types)...});
+    }
+
+    inline TypePtr TupleOf(std::vector<TypePtr> types) {
+        return std::make_shared<TupleType>(std::move(types));
+    }
+
+    inline TypePtr Unit() {
+        return std::make_shared<TupleType>(std::vector<TypePtr>{});
     }
 
 
@@ -379,6 +394,15 @@ namespace type {
 
     inline const VariadicType* isVariadic(const TypePtr& t) noexcept {
         return dynamic_cast<VariadicType*>(t.get());
+    }
+
+    inline const TupleType* isTuple(const TypePtr& t) noexcept {
+        return dynamic_cast<TupleType*>(t.get());
+    }
+
+    inline bool isUnit(const TypePtr& t) noexcept {
+        if (const auto* tuple = isTuple(t)) return tuple->types.empty();
+        return false;
     }
 
     inline const ListType* isList(const TypePtr& t) noexcept {

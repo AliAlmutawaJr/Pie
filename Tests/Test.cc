@@ -8,23 +8,379 @@
 #include "TestSuite.hxx"
 
 
+// stress test those at some point
+/*
+.: .: list
+.: l = { 1, 2, 3};
+.: .: map
+.: m = { x: y, "three": 4};
+.: .: comprehension
+.: c = { loop i : 10 => i };
+.: .: scope
+.: s = { 1; 2; 3; };
+
+.: std::print(l);
+.: std::print(m);
+.: std::print(c);
+.: std::print(s);
+
+.: a = { loop i : 10 => i  };
+.: b = { loop i : 10    i; };
+.: c = { loop i : 10    i  };
+
+.: std::print(a);
+.: std::print(b);
+.: std::print(c);
+
+*/
+
+
+TEST_CASE("Tuple Types Compare Types, Not Pointers", "[Tuple][Type]") {
+{
+    // regression: operator>= used to compare TypePtrs (addresses), so this failed at random
+    const auto src = R"PIE(
+x: (Int, String) = (1, "a");
+y: (Int, String) = x;
+z: (Int, String) = y;
+__builtin_print(z);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((1, a))");
+}
+{
+    const auto src = R"PIE(
+x: (String, Int) = (1, "a");
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+}
+
+
+TEST_CASE("Tuples in Function Types", "[Tuple][Type][Function]") {
+{
+    // a function taking a shorter tuple can stand in for one taking a longer tuple:
+    // it only looks at the first two elements anyway (contravariance + width)
+    const auto src = R"PIE(
+g: ((Int, Bool, Double)) => Any = (t: (Any, Any)) => t;
+__builtin_print(g((1, true, 2.0)));
+)PIE";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+{
+    // ...but not the other way around: it would be handed too few elements
+    const auto src = R"PIE(
+g: ((Any, Any)) => Any = (t: (Int, Bool, Double)) => t;
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+g: ((Int, Bool)) => Any = (t: (String, Bool)) => t;
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+swap = (t: (Int, String)) => {
+    {a, b} = t;
+    (b, a);
+};
+__builtin_print(swap((1, "one")));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((one, 1))");
+}
+}
+
+
+TEST_CASE("Tuples with Concepts, Unions and Nesting", "[Tuple][Type]") {
+{
+    const auto src = R"PIE(
+Pos = (n: Int): Bool => __builtin_gt(n, 0);
+f = (p: (Pos, Pos)) => p;
+__builtin_print(f((3, 4)));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((3, 4))");
+}
+{
+    const auto src = R"PIE(
+Pos = (n: Int): Bool => __builtin_gt(n, 0);
+f = (p: (Pos, Pos)) => p;
+f((3, 0));
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+x: union { (Int, Int); String; } = (1, 2);
+y: union { (Int, Int); String; } = "two";
+__builtin_print(x, y);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((1, 2) two)");
+}
+{
+    const auto src = R"PIE(
+x: ((Int, Int), String) = ((1, 2), "a");
+__builtin_print(x);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(((1, 2), a))");
+}
+{
+    const auto src = R"PIE(
+x: ((Int, Int), String) = (("1", 2), "a");
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+xs: {(Int, String)} = {(1, "a"), (2, "b")};
+__builtin_print(xs);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"({(1, a), (2, b)})");
+}
+{
+    const auto src = R"PIE(
+m = {(0, 0): "origin", (1, 0): "east"};
+__builtin_print(__builtin_get(m, (1, 0)));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == "east");
+}
+}
+
+
+TEST_CASE("Unit", "[Tuple][Unit]") {
+{
+    const auto src = R"PIE(
+u: () = ();
+__builtin_print(u, __builtin_type(u), __builtin_eq((), ()));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(() () true)");
+}
+{
+    const auto src = R"PIE(
+f = () => ();
+__builtin_print(f());
+)PIE";
+
+    REQUIRE(pie::test::run(src) == "()");
+}
+}
+
+
+TEST_CASE("Tuple Return Types", "[Tuple][Type]") {
+{
+    const auto src = R"PIE(
+pair = (n: Int): (Int, Bool) => (n, true);
+__builtin_print(pair(1));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((1, true))");
+}
+{
+    const auto src = R"PIE(
+f: () => () = (): () => ();
+__builtin_print(f());
+)PIE";
+
+    REQUIRE(pie::test::run(src) == "()");
+}
+}
+
+
+TEST_CASE("Tuple Loop!", "[Tuple][Loop]") {
+{
+    const auto src = R"PIE(
+    loop e : (1, 2.3, "4", false, {10, 20}, {"six": 7}) __builtin_print(e);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(1
+2.300000
+4
+false
+{10, 20}
+{six: 7})");
+}
+}
+
+
+TEST_CASE("Func with Tuples and Lists and Packs", "[Tuple][List][Pack]") {
+{
+    const auto src = R"PIE(
+    {..., last} = {__builtin_as_pack((1, true, "meow"))...};
+    __builtin_print(last);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == "meow");
+}
+}
+
+
+TEST_CASE("Invalid Tuples!", "[Tuple][Type]") {
+{
+    const auto src = R"PIE(
+x: (Double, Bool, Double) = (1, true, 3.14);
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+x: (Any, Any, Any, Any) = (1, true, 3.14);
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+x: (Int, Bool, Double, Any) = (1, true, 3.14);
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+    Even = (n: Int): Bool => __builtin_eq(__builtin_mod(n, 2), 0);
+    x: (Even, Bool, Double) = (1, true, 3.14);
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+}
+
+TEST_CASE("Tuples!", "[Tuple][Type]") {
+{
+    const auto src = R"PIE(
+x: (Any, Any) = (1, true, 3.14);
+__builtin_print(x);
+x: (Any, Bool) = (1, true, 3.14);
+__builtin_print(x);
+x: (Int, Any) = (1, true, 3.14);
+__builtin_print(x);
+x: (Any, Any) = (1, true, 3.14);
+__builtin_print(x);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((1, true)
+(1, true)
+(1, true)
+(1, true))");
+}
+{
+    const auto src = R"PIE(
+x = (1, true, 3.14);
+__builtin_print(x);
+__builtin_print(__builtin_type(x));
+__builtin_print(__builtin_decltype(x));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((1, true, 3.140000)
+(Int, Bool, Double)
+Any)");
+}
+{
+    const auto src = R"PIE(
+x = (1, true, 3.14);
+y: (Int, Bool, Double) = x;
+__builtin_print(y);
+__builtin_print(__builtin_type(y));
+__builtin_print(__builtin_decltype(y));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((1, true, 3.140000)
+(Int, Bool, Double)
+(Int, Bool, Double))");
+}
+{
+    const auto src = R"PIE(
+x = (1, true, 3.14);
+y: (Int, Bool, Double) = x;
+z: (Any, Any, Any) = y;
+__builtin_print(z);
+__builtin_print(__builtin_type(z));
+__builtin_print(__builtin_decltype(z));
+
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((1, true, 3.140000)
+(Int, Bool, Double)
+(Any, Any, Any))");
+}
+{
+    const auto src = R"PIE(
+x = (1, true, 3.14);
+y: (Int, Bool, Double) = x;
+z: (Any, Any, Any) = y;
+w: (Any, Any) = z;
+__builtin_print(w);
+__builtin_print(__builtin_type(w));
+__builtin_print(__builtin_decltype(w));
+
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((1, true)
+(Int, Bool)
+(Any, Any))");
+}
+{
+    const auto src = R"PIE(
+x = (1, true, 3.14);
+y: (Int, Bool, Double) = x;
+z: (Any, Any, Any) = y;
+w: (Any, Any) = z;
+Odd = (n: Int): Bool => __builtin_eq(__builtin_mod(n, 2), 1);
+v: (Odd, Bool) = w;
+)PIE";
+
+    REQUIRE_NOTHROW(pie::test::run(src));
+}
+}
+
+
+
+TEST_CASE("Operators Keep Their Namespace Across Calls", "[Operator][Space]") {
+    const auto src = R"PIE(
+space s {
+    helper = (x) => x;
+    prefix(!) twice = (x) => helper(x);
+};
+use s::;
+
+__builtin_print(twice 1);
+__builtin_print(twice 2);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == "1\n2");
+}
+
 
 TEST_CASE("Contravariant Parameters and Covariant Returns", "[Type][Func]") {
     // a function that accepts *more* can stand in for one that accepts less
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int): Any = (x: Any): Int => x;)PIE"));
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Any): Any = (x: Int): Int => x;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int) => Any = (x: Any): Int => x;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Any) => Any = (x: Int): Int => x;)PIE"), pie::except::TypeMismatch);
 
     // a function that returns *less* can stand in for one that returns more
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int): Any = (x: Int): Int => x;)PIE"));
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Int): Int = (x: Int): Any => x;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int) => Any = (x: Int): Int => x;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Int) => Int = (x: Int): Any => x;)PIE"), pie::except::TypeMismatch);
 
     // both at once
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int): Any = (x: Any): Int => 1;)PIE"));
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Any): Int = (x: Int): Any => x;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int) => Any = (x: Any): Int => 1;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Any) => Int = (x: Int): Any => x;)PIE"), pie::except::TypeMismatch);
 
     // the number of parameters has to match
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Int): Int = (x: Int, y: Int): Int => x;)PIE"), pie::except::TypeMismatch);
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Int, Int): Int = (x: Int): Int => x;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Int) => Int = (x: Int, y: Int): Int => x;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (Int, Int) => Int = (x: Int): Int => x;)PIE"), pie::except::TypeMismatch);
 }
 
 
@@ -35,8 +391,8 @@ Role = union { "user"; "admin"; };
 greetAnyone = (names: String) => names;
 greetUsers  = (names: Role  ) => names;
 
-register       = (fun: (Role  ): Any) => 0;
-registerAnyone = (fun: (String): Any) => 0;
+register       = (fun: (Role  ) => Any) => 0;
+registerAnyone = (fun: (String) => Any) => 0;
 )PIE"};
 
 
@@ -48,35 +404,35 @@ registerAnyone = (fun: (String): Any) => 0;
     REQUIRE_THROWS_AS(pie::test::run((prelude + "registerAnyone(greetUsers);").c_str()), pie::except::TypeMismatch);
 
 
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(apply: ((Any): Any): Any = (f: (Int): Any) => 0;)PIE"));
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(apply: ((Int): Any): Any = (f: (Any): Any) => 0;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(apply: ((Any) => Any) => Any = (f: (Int) => Any) => 0;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(apply: ((Int) => Any) => Any = (f: (Any) => Any) => 0;)PIE"), pie::except::TypeMismatch);
 }
 
 
 TEST_CASE("Member-wise Union Comparison", "[Type][Union]") {
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int): union { Int; String; } = (x: Int): Int => x;)PIE"));
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int): Any = (x: union { Int; String; }) => x;)PIE"));
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (union { Int; String; }): Any = (x: Int) => x;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int) => union { Int; String; } = (x: Int): Int => x;)PIE"));
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (Int) => Any = (x: union { Int; String; }) => x;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (union { Int; String; }) => Any = (x: Int) => x;)PIE"), pie::except::TypeMismatch);
 
 
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { Int; String; }): Any = (x: union { Int; String; }) => x;)PIE"));
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { Int; String; }): Any = (x: union { String; Int; }) => x;)PIE"));
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { Int; String; }): Any = (x: union { Int; String; Bool; }) => x;)PIE"));
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (union { Int; String; Bool; }): Any = (x: union { Int; String; }) => x;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { Int; String; }) => Any = (x: union { Int; String; }) => x;)PIE"));
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { Int; String; }) => Any = (x: union { String; Int; }) => x;)PIE"));
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { Int; String; }) => Any = (x: union { Int; String; Bool; }) => x;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (union { Int; String; Bool; }) => Any = (x: union { Int; String; }) => x;)PIE"), pie::except::TypeMismatch);
 
     // unions of values
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { "user"; "admin"; }): Any = (x: union { "admin"; "user"; }) => x;)PIE"));
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (union { "user"; "admin"; }): Any = (x: union { "user"; }) => x;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(f: (union { "user"; "admin"; }) => Any = (x: union { "admin"; "user"; }) => x;)PIE"));
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(f: (union { "user"; "admin"; }) => Any = (x: union { "user"; }) => x;)PIE"), pie::except::TypeMismatch);
 }
 
 
 TEST_CASE("Value Types are Compared as Values", "[Type][Value]") {
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(g: ("Int"): Any = (a: Int) => a;)PIE"), pie::except::TypeMismatch);
-    REQUIRE_THROWS_AS(pie::test::run(R"PIE(g: (42): Any = (a: "42") => a;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(g: ("Int") => Any = (a: Int) => a;)PIE"), pie::except::TypeMismatch);
+    REQUIRE_THROWS_AS(pie::test::run(R"PIE(g: (42) => Any = (a: "42") => a;)PIE"), pie::except::TypeMismatch);
 
     // a value is accepted by the type it belongs to
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(g: (42): Any = (a: Int) => a;)PIE"));
-    REQUIRE_NOTHROW(pie::test::run(R"PIE(g: ("large"): Any = (a: String) => a;)PIE"));
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(g: (42) => Any = (a: Int) => a;)PIE"));
+    REQUIRE_NOTHROW(pie::test::run(R"PIE(g: ("large") => Any = (a: String) => a;)PIE"));
 
     // and plain assignment still works as before
     REQUIRE_NOTHROW(pie::test::run(R"PIE(size: union { "small"; "large"; } = "large";)PIE"));
@@ -5055,8 +5411,8 @@ f(5);
 
 TEST_CASE("Types as Values", "[Func][Type]") {
     const auto src = R"(
-:(Int, Double): String = :(Any, Any): Any;
-f: (Int, Double): String = (a, b) => 1;
+:(Int, Double) => String = :(Any, Any) => Any;
+f: (Int, Double) => String = (a, b) => 1;
 f(4, false);
 )";
 
@@ -5094,7 +5450,7 @@ func(House2(), 1, 1);
 
 TEST_CASE("Function Type Checking", "[Func][Type]") {
     const auto src = R"(
-func: (Int): Bool = (x: Int, s: String): Bool => true;
+func: (Int) => Bool = (x: Int, s: String): Bool => true;
 )";
 
     REQUIRE_THROWS(pie::test::run(src));
@@ -5647,7 +6003,7 @@ TEST_CASE("Type Alias 3", "[Type]") {
     const auto src = R"(
 print = __builtin_print;
 
-Func = :(Int, Int, Double): Any;
+Func = :(Int, Int, Double) => Any;
 
 f: Func = (a: Int, c: Any, b: String): String => "hi";
 )";
@@ -5660,14 +6016,14 @@ TEST_CASE("Type Alias 2", "[Type]") {
     const auto src = R"(
 print = __builtin_print;
 
-Func = :(Int, Int, String): Any;
+Func = :(Int, Int, String) => Any;
 
 f: Func = (a: Int, c: Any, b: String): String => "hi";
 
 print(Func);
 )";
 
-    REQUIRE(pie::test::run(src) == R"((Int, Int, String): Any)");
+    REQUIRE(pie::test::run(src) == R"((Int, Int, String) => Any)");
 }
 
 

@@ -140,6 +140,21 @@ std::string stringify(const Value& value, const size_t indent, const bool show_h
 
         s += '}';
     }
+
+    else if (std::holds_alternative<Tuple>(value)) {
+        const auto& vec = get<Tuple>(value).elts->values;
+        if (vec.size() == 1) s = '(' + stringify(vec.front(), indent + 4) + ",)";
+        else {
+            s += '(';
+            for (std::string comma = ""; const auto& v : vec) {
+                s += comma + stringify(v, indent + 4);
+                comma = ", ";
+            }
+
+            s += ')';
+        }
+    }
+
     else if (std::holds_alternative<value::Address>(value)) {
         const auto& address = get<value::Address>(value);
         s = std::format("{} at <{}>", address.name, address.pointer);
@@ -237,6 +252,9 @@ inline std::ostream& operator<<(std::ostream& os, const Environment& env) {
 
     if (std::holds_alternative<List>(lhs) and std::holds_alternative<List>(rhs))
         return get<List>(lhs).elts->values == get<List>(rhs).elts->values;
+
+    if (std::holds_alternative<Tuple>(lhs) and std::holds_alternative<Tuple>(rhs))
+        return get<Tuple>(lhs).elts->values == get<Tuple>(rhs).elts->values;
 
     if (std::holds_alternative<Map>(lhs) and std::holds_alternative<Map>(rhs))
         return get<Map>(lhs).items->map == get<Map>(rhs).items->map;

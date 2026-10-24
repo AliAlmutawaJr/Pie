@@ -204,6 +204,39 @@ struct Map : Expr {
 
 
 
+struct Tuple : Expr {
+    std::vector<ExprPtr> elts;
+
+    explicit Tuple(std::vector<ExprPtr> elts = {}, util::SourceSpan sp = {}) noexcept : Expr{std::move(sp)}, elts{std::move(elts)} { }
+    // explicit Map(std::unordered_map<ExprPtr, ExprPtr> elts = {}) noexcept : elements{std::move(elts)} {}
+
+    std::string stringify(const size_t indent = 0) const override {
+        if (elts.empty()) return "()";
+        if (elts.size() == 1) return '(' + elts.front()->stringify(indent + 4) + ",)";
+
+
+        std::string s = '(' + elts.front()->stringify(indent + 4);
+        for (const auto& elt : elts | std::views::drop(1)) {
+            s +=  + ", " + elt->stringify(indent + 4);
+        }
+
+        s += ')';
+
+        return s;
+    }
+
+    bool involvesName(const std::string_view sv) const override {
+        return sv == stringify()
+            or std::ranges::any_of(
+                elts, 
+                [sv] (const auto& e) { return e->involvesName(sv); }
+            );
+    }
+
+    Node variant() override { return this; }
+};
+
+
 struct Expansion : Expr {
     ExprPtr pack;
 

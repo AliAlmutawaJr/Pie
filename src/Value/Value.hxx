@@ -31,13 +31,15 @@ struct Members;
 
 
 struct Elements;
-struct List { std::shared_ptr<Elements> elts; };
 using Pack = std::shared_ptr<Elements>;
+struct List  { std::shared_ptr<Elements> elts; };
+struct Tuple { std::shared_ptr<Elements> elts; };
 
 struct Items;
 struct Map { std::shared_ptr<Items> items; };
 
 struct BuiltinFunction { std::string func_name; };
+
 // represents any C pointer
 struct Address {
     std::string name;
@@ -58,6 +60,7 @@ using VariantType = std::variant<
     Pack,
     List,
     Map,
+    Tuple,
     Address
 >;
 
@@ -84,8 +87,8 @@ struct std::hash<pie::value::Value> { size_t operator()(const pie::value::Value&
 namespace pie {
 namespace value {
 
-struct Fields   { std::vector<std::tuple<expr::Name, type::TypePtr, expr::ExprPtr>> fields;  };
-struct Members  { std::vector<std::tuple<expr::Name, type::TypePtr, ValuePtr>> members; };
+struct Fields   { std::vector<std::tuple<expr::Name, type::TypePtr, expr::ExprPtr>> fields;    };
+struct Members  { std::vector<std::tuple<expr::Name, type::TypePtr, ValuePtr>>      members;   };
 struct Elements { std::vector<Value> values;                                                   };
 struct Items    { std::unordered_map<Value, Value> map;                                        };
 
@@ -107,6 +110,10 @@ template <typename ...Ts>
 
 [[nodiscard]] inline Map makeMap(std::unordered_map<Value, Value> items = {}) {
     return {std::make_shared<Items>(std::move(items))};
+}
+
+[[nodiscard]] inline Tuple makeTuple(std::vector<Value> values = {}) {
+    return {std::make_shared<Elements>(std::move(values))};
 }
 
 

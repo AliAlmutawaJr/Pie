@@ -350,7 +350,7 @@ public:
     }
 
 
-    template <bool ALLOW_VARIADIC = true>
+    template <bool ALLOW_VARIADIC = true, bool PARSE_FUNC = true>
     type::TypePtr parseType() {
         using enum token::TokenKind;
 
@@ -363,30 +363,47 @@ public:
             return std::make_shared<type::VariadicType>(parseType<false>());
         }
 
-        // either a function type
+        // either a function type or a tuple
         if (check(L_PAREN)) {
-            if (check(R_PAREN, 1)) { // nullary function type
+            if (check(R_PAREN, 1)) { // nullary function or unit 
                 consume(L_PAREN);
                 consume(R_PAREN);
-                consume(COLON);
-                return std::make_shared<type::FuncType>(std::vector<type::TypePtr>{}, parseType());
+
+                if constexpr (PARSE_FUNC)
+                    if (match(FAT_ARROW)) {
+                        constexpr auto PARSE_VARIADIC = true;
+                        constexpr auto DISALLOW_FUNC = false;
+                        return std::make_shared<type::FuncType>(
+                            std::vector<type::TypePtr>{},
+                            parseType<PARSE_VARIADIC, DISALLOW_FUNC>()
+                        );
+                    }
+
+                return type::Unit();
             }
 
-            const bool func_type = [this] {
+
+
+            bool seen_comma = false;
+            const bool func_type = [this, &seen_comma] {
                 size_t i = 1; // skip the L_PAREN check above
                 for (; /* not atEnd(i) and */ not check(R_PAREN , i); ++i) {
                     if (check(L_BRACE, i)) while (not check(R_BRACE, i)) ++i;
                     if (check(L_PAREN, i)) while (not check(R_PAREN, i)) ++i;
 
-                    if (check(COMMA, i)) return true; // Comma Separated List can only appear in function arguments list
+                    /* old code vvvv. new: could be a tuple */
+                    // if (check(COMMA, i)) return true; // Comma Separated List can only appear in function arguments list
+
+                    if (check(COMMA, i)) seen_comma = true;
                 }
                 ++i;
 
-                return check(COLON, i); // ( ... ):
+                if constexpr (PARSE_FUNC) return check(FAT_ARROW, i); // ( ... ) =>
+                return false;
             }();
 
 
-            if (func_type) { // function type with more than one parameter
+            if constexpr (PARSE_FUNC) if (func_type) { // function type with more than one parameter
                 consume(L_PAREN);
 
                 type::FuncType type{{}, {}};
@@ -404,15 +421,35 @@ public:
                 }
 
                 consume(R_PAREN);
-                consume(COLON);
+                consume(FAT_ARROW);
 
-                type.ret = parseType();
+                constexpr auto PARSE_VARIADIC = true;
+                constexpr auto DISALLOW_FUNC = false;
+                type.ret = parseType<PARSE_VARIADIC, DISALLOW_FUNC>();
                 return std::make_shared<type::FuncType>(std::move(type));
+            }
+
+
+            // tuple
+            if (seen_comma) {
+                consume(L_PAREN);
+
+                std::vector<type::TypePtr> types;
+                do {
+                    types.push_back(parseType());
+
+                    if (match(R_PAREN)) break;
+
+                    consume(COMMA);
+                } while (not match(R_PAREN));
+
+                return type::TupleOf(std::move(types));
             }
 
             // just a grouping at this point, which means it's an expression
             return std::make_shared<type::ExprType>(parseExpr());
         }
+
 
         if (match(L_BRACE)) { // list or map type
             auto snapshot = checkpoint();
@@ -1304,8 +1341,9 @@ public:
         //     }
         // }
 
-
-        type::TypePtr return_type = match(COLON) ? parseType() : type::builtins::_();
+        constexpr auto PARSE_VARIADIC = true;
+        constexpr auto DISALLOW_FUNC = false;
+        type::TypePtr return_type = match(COLON) ? parseType<PARSE_VARIADIC, DISALLOW_FUNC>() : type::builtins::_();
 
         consume(FAT_ARROW);
 
@@ -1922,18 +1960,33 @@ public:
     expr::ExprPtr LParen() {
         using enum token::TokenKind;
 
-        if (match(R_PAREN)) { // nullary closure
-            type::TypePtr return_type = match(COLON) ? parseType() : type::builtins::_();
+        if (match(R_PAREN)) { // nullary closure or unit
+            if (match(COLON)) {
+                constexpr auto PARSE_VARIADIC = true;
+                constexpr auto DISALLOW_FUNC = false;
+                auto return_type = parseType<PARSE_VARIADIC, DISALLOW_FUNC>();
 
-            consume(FAT_ARROW);
-            // It's a closure
-            return std::make_shared<expr::Closure>(
-                std::vector<expr::Closure::Param>{},
-                type::FuncType{{}, std::move(return_type)},
-                std::optional<size_t>{},      // variadic index
-                std::vector<expr::ExprPtr>{}, // default values
-                closureBody()
-            );
+                consume(FAT_ARROW);
+                return std::make_shared<expr::Closure>(
+                    std::vector<expr::Closure::Param>{},
+                    type::FuncType{{}, std::move(return_type)},
+                    std::optional<size_t>{},      // variadic index
+                    std::vector<expr::ExprPtr>{}, // default values
+                    closureBody()
+                );
+            }
+
+            if (match(FAT_ARROW)) {
+                return std::make_shared<expr::Closure>(
+                    std::vector<expr::Closure::Param>{},
+                    type::FuncType{{}, type::builtins::_()},
+                    std::optional<size_t>{},      // variadic index
+                    std::vector<expr::ExprPtr>{}, // default values
+                    closureBody()
+                );
+            }
+
+            return std::make_shared<expr::Tuple>(); // unit
         }
 
 
@@ -1972,10 +2025,25 @@ public:
 
 
         // just a grouping `(x)`
-        const auto expr = std::make_shared<expr::Grouping>(parseExpr());
+        std::vector expr = {parseExpr()};
+        // tuple
+        if (match(COMMA)) {
+            if (match(R_PAREN)) return std::make_shared<expr::Tuple>(std::move(expr));
+
+            do {
+                expr.push_back(parseExpr());
+
+                if (match(R_PAREN)) break;
+
+                consume(COMMA);
+            } while(not match(R_PAREN));
+
+            return std::make_shared<expr::Tuple>(std::move(expr));
+        }
+
+        // just a grouping!
         consume(R_PAREN);
-        return expr;
-        // return expr;
+        return std::make_shared<expr::Grouping>(std::move(expr).front());
     }
 
 

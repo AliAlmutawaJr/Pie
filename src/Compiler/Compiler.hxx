@@ -258,6 +258,7 @@ public:
         value::BuiltinFunction{"__builtin_conditional"},
         value::BuiltinFunction{"__builtin_str_slice"  },
         value::BuiltinFunction{"__builtin_str_split"  },
+        value::BuiltinFunction{"__builtin_as_pack"    },
 
         //* File IO
         value::BuiltinFunction{"__builtin_open_file" },

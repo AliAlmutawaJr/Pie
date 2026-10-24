@@ -11,7 +11,7 @@
 
 ## Philosophy
 - Pie aims to be unique yet feel familiar
-- Everything is an expression (no null/unit/none type)
+- Everything is an expression (no null/none type)
 - Bare-bones (if it doesn't need to be keyword, then it isn't + no operators)
 - Still quirky (different even if the difference is not good)
 

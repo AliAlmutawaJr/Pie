@@ -35,14 +35,17 @@ space std {
 
 
     prefix(!) -   = (x) => __builtin_neg(x);
-    prefix(!) not = (x) => __builtin_not(x);
+    prefix(!) not = (x) => {
+        print("not: ", x);
+        __builtin_not(x);
+    };
     prefix ~ = (s: String) => (s);
 
     infix(&&) and = (x, y) => __builtin_and(x, y);
     infix(||) or  = (x, y) => __builtin_or (x, y);
 
     infix == = (a, b) => __builtin_eq(a, b);
-    infix != = (a, b) => __builtin_not(__builtin_eq(a, b));
+    .: infix != = (a, b) => __builtin_not(__builtin_eq(a, b));
     infix <  = (a, b) => __builtin_lt(a, b);
     infix <= = (a, b) => __builtin_leq(a, b);
     infix >  = (a, b) => __builtin_gt(a, b);

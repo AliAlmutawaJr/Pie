@@ -84,13 +84,17 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"len">,
         Func<
             decltype([](const auto& x, const auto&) {
-                if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, std::string>)
+                using T = std::remove_cvref_t<decltype(x)>;
+                if constexpr (std::is_same_v<T, std::string>)
                         return static_cast<BigInt>(x.length());
 
-                else if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, value::Pack>)
+                else if constexpr (std::is_same_v<T, value::Pack>)
                     return static_cast<BigInt>(x->values.size());
 
-                else if constexpr (std::is_same_v<std::remove_cvref_t<decltype(x)>, value::List>)
+                else if constexpr (std::is_same_v<T, value::List>)
+                    return static_cast<BigInt>(x.elts->values.size());
+
+                else if constexpr (std::is_same_v<T, value::Tuple>)
                     return static_cast<BigInt>(x.elts->values.size());
 
                 else // map value
@@ -99,6 +103,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             TypeList<std::string>,
             TypeList<value::Pack>,
             TypeList<value::List>,
+            TypeList<value::Tuple>,
             TypeList<value::Map>
         >
     >{},
@@ -197,6 +202,16 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 );
             }),
             TypeList<std::string, std::string>
+        >
+    >{},
+
+    MapEntry<
+        S<"as_pack">,
+        Func<
+            decltype([](const auto& tuple, const auto&) {
+                return value::makePack(tuple.elts->values);
+            }),
+            TypeList<value::Tuple>
         >
     >{},
 
@@ -485,6 +500,12 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
                     return a.elts->values[size_t(ind)]; 
                 }
+                else if constexpr (std::is_same_v<T, value::Tuple>) {
+                    if (ind < 0 or size_t(ind) >= a.elts->values.size())
+                        util::error("Accessing tuple '" + stringify(a) + "' at index '" + ind.str() + "' which is out of bounds!");
+
+                    return a.elts->values[size_t(ind)]; 
+                }
                 else if constexpr (std::is_same_v<T, value::Map>) {
                     if (not a.items->map.contains(ind))
                         util::error("Accessing Map '" + stringify(a) + "' at key `" + stringify(ind) + "` which doesn't exist!");
@@ -514,6 +535,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 }
             }),
             TypeList<value::List, BigInt>,
+            TypeList<value::Tuple, BigInt>,
             TypeList<value::Map, Any>,
             TypeList<value::Object, std::string>,
             TypeList<value::Pack, BigInt>,

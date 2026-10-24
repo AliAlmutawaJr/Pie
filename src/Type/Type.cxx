@@ -3,6 +3,7 @@
 #include "Value/Value.hxx"
 
 #include <algorithm>
+#include <ranges>
 #include <variant>
 
 
@@ -61,9 +62,18 @@ namespace type {
 
         // a value used as a type: `String >= "large"` because "large" is a String.
         // (comparing text would make the string "Int" equal to the type Int)
-        if (const auto v = isValue(other)) return type == builtinNameOf(*v->val);
+        if (const auto v = isValue(other)) {
+            if (std::holds_alternative<BigInt       >(*v->val)) return type == "Int";
+            if (std::holds_alternative<double       >(*v->val)) return type == "Double";
+            if (std::holds_alternative<bool         >(*v->val)) return type == "Bool";
+            if (std::holds_alternative<std::string  >(*v->val)) return type == "String";
+            if (std::holds_alternative<type::TypePtr>(*v->val)) return type == "Type";
+        }
+
 
         return type == other.text();
+        // // util::error();
+        // return false;
     }
 
 
@@ -218,7 +228,7 @@ namespace type {
         std::string s = "union {\n";
 
         const std::string space(indent + 4, ' ');
-        for (std::string pipe{}; const auto& t : types) {
+        for (const auto& t : types) {
             s += space + t->text(indent + 4) + ";\n";
         }
 
@@ -255,14 +265,80 @@ namespace type {
 
 
 
+    // * Tuple Type * //
+    std::string TupleType::text(const size_t indent) const {
+        if (types.empty()) return "()";
+
+        if (types.size() == 1) return "(" + types.front()->text() + ",)";
+
+        std::string s = "(";
+
+        for (std::string comma{}; const auto& t : types) {
+            s += comma + t->text(indent + 4);
+            comma = ", ";
+        }
+
+        return s + ')';
+    }
+
+    bool TupleType::involvesT(const Type& T) const {
+        return std::ranges::any_of(types, [&T] (const auto& type) { return type->involvesT(T); });
+    }
+
+
+    bool TupleType::typeCheck(interp::Visitor* v, const value::Value& val, [[maybe_unused]] const TypePtr& other) const {
+        if (not std::holds_alternative<value::Tuple>(val)) return false;
+
+        const auto& vec = get<value::Tuple>(val).elts->values;
+
+        if (vec.size() < types.size()) return false;
+
+        for (const auto& [value, type] : std::views::zip(vec, types)) {
+            if (not type->typeCheck(v, value, v->typeOf(value))) return false;
+        }
+
+        return true;
+        // return *this >= *other;
+    }
+
+    bool TupleType::operator>(const Type& other) const {
+        if (shouldReassign(other)) return true;
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
+        const auto* other_tuple = dynamic_cast<const TupleType*>(&other);
+        if (not other_tuple) return false;
+
+        if (other_tuple->types.size() < types.size()) return false;
+
+        for (const auto& [t1, t2] : std::views::zip(types, other_tuple->types))
+            if (not (*t1 > *t2)) return false;
+
+        return true;
+    }
+
+    bool TupleType::operator>=(const Type& other) const {
+        if (shouldReassign(other)) return true;
+        if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
+
+        const auto* other_tuple = dynamic_cast<const TupleType*>(&other);
+        if (not other_tuple) return false;
+
+        if (other_tuple->types.size() < types.size()) return false;
+
+        for (const auto& [t1, t2] : std::views::zip(types, other_tuple->types))
+            if (not (*t1 >= *t2)) return false;
+
+        return true;
+    }
+
+
 
     // * Function Type * //
     std::string FuncType::text(const size_t indent) const {
         std::string t = params.empty() ? "" : params[0]->text(indent);
-        for (size_t i = 1uz; i < params.size(); ++i)
+        for (size_t i = 1; i < params.size(); ++i)
             t += ", " + params[i]->text(indent);
 
-        return '(' + t + "): " + ret->text(indent);
+        return '(' + t + ") => " + ret->text(indent);
     }
     bool FuncType::involvesT(const Type& T) const {
         for (const auto& type : params)
@@ -382,15 +458,5 @@ namespace type {
     }
 
 
-
-
-    std::string builtinNameOf(const value::Value& v) {
-        if (std::holds_alternative<BigInt       >(v)) return "Int";
-        if (std::holds_alternative<double       >(v)) return "Double";
-        if (std::holds_alternative<bool         >(v)) return "Bool";
-        if (std::holds_alternative<std::string  >(v)) return "String";
-        if (std::holds_alternative<type::TypePtr>(v)) return "Type";
-        return "";
-    }
 } // namespace type
 } // namespace pie

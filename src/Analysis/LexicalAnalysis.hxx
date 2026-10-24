@@ -110,6 +110,7 @@ public:
 
     void operator()(expr::List*);
     void operator()(expr::Map*);
+    void operator()(expr::Tuple*);
 
     void operator()(expr::ListComp*);
     void operator()(expr::MapComp*);
