@@ -45,14 +45,14 @@ jobs:
             mkdir build
             cd build
             cmake -DCMAKE_CXX_COMPILER=g++-14 ..
-            make
+            make -j15
             mv Pie ../Pie-${{ matrix.name }}
           else
             make test_dylib_mac CC=clang++
             mkdir build
             cd build
             cmake  -DCMAKE_CXX_COMPILER=clang++ ..
-            make
+            make -j15
             mv Pie ../Pie-${{ matrix.name }}
           fi
 

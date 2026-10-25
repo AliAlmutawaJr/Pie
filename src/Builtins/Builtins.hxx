@@ -51,6 +51,7 @@ inline constexpr auto NAMES = {
     "__builtin_remove_at",
     "__builtin_object_has",
     "__builtin_into_pack",
+    "__builtin_into_tuple",
     "__builtin_add",
     "__builtin_sub",
     "__builtin_mul",

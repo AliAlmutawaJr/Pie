@@ -32,6 +32,30 @@
 .: std::print(b);
 .: std::print(c);
 
+
+
+
+
+
+.: .: man
+.: show = (x: String) => std::print(x);
+.: shows = (xs: {String}) => {
+.:     __builtin_push(xs, "meow");
+.:     std::print(xs);
+.: };
+
+.: .: r: Role = "user";
+.: l: {Role} = {"user", "admin"};
+.: std::print(l);
+.: __builtin_push(l, "meow");
+.: std::print(l);
+.: .: shows(l);
+.: .: std::print(l);
+
+
+
+
+
 */
 
 

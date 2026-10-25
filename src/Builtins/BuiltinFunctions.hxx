@@ -634,7 +634,26 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             decltype([](const auto& cont, const auto&) -> value::Value {
                 return value::makePack(cont.elts->values);
             }),
-            TypeList<value::List>
+            TypeList<value::List>,
+            TypeList<value::Tuple>
+        >
+    >{},
+
+    MapEntry<
+        S<"into_tuple">,
+        Func<
+            decltype([](const auto& cont, const auto&) -> value::Value {
+                using T = std::remove_cvref_t<decltype(cont)>;
+
+                if constexpr (std::is_same_v<T, value::List>) {
+                    return value::makeTuple(cont.elts->values);
+                }
+                else {
+                    return value::makeTuple(cont->values);
+                }
+            }),
+            TypeList<value::List>,
+            TypeList<value::Pack>
         >
     >{},
 

@@ -5311,7 +5311,7 @@ There are no mistakes with art.)";
 
             //* unary
             "type", "decltype",
-            "len", "reverse", "into_pack",
+            "len", "reverse", "into_pack", "into_tuple",
             "reset", "eval",
             "neg", "abs",
             "not",
@@ -5630,6 +5630,7 @@ There are no mistakes with art.)";
             "len"          ,
             "reverse"      ,
             "into_pack"    ,
+            "into_tuple"    ,
             "eval"         ,
             "abs"          ,
             "neg"          ,
@@ -5676,6 +5677,7 @@ There are no mistakes with art.)";
             if (name == "len"          ) return execute<1>(stdx::get<S<"len"       >>(functions).value, {expanded[0]}, this);
             if (name == "reverse"      ) return execute<1>(stdx::get<S<"reverse"   >>(functions).value, {expanded[0]}, this);
             if (name == "into_pack"    ) return execute<1>(stdx::get<S<"into_pack" >>(functions).value, {expanded[0]}, this);
+            if (name == "into_tuple"   ) return execute<1>(stdx::get<S<"into_tuple">>(functions).value, {expanded[0]}, this);
             if (name == "eval"         ) return execute<1>(stdx::get<S<"eval"      >>(functions).value, {expanded[0]}, this);
             if (name == "abs"          ) return execute<1>(stdx::get<S<"abs"       >>(functions).value, {expanded[0]}, this);
             if (name == "neg"          ) return execute<1>(stdx::get<S<"neg"       >>(functions).value, {expanded[0]}, this);
