@@ -350,7 +350,7 @@ public:
     }
 
 
-    template <bool ALLOW_VARIADIC = true, bool PARSE_FUNC = true>
+    template <bool ALLOW_VARIADIC = true>
     type::TypePtr parseType() {
         using enum token::TokenKind;
 
@@ -369,15 +369,12 @@ public:
                 consume(L_PAREN);
                 consume(R_PAREN);
 
-                if constexpr (PARSE_FUNC)
-                    if (match(FAT_ARROW)) {
-                        constexpr auto PARSE_VARIADIC = true;
-                        constexpr auto DISALLOW_FUNC = false;
-                        return std::make_shared<type::FuncType>(
-                            std::vector<type::TypePtr>{},
-                            parseType<PARSE_VARIADIC, DISALLOW_FUNC>()
-                        );
-                    }
+                if (match(THIN_ARROW)) {
+                    return std::make_shared<type::FuncType>(
+                        std::vector<type::TypePtr>{},
+                        parseType()
+                    );
+                }
 
                 return type::Unit();
             }
@@ -398,12 +395,12 @@ public:
                 }
                 ++i;
 
-                if constexpr (PARSE_FUNC) return check(FAT_ARROW, i); // ( ... ) =>
+                return check(THIN_ARROW, i); // ( ... ) ->
                 return false;
             }();
 
 
-            if constexpr (PARSE_FUNC) if (func_type) { // function type with more than one parameter
+            if (func_type) { // function type with more than one parameter
                 consume(L_PAREN);
 
                 type::FuncType type{{}, {}};
@@ -421,11 +418,9 @@ public:
                 }
 
                 consume(R_PAREN);
-                consume(FAT_ARROW);
+                consume(THIN_ARROW);
 
-                constexpr auto PARSE_VARIADIC = true;
-                constexpr auto DISALLOW_FUNC = false;
-                type.ret = parseType<PARSE_VARIADIC, DISALLOW_FUNC>();
+                type.ret = parseType();
                 return std::make_shared<type::FuncType>(std::move(type));
             }
 
@@ -1341,9 +1336,7 @@ public:
         //     }
         // }
 
-        constexpr auto PARSE_VARIADIC = true;
-        constexpr auto DISALLOW_FUNC = false;
-        type::TypePtr return_type = match(COLON) ? parseType<PARSE_VARIADIC, DISALLOW_FUNC>() : type::builtins::_();
+        type::TypePtr return_type = match(COLON) ? parseType() : type::builtins::_();
 
         consume(FAT_ARROW);
 
@@ -1962,9 +1955,7 @@ public:
 
         if (match(R_PAREN)) { // nullary closure or unit
             if (match(COLON)) {
-                constexpr auto PARSE_VARIADIC = true;
-                constexpr auto DISALLOW_FUNC = false;
-                auto return_type = parseType<PARSE_VARIADIC, DISALLOW_FUNC>();
+                auto return_type = parseType();
 
                 consume(FAT_ARROW);
                 return std::make_shared<expr::Closure>(
@@ -1976,7 +1967,7 @@ public:
                 );
             }
 
-            if (match(FAT_ARROW)) {
+            if (match(FAT_ARROW)) { // a function
                 return std::make_shared<expr::Closure>(
                     std::vector<expr::Closure::Param>{},
                     type::FuncType{{}, type::builtins::_()},
@@ -1986,11 +1977,22 @@ public:
                 );
             }
 
+            if (match(THIN_ARROW)) { // a function type
+                return std::make_shared<expr::Type>(
+                    std::make_shared<type::FuncType>(
+                        std::vector<type::TypePtr>{},
+                        parseType()
+                    )
+                );
+            }
+
+
             return std::make_shared<expr::Tuple>(); // unit
         }
 
 
-        const bool closure_expr = [this] {
+        enum FUNC { EXPR, TYPE, NOT, };
+        const auto what = [this] {
             size_t i{};
             for (; /* not atEnd(i) and */ not check(R_PAREN , i); ++i) {
                 if (check(L_BRACE, i)) while (not check(R_BRACE, i)) ++i;
@@ -1998,11 +2000,23 @@ public:
             }
             ++i;
 
-            return (CTX != Context::MAP and check(COLON, i)) or check(FAT_ARROW, i); // ( ... ): OR ( ... ) =>
+             // ( ... ): OR ( ... ) =>
+            if ((CTX != Context::MAP and check(COLON, i)) or check(FAT_ARROW, i))
+                return FUNC::EXPR;
+
+            if (check(THIN_ARROW, i)) return FUNC::TYPE;
+
+            return FUNC::NOT;
         }();
 
 
-        if (closure_expr) return closure();
+        if (what == FUNC::EXPR) return closure();
+        if (what == FUNC::TYPE) {
+            // there are ways around not unconsuming, but this is the cleanest
+            // and so far, it works, so we'll keep it till it gives us issues
+            unconsume(); // unconsume the L_PAREN
+            return std::make_shared<expr::Type>(parseType());
+        }
 
 
         // todo: fix this algorithm

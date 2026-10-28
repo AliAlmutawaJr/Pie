@@ -338,7 +338,7 @@ namespace type {
         for (size_t i = 1; i < params.size(); ++i)
             t += ", " + params[i]->text(indent);
 
-        return '(' + t + ") => " + ret->text(indent);
+        return '(' + t + ") -> " + ret->text(indent);
     }
     bool FuncType::involvesT(const Type& T) const {
         for (const auto& type : params)

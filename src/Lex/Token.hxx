@@ -38,6 +38,7 @@ enum class TokenKind {
     WALRUS, // :=
     ASSIGN,
     FAT_ARROW,
+    THIN_ARROW,
 
     COMMA,
 
@@ -108,18 +109,19 @@ constexpr const char* stringify(const TokenKind token) noexcept {
         case SCOPE_RESOLVE: return "SCOPE_RESOLVE";
 
         // should make them weak keywords
-        case ASSIGN:        return "ASSIGN"   ;
-        case FAT_ARROW:     return "FAT_ARROW";
+        case ASSIGN:        return "ASSIGN"    ;
+        case FAT_ARROW:     return "FAT_ARROW" ;
+        case THIN_ARROW:    return "THIN_ARROW";
 
         // keywords
         case MIXFIX:        return "MIXFIX";
         case PREFIX:        return "PREFIX";
-        case INFIX:         return "INFIX" ;
+        case INFIX :        return "INFIX" ;
         case SUFFIX:        return "SUFFIX";
-        case EXFIX:         return "EXFIX" ;
-        case CLASS:         return "CLASS" ;
-        case UNION:         return "UNION" ;
-        case MATCH:         return "MATCH" ;
+        case EXFIX :        return "EXFIX" ;
+        case CLASS :        return "CLASS" ;
+        case UNION :        return "UNION" ;
+        case MATCH :        return "MATCH" ;
 
         case LOOP    :      return "LOOP"    ;
         case BREAK   :      return "BREAK"   ;

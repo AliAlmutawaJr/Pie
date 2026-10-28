@@ -2,7 +2,6 @@
 
 #include <cstdio>
 #include <exception>
-#include <stdexcept>
 
 #include "Token.hxx"
 #include "../Utils/utils.hxx"
@@ -62,7 +61,7 @@ bool validNameChar(const char c) noexcept {
         case '>':
         case '[':
         case ']':
-        case '=': // function would only be used when checking chars that are not the first in the name
+        case '=': // validNameChar would only be used when checking chars that are not the first in the name
             return true;
     }
 
@@ -189,6 +188,12 @@ token::Tokens lex(const std::string& src, const bool check_for_semis, const std:
 
 
             case CC::NAME: {
+                if (src[index] == '-' and index + 1 < src.length() and src[index + 1] == '>') {
+                    ++to_column;
+                    emplace(THIN_ARROW, std::string{src[index], src[++index]});
+                    break;
+                }
+
                 const auto beginning = index;
                 for (++to_column; ++index < src.size() and validNameChar(src[index]); ++to_column);
 

@@ -279,8 +279,8 @@ exfix :=
       "exfix" name ":" name "=" "(" expr type_annotation? ")" "=>" expr
 
 
-exfix :=
-      "exfix" "(" prec ")" ":"? name (name | ":")* "=" "(" (expr type_annotation)* ")" "=>" expr
+mixfix :=
+      "mixfix" "(" prec ")" ":"? name (name | ":")* "=" "(" (expr type_annotation)* ")" "=>" expr
 
 
 unary_op :=
@@ -324,7 +324,8 @@ namespace :=
 
 
 space_access :=
-      name "::" name
+      "::"? name "::" name
+    | space_access "::" name
 
 
 use :=

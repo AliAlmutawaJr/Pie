@@ -58,6 +58,7 @@ If you're a windows dev and would like to contribute to Pie, writing a guide on 
 - [ ] Improve error messages (add line and column numbers)
 - [ ] Add generators/coroutines!
 - [ ] Add pattern matching against code!
+- [ ] Positional-only and kw-only parameters
 - [ ] Make `=` and `=>` overloadable
 - [ ] Better File IO
 - [ ] Move from Make to Bake
