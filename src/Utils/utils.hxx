@@ -16,7 +16,7 @@
     #include <mach-o/dyld.h>
 #elif defined(_WIN32) or defined(_WIN64)
     #include <windows.h>
-#elif defined(__linux__)
+#elif defined(__linux__) or defined(__OpenBSD__)
     #include <unistd.h>
 #elif WEB_PIE
 #else

@@ -51,6 +51,12 @@ std::filesystem::path getPiePath() {
         return std::filesystem::path(buffer).parent_path();
     }
 
+#elif defined(__OpenBSD__)
+
+    if (getexecpath(buffer, sizeof(buffer)) == 0) {
+	return std::filesystem::path(buffer).parent_path();
+    }
+
 #elif WEB_PIE
 #else
 // `-path` not supported yet!
