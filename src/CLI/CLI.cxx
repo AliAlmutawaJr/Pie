@@ -41,8 +41,8 @@ namespace cli {
             std::print(">>> ");
 	    // Handle EOF
             if (!std::getline(std::cin, line)) {
-		    std::putchar('\n');
-		    std::exit(0);
+		    putchar('\n');
+		    return;
 	    }
 
             if (line.empty()) continue;
