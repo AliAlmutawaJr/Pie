@@ -39,9 +39,10 @@ namespace cli {
         for (;;) try {
             std::string line;
             std::print(">>> ");
+	    // Handle EOF
             if (!std::getline(std::cin, line)) {
 		    std::exit(0);
-	    };
+	    }
 
             if (line.empty()) continue;
             if (line.back() != ';') line += ';';
