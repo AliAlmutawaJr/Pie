@@ -1,3 +1,4 @@
+#include "Declarations.hxx"
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"
 
@@ -7026,7 +7027,10 @@ TEST_CASE("Any vs Func", "[Type]") {
     auto Any  = pie::type::builtins::Any();
 
     auto func = std::make_shared<pie::type::FuncType>( // functions taking 2 ints and returns an int
-        std::vector{pie::type::builtins::Int(), pie::type::builtins::Int()}, pie::type::builtins::Int()
+        std::vector{pie::type::builtins::Int(), pie::type::builtins::Int()},
+        std::vector<pie::type::TypePtr>{},
+        std::vector<pie::type::TypePtr>{},
+        pie::type::builtins::Int()
     );
 
 

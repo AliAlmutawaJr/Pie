@@ -247,7 +247,7 @@ public:
             case L_BRACE : return LBrace();
 
             // either a grouping or a closure - (or a closure type)
-            case L_PAREN : return LParen<PARSE_TYPE, CTX>();
+            case L_PAREN : return LParen<PARSE_TYPE, CTX>(std::move(token));
 
             case BACKTICK: return backticks(); 
 
@@ -371,7 +371,9 @@ public:
 
                 if (match(THIN_ARROW)) {
                     return std::make_shared<type::FuncType>(
-                        std::vector<type::TypePtr>{},
+                        std::vector<type::TypePtr>{}, // ps
+                        std::vector<type::TypePtr>{}, // pos
+                        std::vector<type::TypePtr>{}, //kw
                         parseType()
                     );
                 }
@@ -403,7 +405,9 @@ public:
             if (func_type) { // function type with more than one parameter
                 consume(L_PAREN);
 
-                type::FuncType type{{}, {}};
+                                // ps, pos, kw, r
+                type::FuncType type{{}, {}, {}, {}};
+
                 type.params.push_back(parseType());
                 bool seen_variadic = type::isVariadic(type.params.back());
 
@@ -1253,101 +1257,272 @@ public:
 
 
 
-    expr::ExprPtr closure() {
+
+    void fill(
+        std::vector<expr::Closure::Param>& params,
+        std::vector<type::TypePtr>& types,
+        std::vector<expr::ExprPtr>& defaults,
+        std::optional<size_t>& variadic_index,
+        const size_t& i,
+        const token::Token& token
+    ) {
         using enum token::TokenKind;
 
-        std::vector<expr::Closure::Param> params;
-        std::vector<type::TypePtr> params_types;
-        std::vector<expr::ExprPtr> default_values;
-        std::optional<size_t> variadic_index;
+        constexpr auto DONT_PARSE_TYPE = false;
 
-        if (not match(R_PAREN)) {
-            size_t i {};
-            do { ++i;
+        if (match(ELLIPSIS)) {
 
-                constexpr auto DONT_PARSE_TYPE = false;
-
-                if (match(ELLIPSIS)) {
-                    if (not variadic_index)
-                        variadic_index = i - 1; // it guranteed to be at least 1 here
-                    else
-                        util::error<except::SyntaxError>("Cannot have more than 1 variadic parameter in a closure!");
-                }
-
-                // check for unpackments first.
-                if (check(L_BRACE)) {
-                    params.emplace_back(parseUnpackmentPattern<Context::FOLLOWED_BY_COLON>());
-
-                    if (match(COLON))
-                        params_types.push_back(parseType());
-                    else {
-                        // not `Any`, but `_` in case `Any` was assigned to
-                        if (i - 1 == variadic_index) 
-                            params_types.push_back(type::VariadicOf(type::builtins::_()));
-                        else
-                            params_types.push_back(type::builtins::_());
-                    }
-
-                    continue;
-                }
-                // if not an unpackment, do the usual thing
-
-                auto param = parseExpr<DONT_PARSE_TYPE>(prec::ASSIGNMENT_VALUE);
-
-                if (auto s = expr::is<expr::Syntax>(param.get())) {
-                    if (not default_values.empty())
-                        util::error("Syntax parameter's can't come after defaulted parameters!");
-
-                    params.push_back(expr::Closure::RegularParam{s->expr, -1, true});
-                    // params_types.push_back(type::builtins::_());
-                    params_types.push_back(type::builtins::Syntax());
-                }
-                else {
-                    params.push_back(expr::Closure::RegularParam{param});
-
-                    if (match(COLON))
-                        params_types.push_back(parseType());
-                    else {
-                        // not `Any`, but `_` in case `Any` was assigned to
-                        if (i - 1 == variadic_index) 
-                            params_types.push_back(type::VariadicOf(type::builtins::_()));
-                        else
-                            params_types.push_back(type::builtins::_());
-                    }
-
-
-                    if (match(ASSIGN))
-                        default_values.push_back(parseExpr());
-                    else if (not default_values.empty())
-                        util::error("All default values must be at the end of the parameter list");
-                }
-            }
-            while (match(COMMA));
-
-            consume(R_PAREN);
+            if (not variadic_index)
+                variadic_index = i - 1; // it guranteed to be at least 1 here
+            else
+                util::error<except::SyntaxError>(token.span, "Cannot have more than 1 variadic parameter in a closure!");
         }
 
 
-        // check uneeded
-        // for (bool found{}; auto&& type : params_types) {
-        //     if (type::isVariadic(type)) {
-        //         if  (found) util::error<except::SyntaxError>("Variadic parameters can only appear once in parameter list!");
-        //         else found = true;
-        //     }
-        // }
+        // check for unpackments first.
+        if (check(L_BRACE)) {
+            params.emplace_back(parseUnpackmentPattern<Context::FOLLOWED_BY_COLON>());
+
+            if (match(COLON))
+                types.push_back(parseType());
+            else if (i - 1 == variadic_index) // not `Any`, but `_` in case `Any` was assigned to
+                types.push_back(type::VariadicOf(type::builtins::_()));
+            else
+                types.push_back(type::builtins::_());
+
+
+
+            if (match(ASSIGN))
+                defaults.push_back(parseExpr());
+            else defaults.push_back(nullptr);
+            return;
+        }
+        // if not an unpackment, do the usual thing
+
+
+
+        auto param = parseExpr<DONT_PARSE_TYPE>(prec::ASSIGNMENT_VALUE);
+        if (auto s = expr::is<expr::Syntax>(param.get())) {
+            // todo: remove this check in the future
+            // if (not defaults.empty())
+            if (std::ranges::any_of(defaults, [](const expr::ExprPtr& e) { return e != nullptr; }))
+                util::error("Syntax parameter's can't come after defaulted parameters!");
+
+            params.push_back(expr::Closure::RegularParam{s->expr, -1, true});
+            types.push_back(type::builtins::Syntax());
+            defaults.push_back(nullptr);
+        }
+        else {
+            params.push_back(expr::Closure::RegularParam{param});
+
+            if (match(COLON))
+                types.push_back(parseType());
+            else if (i - 1 == variadic_index) // not `Any`, but `_` in case `Any` was assigned to
+                types.push_back(type::VariadicOf(type::builtins::_()));
+            else
+                types.push_back(type::builtins::_());
+
+
+            if (match(ASSIGN))
+                defaults.push_back(parseExpr());
+            else defaults.push_back(nullptr);
+            // else if (not defaults.empty())
+            //     util::error(token.span, "All default values must be at the end of the parameter list");
+        }
+    }
+
+
+
+    expr::ExprPtr closure(token::Token token) {
+        using enum token::TokenKind;
+
+        // POS vs BOTH vs KW
+        enum class Phase { NONE, ONE, TWO, } phase {};
+
+
+        std::vector<expr::Closure::Param> vec1;
+        std::vector<expr::Closure::Param> vec2;
+        std::vector<expr::Closure::Param> vec3;
+
+        std::vector<type::TypePtr> types_1;
+        std::vector<type::TypePtr> types_2;
+        std::vector<type::TypePtr> types_3;
+
+        std::vector<expr::ExprPtr> defaults_1;
+        std::vector<expr::ExprPtr> defaults_2;
+        std::vector<expr::ExprPtr> defaults_3;
+
+        std::optional<size_t> variadic_index;
+
+
+        std::vector<expr::Closure::Param>* current_params = &vec1;
+        std::vector<type::TypePtr>* current_types = &types_1;
+        std::vector<expr::ExprPtr>* current_defaults = &defaults_1;
+
+        if (not match(R_PAREN)) {
+            size_t i {};
+
+            // check for preceeding semis
+            if (match(SEMI)) {
+                phase = Phase::ONE;
+                current_params = &vec2;
+                current_types = &types_2;
+                current_defaults = &defaults_2;
+            }
+
+            if (match(SEMI)) {
+                phase = Phase::TWO;
+                current_params = &vec3;
+                current_types = &types_3;
+                current_defaults = &defaults_3;
+            }
+
+            do {
+                ++i;
+
+                fill(
+                    *current_params,
+                    *current_types,
+                    *current_defaults,
+                    variadic_index,
+                    i,
+                    token
+                );
+
+
+                if (match(COMMA)) continue;
+
+                if (match(SEMI)) {
+                    do {
+                        switch (phase) {
+                            using enum Phase;
+                            case NONE: phase = ONE;
+                                current_params = &vec2;
+                                current_types = &types_2;
+                                current_defaults = &defaults_2;
+                                break;
+
+                            case  ONE: phase = TWO;
+                                current_params = &vec3;
+                                current_types = &types_3;
+                                current_defaults = &defaults_3;
+                                break;
+
+                            case  TWO: util::error(token.span, "Can't have more than 2 `;` in an parameter list");
+                        }
+                    }
+                    while (match(SEMI));
+
+                    if (match(R_PAREN)) break;
+                    continue;
+                }
+
+                if (match(R_PAREN)) break;
+
+                util::error(consume().span, "Missing separator!");
+            } while (true);
+
+            // consume(R_PAREN);
+        }
+
+
+        for (bool seen{}; const auto& def : defaults_1) {
+            if (def) seen = true;
+            else if (seen) util::error(token.span, "All default values must appear at the end!");
+        }
+
+
+        if (phase == Phase::TWO) for (bool seen{}; const auto& def : defaults_2) {
+            if (def) seen = true;
+            else if (seen) util::error(token.span, "All default values must appear at the end!");
+        }
+
 
         type::TypePtr return_type = match(COLON) ? parseType() : type::builtins::_();
 
         consume(FAT_ARROW);
 
-        return std::make_shared<expr::Closure>(
-            std::move(params),
-            type::FuncType{std::move(params_types), std::move(return_type)},
-            std::move(variadic_index),
-            std::move(default_values),
-            closureBody()
-        );
+        std::shared_ptr<expr::Closure> func;
+
+
+        // keyword-only checks. before the reorder below, keyword-only is vec2 in phase ONE, and vec3 in phase TWO
+        if (phase != Phase::NONE) {
+            const auto& kw_params   = phase == Phase::ONE ? vec2       : vec3;
+            const auto& kw_defaults = phase == Phase::ONE ? defaults_2 : defaults_3;
+            const size_t kw_start   = phase == Phase::ONE ? vec1.size() : vec1.size() + vec2.size();
+
+            if (variadic_index and *variadic_index >= kw_start)
+                util::error(token.span, "A variadic parameter can't be keyword-only!");
+
+            for (const auto& [param, def] : std::views::zip(kw_params, kw_defaults))
+                if (std::holds_alternative<expr::unpack::PatternPtr>(param) and not def)
+                    util::error(token.span, "A keyword-only unpackment needs a default value, since it can't be passed by name!");
+        }
+
+
+        switch (phase) {
+            case Phase::NONE:
+            func = std::make_shared<expr::Closure>(
+                std::move(vec1),
+                std::move(vec2),
+                std::move(vec3),
+                type::FuncType{
+                    std::move(types_1),
+                    std::move(types_2),
+                    std::move(types_3),
+                    std::move(return_type),
+                },
+                std::move(variadic_index),
+                std::move(defaults_1),
+                std::move(defaults_2),
+                std::move(defaults_3),
+                closureBody()
+            );
+            break;
+
+            case Phase::ONE :
+            func = std::make_shared<expr::Closure>(
+                std::move(vec3), // should be empty anyway
+                std::move(vec1),
+                std::move(vec2),
+                type::FuncType{
+                    std::move(types_3),
+                    std::move(types_1),
+                    std::move(types_2),
+                    std::move(return_type),
+                },
+                std::move(variadic_index),
+                std::move(defaults_3),
+                std::move(defaults_1),
+                std::move(defaults_2),
+                closureBody()
+            );
+            break;
+
+            case Phase::TWO :
+            func = std::make_shared<expr::Closure>(
+                std::move(vec2),
+                std::move(vec1),
+                std::move(vec3),
+                type::FuncType{
+                    std::move(types_2),
+                    std::move(types_1),
+                    std::move(types_3),
+                    std::move(return_type),
+                },
+                std::move(variadic_index),
+                std::move(defaults_2),
+                std::move(defaults_1),
+                std::move(defaults_3),
+                closureBody()
+            );
+            break;
+        }
+
+        return func;
     }
+
+
 
 
     expr::ExprPtr closureBody() {
@@ -1950,7 +2125,7 @@ public:
 
 
     template <bool PARSE_TYPE = true, Context CTX>
-    expr::ExprPtr LParen() {
+    expr::ExprPtr LParen(token::Token token) {
         using enum token::TokenKind;
 
         if (match(R_PAREN)) { // nullary closure or unit
@@ -1959,20 +2134,38 @@ public:
 
                 consume(FAT_ARROW);
                 return std::make_shared<expr::Closure>(
-                    std::vector<expr::Closure::Param>{},
-                    type::FuncType{{}, std::move(return_type)},
+                    std::vector<expr::Closure::Param>{}, // ps
+                    std::vector<expr::Closure::Param>{}, // pos
+                    std::vector<expr::Closure::Param>{}, // kw
+                    type::FuncType{
+                        {}, // ps
+                        {}, // pos
+                        {}, // kw
+                        std::move(return_type)
+                    },
                     std::optional<size_t>{},      // variadic index
                     std::vector<expr::ExprPtr>{}, // default values
+                    std::vector<expr::ExprPtr>{}, // pos default values
+                    std::vector<expr::ExprPtr>{}, // kw default values
                     closureBody()
                 );
             }
 
             if (match(FAT_ARROW)) { // a function
                 return std::make_shared<expr::Closure>(
-                    std::vector<expr::Closure::Param>{},
-                    type::FuncType{{}, type::builtins::_()},
+                    std::vector<expr::Closure::Param>{}, // ps
+                    std::vector<expr::Closure::Param>{}, // pos
+                    std::vector<expr::Closure::Param>{}, // kw
+                    type::FuncType{
+                        {}, // ps
+                        {}, // pos
+                        {}, // kw
+                        type::builtins::_()
+                    },
                     std::optional<size_t>{},      // variadic index
                     std::vector<expr::ExprPtr>{}, // default values
+                    std::vector<expr::ExprPtr>{}, // pos default values
+                    std::vector<expr::ExprPtr>{}, // kw default values
                     closureBody()
                 );
             }
@@ -1980,7 +2173,9 @@ public:
             if (match(THIN_ARROW)) { // a function type
                 return std::make_shared<expr::Type>(
                     std::make_shared<type::FuncType>(
-                        std::vector<type::TypePtr>{},
+                        std::vector<type::TypePtr>{}, // ps
+                        std::vector<type::TypePtr>{}, // pos
+                        std::vector<type::TypePtr>{}, // kw
                         parseType()
                     )
                 );
@@ -1991,7 +2186,7 @@ public:
         }
 
 
-        enum FUNC { EXPR, TYPE, NOT, };
+        enum class FUNC { EXPR, TYPE, NOT, };
         const auto what = [this] {
             size_t i{};
             for (; /* not atEnd(i) and */ not check(R_PAREN , i); ++i) {
@@ -2010,7 +2205,7 @@ public:
         }();
 
 
-        if (what == FUNC::EXPR) return closure();
+        if (what == FUNC::EXPR) return closure(std::move(token));
         if (what == FUNC::TYPE) {
             // there are ways around not unconsuming, but this is the cleanest
             // and so far, it works, so we'll keep it till it gives us issues

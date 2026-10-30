@@ -4283,20 +4283,11 @@ There are no mistakes with art.)";
         - expand_at.size(); // minus redundant packs (already expanded)
     }
 
+
+
     static bool isSyntaxParam(const expr::Closure::Param& sid) {
         return std::holds_alternative<expr::Closure::RegularParam>(sid)
-           and get<expr::Closure::RegularParam>(sid).is_syntax;
-    }
-
-
-    // when currying: does parameter `i` get bound now, or is it left for the curried closure?
-    // args only ever land on required params when currying, so:
-    //   - a non-variadic param is bound if it's among the first `args_size` non-variadic params
-    //   - the variadic is bound (to an empty pack) if an argument landed past it
-    // with no positional variadic, v == pos_params.size(), so `i == v` and `i > v` are never true
-    static bool curryBinds(const size_t i, const size_t v, const size_t args_size) {
-        if (i == v) return args_size > v;
-        return i - (i > v) < args_size;
+            and get<expr::Closure::RegularParam>(sid).is_syntax;
     }
 
 
@@ -4380,6 +4371,7 @@ There are no mistakes with art.)";
     }
 
 
+
     void bindNamedArgs(const expr::Call* call, const expr::Closure& func, value::Environment& args_env) {
         for (const auto& [name, expr] : call->named_args) {
             type::TypePtr type;
@@ -4396,6 +4388,21 @@ There are no mistakes with art.)";
                 }
             }
 
+
+            // if it wasn't found in the "either" params, look in the kw-only params
+            if (not type) for (const auto& [p, t] : std::views::zip(func.kw_params, func.type.kw_params)) {
+                if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+                    const auto& param = get<expr::Closure::RegularParam>(p);
+                    if (param.expr->stringify() == name) {
+                        type = t;
+                        id = param.ID;
+                        break;
+                    }
+                }
+            }
+
+
+            // if still
             if (not type) util::error(); // should never happen anyway
 
             auto value = std::visit(*this, expr->variant()).value;
@@ -4412,12 +4419,11 @@ There are no mistakes with art.)";
                 "Type mis-match! Parameter '" + name + "' expected type: " + type->text() + ", got: " + typeOf(value)->text()
             );
 
-            // if (std::holds_alternative<expr::Closure>(value))
-            //     captureEnvForPassedClosure(get<expr::Closure>(value));
 
             args_env[id] = {{name}, std::make_shared<value::Value>(std::move(value)), std::move(type)};
         }
     }
+
 
 
     // yields positional argument values one at a time, flattening `...` expansions
@@ -4519,7 +4525,14 @@ There are no mistakes with art.)";
 
 
         for (size_t i{}; i < P; ++i) {
-            if (currying and not curryBinds(i, v, args_size)) continue; // left for the curried closure
+
+            // when currying: does parameter `i` get bound now, or is it left for the curried closure?
+            // args only ever land on required params when currying, so:
+            //   - a non-variadic param is bound if it's among the first `args_size` non-variadic params
+            //   - the variadic is bound (to an empty pack) if an argument landed past it
+            // with no positional variadic, v == pos_params.size(), so `i == v` and `i > v` are never true
+            const auto curry_binds = i == v ? args_size > v : i - (i > v) < args_size;
+            if (currying and not curry_binds) continue; // left for the curried closure
 
             auto& [param, type] = pos_params[i];
             type = type->clone();
@@ -4601,6 +4614,7 @@ There are no mistakes with art.)";
 
 
 
+
     ValueType partialApplication(
         const expr::Call *call,
         const expr::Closure& func,
@@ -4608,7 +4622,6 @@ There are no mistakes with art.)";
         std::vector<std::pair<size_t, std::vector<value::Value>>> expand_at,
         std::vector<expr::ExprPtr> args,
         const size_t args_size
-        //, const bool is_variadic
     ) {
         ScopeGuard sg{this, value::EnvTag::FUNC, func.envs.env.env};
         value::Environment args_env = func.envs.env.env;
@@ -4622,32 +4635,96 @@ There are no mistakes with art.)";
         );
 
         const size_t P = pos_params.size();
+        const size_t F = P - defaults.size(); // first defaulted param
         const size_t v = pos_variadic_index.value_or(P);
 
-        // assert(is_variadic == (v < P));
 
-        // params that won't be bound now go into the curried closure.
-        // every defaulted param is among them, so `defaults` carries over as is.
-        std::vector<expr::Closure::Param> new_params;
-        std::vector<type::TypePtr> new_types;
+
+
+
+        // params that won't be bound now go into the curried closure (in the same zone they came from)
+        // positional-only params can't be passed by name, so they're still the first `func.pos_params.size()` of `pos_params`
+
+        // this is getting rediculous, I know..:)
+        std::vector<expr::Closure::Param> new_pos;
+        std::vector<expr::Closure::Param> new_either;
+        std::vector<expr::Closure::Param> new_kw;
+ 
+        std::vector<type::TypePtr> new_pos_types;
+        std::vector<type::TypePtr> new_either_types;
+        std::vector<type::TypePtr> new_kw_types;
+ 
+        std::vector<expr::ExprPtr> new_pos_defaults;
+        std::vector<expr::ExprPtr> new_either_defaults;
+        std::vector<expr::ExprPtr> new_kw_defaults;
+ 
+
+
         std::optional<size_t> new_variadic_index;
         for (size_t i{}; i < P; ++i) {
-            if (not curryBinds(i, v, args_size)) {
-                if (i == v) new_variadic_index = new_params.size();
+            // if (not curry_binds) {
+            //     if (i == v) new_variadic_index = new_params.size();
 
-                const auto& [param, type] = pos_params[i];
-                new_params.push_back(param);
-                new_types .push_back(type );
+            //     const auto& [param, type] = pos_params[i];
+            //     new_params.push_back(param);
+            //     new_types .push_back(type );
+            // }
+
+            const auto curry_binds = i == v ? args_size > v : i - (i > v) < args_size;
+            if (curry_binds) continue;
+ 
+            if (i == v) new_variadic_index = new_pos.size() + new_either.size();
+ 
+            const auto& [param, type] = pos_params[i];
+            expr::ExprPtr def = i >= F ? defaults[i - F] : nullptr;
+            // auto def = defaults[i - F];
+ 
+            if (i < func.pos_params.size()) {
+                new_pos.push_back(param);
+                new_pos_types.push_back(type);
+                new_pos_defaults.push_back(std::move(def));
+            }
+            else {
+                new_either.push_back(param);
+                new_either_types.push_back(type);
+                new_either_defaults.push_back(std::move(def));
             }
         }
 
+
+
+        for (const auto& [param, type, def] : std::views::zip(func.kw_params, func.type.kw_params, func.kw_defaults)) {
+            if (
+                std::holds_alternative<expr::Closure::RegularParam>(param)
+                and // already bound by named arg?
+                call->named_args.contains(get<expr::Closure::RegularParam>(param).expr->stringify())
+            )
+                continue;
+ 
+            // else, curry it!
+            new_kw.push_back(param);
+            new_kw_types.push_back(type);
+            new_kw_defaults.push_back(def);
+        }
+ 
+
         expr::Closure closure{
-            std::move(new_params),
-            type::FuncType{std::move(new_types), func.type.ret},
+            std::move(new_either),
+            std::move(new_pos),
+            std::move(new_kw),
+            type::FuncType{
+                std::move(new_either_types),
+                std::move(new_pos_types),
+                std::move(new_kw_types),
+                func.type.ret
+            },
             new_variadic_index,
-            defaults, // copy: positionalCall needs its own
+            std::move(new_either_defaults),
+            std::move(new_pos_defaults),
+            std::move(new_kw_defaults),
             func.body
         };
+
 
         positionalCall(
             func,
@@ -4664,7 +4741,6 @@ There are no mistakes with art.)";
         );
 
         closure.capture(args_env);
-
         return {closure, std::make_shared<type::FuncType>(closure.type)};
     }
 
@@ -4689,26 +4765,64 @@ There are no mistakes with art.)";
 
 
         // check for invalid named arguments
+        // for (const auto& [name, _] : call->named_args) {
+        //     auto result = std::ranges::find_if(
+        //         func.params,
+        //         [&name] (const auto& param) {
+        //             if (not std::holds_alternative<expr::Closure::RegularParam>(param)) return false;
+
+        //             return get<expr::Closure::RegularParam>(param).expr->stringify() == name;
+        //         }
+        //     );
+
+        //     if (result == func.params.end())
+        //         util::error("Named argument `" + name + "` does not name a parameter name!");
+        // }
+
         for (const auto& [name, _] : call->named_args) {
-            auto result = std::ranges::find_if(
-                func.params,
-                [&name] (const auto& param) {
-                    if (not std::holds_alternative<expr::Closure::RegularParam>(param)) return false;
+            const auto is_named = [&name] (const auto& param) {
+                return std::holds_alternative<expr::Closure::RegularParam>(param)
+                   and get<expr::Closure::RegularParam>(param).expr->stringify() == name;
+            };
 
-                    return get<expr::Closure::RegularParam>(param).expr->stringify() == name;
-                }
-            );
-
-            if (result == func.params.end())
-                util::error("Named argument `" + name + "` does not name a parameter name!");
+            // check for this first, to allow having both kw and pos only args in the same func
+            if (std::ranges::none_of(func.params, is_named) and std::ranges::none_of(func.kw_params, is_named)) {
+                // only if it's not found, then inform the user that a pos-only param
+                // can't be used with a named-arg. 
+                if (std::ranges::any_of(func.pos_params, is_named))
+                    util::error("Parameter `" + name + "` is positional-only, and can't be passed by name: " + call->stringify());
+                else
+                    util::error("Named argument `" + name + "` does not name a parameter name!");
+            }
+        }
+ 
+ 
+        // the params that can be filled by position (positional-only, then either) as one list,
+        // with only the defaults that exist. They're all at the end of it (parser checks that).
+        // that's the layout the rest of the call code expects. keyword-only params are handled on their own.
+        {
+            std::vector<expr::Closure::Param> params = func.pos_params;
+            params.insert(params.end(), func.params.begin(), func.params.end());
+ 
+            std::vector<type::TypePtr> types = func.type.pos_params;
+            types.insert(types.end(), func.type.params.begin(), func.type.params.end());
+ 
+            // ugly af, i know
+            std::vector<expr::ExprPtr> defaults;
+            for (const auto& def : func.pos_defaults) if (def) defaults.push_back(def);
+            for (const auto& def : func.defaults)     if (def) defaults.push_back(def);
+ 
+            func.params      = std::move(params);
+            func.type.params = std::move(types);
+            func.defaults    = std::move(defaults);
         }
 
+ 
 
         const size_t args_size = argsSize(args, expand_at);
 
         const bool is_variadic = func.variadic_index.has_value();
         const size_t variadic_index = func.variadic_index.value_or(func.type.params.size());
-
         const bool variadic_is_named =
             is_variadic
             and std::holds_alternative<expr::Closure::RegularParam>(func.params[variadic_index])
@@ -4719,8 +4833,18 @@ There are no mistakes with art.)";
             is_variadic and variadic_index >= func.params.size() - func.defaults.size();
 
 
-        if (not is_positional_variadic and args_size + call->named_args.size() > func.params.size())
+
+        size_t named_positional {};
+        for (const auto& param : func.params)
+            named_positional +=
+                std::holds_alternative<expr::Closure::RegularParam>(param)
+                and call->named_args.contains(get<expr::Closure::RegularParam>(param).expr->stringify());
+
+
+        //                                             vvvvvvvvvvvvvvvv was -> call->named_args.size()
+        if (not is_positional_variadic and args_size + named_positional > func.params.size())
             util::error("Too many arguments passed to function: " + call->stringify());
+ 
 
 
         std::vector<expr::ExprPtr> new_defaults;
@@ -4755,11 +4879,25 @@ There are no mistakes with art.)";
 
         const size_t required_positional =
               func.params.size()
-            - call->named_args.size()                                 // covered by name
+            // - call->named_args.size()
+            - named_positional                                        // covered by name
             - new_defaults.size()                                     // unnamed params with defaults
             - (is_positional_variadic and not variadic_is_defaulted); // a bare variadic can be empty
 
-        if (args_size < required_positional) // curry!
+
+
+        bool missing_keyword = std::ranges::any_of(
+            std::views::zip(func.kw_params, func.kw_defaults),
+            [call] (const auto& p) {
+                const auto& [param, def] = p;
+
+                return not def and std::holds_alternative<expr::Closure::RegularParam>(param)
+                    and not call->named_args.contains(get<expr::Closure::RegularParam>(param).expr->stringify());
+            }
+        );
+
+        // if kw-only param was missing, then curry, otherwise, if a pos arg is missing, also curry
+        if (missing_keyword or args_size < required_positional)
             return partialApplication(
                 call,
                 func,
@@ -4767,13 +4905,12 @@ There are no mistakes with art.)";
                 std::move(expand_at),
                 std::move(args),
                 args_size
-                //, is_positional_variadic
             );
 
 
 
-        //* full call. Don't curry!
 
+        // full call. Don't curry!
         ScopeGuard sg{this, value::EnvTag::FUNC, func.envs.env.env};
         value::Environment args_env; // in case the lambda needs to capture
 
@@ -4794,18 +4931,47 @@ There are no mistakes with art.)";
         );
 
 
-        if (
-            std::ranges::find_if(
-                func.params, [&type = func.type.ret](const auto& p) {
-                    if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
-                        const auto& param = get<expr::Closure::RegularParam>(p);
 
-                        if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
-                            return true;
+        // keyword-only params that weren't passed by name take their defaults
+        for (const auto& [param, type, def] : std::views::zip(func.kw_params, func.type.kw_params, func.kw_defaults)) {
+            if (
+                std::holds_alternative<expr::Closure::RegularParam>(param)
+                and // already bound by named arg?
+                call->named_args.contains(get<expr::Closure::RegularParam>(param).expr->stringify())
+            ) continue;
+ 
+
+            const bool syntax = isSyntaxParam(param);
+ 
+            value::Value value;
+            if (syntax) value = def->variant(); // we know def is not null since it was checked above (missing_keyword)
+            else        value = checkArg(std::visit(*this, def->variant()).value, type, param);
+ 
+            value::Environment param_env;
+            bindParam(param, {std::move(value), type->clone()}, param_env);
+ 
+            sg.addEnv(param_env);
+            for (auto& [id, entry] : param_env) args_env[id] = std::move(entry);
+        }
+ 
+
+        const auto involvesParam = [&type = func.type.ret](const auto& p) {
+            return
+                std::holds_alternative<expr::Closure::RegularParam>(p) and
+                type->involvesT(
+                    type::ExprType{
+                        std::make_shared<expr::Name>(
+                            get<expr::Closure::RegularParam>(p).expr->stringify(),
+                            util::SourceSpan{}
+                        )
                     }
-                    return false;
-                }
-            ) != func.params.cend()
+                );
+        };
+
+
+        if (
+            std::ranges::any_of(func.params, involvesParam) or
+            std::ranges::any_of(func.kw_params, involvesParam)
         ) {
             ScopeGuard ret_sg{this, func.envs.env.env, args_env};
             func.type.ret = validateType(std::move(func.type.ret));
@@ -4841,6 +5007,8 @@ There are no mistakes with art.)";
 
         return {ret, func.type.ret};
     }
+
+
 
 
     // since all variables are always alive, it there is no need to capture variables...for now at least
@@ -5024,81 +5192,102 @@ There are no mistakes with art.)";
     }
 
 
+
     ValueType operator()(const expr::Closure *c) {
         if (const auto& var = getVar(c->var_ID, liftName(c)); var) return *var;
 
         expr::Closure closure = *c; // copy to use for fix the types
 
-        // for (auto& type : closure.type.params) {
-        for (size_t i{}; i < closure.type.params.size(); ++i) {
-            auto& type = closure.type.params[i];
 
-            bool found{};
-            for (size_t j{}; j < i; ++j) {
-                if (std::holds_alternative<expr::Closure::RegularParam>(closure.params[j])) {
-                    const auto& param = get<expr::Closure::RegularParam>(closure.params[j]);
+        // shared vars for all three calls down bellow
+        std::vector<const expr::Closure::Param*> seen;
+        size_t v_index{};
+
+        const auto handleTypes = [this, &c, &seen, &v_index] (
+            const std::vector<expr::Closure::Param>& params,
+            std::vector<type::TypePtr>& types
+        ) {
+
+            const size_t n = params.size();
+            assert(n == types.size()); // should never fire
+            for (size_t i{}; auto&& [param, type] : std::views::zip(params, types)) {
+
+                bool found{};
+                for (const auto& seen_param : seen) {
+                    if (std::holds_alternative<expr::Closure::RegularParam>(*seen_param)) {
+                        const auto& param = get<expr::Closure::RegularParam>(*seen_param);
+
+                        if (
+                            type->involvesT(
+                                type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}
+                            )
+                        ) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    else {
+                        const auto& param = get<expr::unpack::PatternPtr>(*seen_param);
+                        expr::unpack::forEachName(
+                            param.get(),
+                            [&type, &found] (const auto& expr) {
+                                if (
+                                    type->involvesT(
+                                        type::ExprType{std::make_shared<expr::Name>(expr->stringify(), util::SourceSpan{})}
+                                    )
+                                ) {
+                                    found = true;
+                                }
+                            }
+                        );
+                    }
+                }
+
+                if (not found) {
+                    type = validateType(std::move(type));
 
                     if (
-                        type->involvesT(
-                            type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}
-                        )
-                    ) {
-                        found = true;
-                        break;
-                    }
-                }
-                else {
-                    const auto& param = get<expr::unpack::PatternPtr>(closure.params[j]);
-                    expr::unpack::forEachName(
-                        param.get(),
-                        [&type, &found] (const auto& expr) {
-                            if (
-                                type->involvesT(
-                                    type::ExprType{std::make_shared<expr::Name>(expr->stringify(), util::SourceSpan{})}
-                                )
-                            ) {
-                                found = true;
-                            }
-                        }
+                        c->variadic_index       and
+                        i == *c->variadic_index and
+                        not type::isVariadic(type)
+                    )
+                    util::error(
+                        "In closure: " + c->stringify() +
+                        "\nVariadic parameter must have a variadic type. Got: " + type->text()
                     );
                 }
-            }
 
-            if (not found) {
-                type = validateType(std::move(type));
+                seen.push_back(&param);
 
-                if (
-                    c->variadic_index       and
-                    i == *c->variadic_index and
-                    not type::isVariadic(type)
-                )
-                util::error(
-                    "In closure: " + c->stringify() +
-                    "\nVariadic parameter must have a variadic type. Got: " + type->text()
-                );
+                i++; ++v_index;
             }
-        }
+        };
+
+
+        handleTypes(closure.pos_params, closure.type.pos_params);
+        handleTypes(closure.params    , closure.type.params    );
+        handleTypes(closure.kw_params , closure.type.kw_params );
+
+
+
+        const auto involves_param = [&type = closure.type.ret](const auto& p) {
+            if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
+                const auto& param = get<expr::Closure::RegularParam>(p);
+
+                if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
+                    return true;
+            }
+            return false;
+        };
 
         if (
-            std::ranges::find_if(
-                closure.params, [&type = closure.type.ret](const auto& p) {
-                    if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
-                        const auto& param = get<expr::Closure::RegularParam>(p);
-
-                        if (type->involvesT(type::ExprType{std::make_shared<expr::Name>(param.expr->stringify(), util::SourceSpan{})}))
-                            return true;
-                    }
-                    return false;
-
-                    // old code
-                    // return type->involvesT(type::ExprType{std::make_shared<expr::Name>(p.expr->stringify(), util::SourceSpan{})});
-                }
-            ) == closure.params.cend()
+            std::ranges::none_of(closure.pos_params, involves_param) and
+            std::ranges::none_of(closure.params,     involves_param) and
+            std::ranges::none_of(closure.kw_params,  involves_param)
         )
             closure.type.ret = validateType(std::move(closure.type.ret));
 
-        // for (auto& type : closure.type.params) { type = validateType(std::move(type)); }
-        // closure.type.ret = validateType(std::move(closure.type.ret));
+
 
         closure.inSpace(current_space);
 
@@ -5162,9 +5351,17 @@ There are no mistakes with art.)";
             util::error("Can only assign operators to closure literals: " + fix->stringify());
 
 
+
         // auto func = dynamic_cast<expr::Closure*>(fix->funcs[0].get());
         auto func_copy = std::make_shared<expr::Closure>(*dynamic_cast<const expr::Closure*>(fix->funcs[0].get()));
+
         auto func = func_copy.get();
+
+
+        if (not func->pos_params.empty() or not func->kw_params.empty())
+            util::error("Operators can't have positional-only or keyword-only parameters (yet): " + fix->stringify());
+
+
         // this is needed in the case the operator is applied in another namespace (most likely)
         func->inSpace(current_space);
 
@@ -6363,15 +6560,20 @@ There are no mistakes with art.)";
         else if (type::isClass(type) or type::isUnion(type)) return type;
 
         else if (const auto *func_type = type::isFunction(type)) {
+            std::vector<type::TypePtr> pos_params;
             std::vector<type::TypePtr> params;
-            for (auto& param : func_type->params) {
-                params.push_back(validateType(param));
-            }
+            std::vector<type::TypePtr> kw_params;
 
-            // all param types are valid. Only thing left to check is return type
-            // auto ret = validateType(func_type->ret);
+            for (auto& param : func_type->pos_params) pos_params.push_back(validateType(param));
+            for (auto& param : func_type->params    ) params    .push_back(validateType(param));
+            for (auto& param : func_type->kw_params ) kw_params .push_back(validateType(param));
 
-            return std::make_shared<type::FuncType>(std::move(params), validateType(func_type->ret));
+            return std::make_shared<type::FuncType>(
+                std::move(params),
+                std::move(pos_params),
+                std::move(kw_params),
+                validateType(func_type->ret)
+            );
         }
         else if (const auto *variadic_type = type::isVariadic(type)) {
             return std::make_shared<type::VariadicType>(validateType(std::move(variadic_type)->type));
@@ -6428,9 +6630,10 @@ There are no mistakes with art.)";
         if (std::holds_alternative<expr::Closure>(value)) {
             const auto& func = get<expr::Closure>(value);
 
-            type::FuncType type{{}, {}};
-            for (const auto& t : func.type.params)
-                type.params.push_back(t);
+            type::FuncType type{{}, {}, {}, {}};
+            for (const auto& t : func.type.pos_params) type.pos_params.push_back(t);
+            for (const auto& t : func.type.params    ) type.params    .push_back(t);
+            for (const auto& t : func.type.kw_params ) type.kw_params .push_back(t);
 
 
             type.ret = func.type.ret;

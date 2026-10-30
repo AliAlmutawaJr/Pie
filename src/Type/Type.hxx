@@ -212,9 +212,21 @@ namespace type {
 
     struct FuncType final : Type {
         std::vector<TypePtr> params;
+        std::vector<TypePtr> pos_params;
+        std::vector<TypePtr> kw_params;
         TypePtr ret;
 
-        FuncType(std::vector<TypePtr> ps, TypePtr r) noexcept : params{std::move(ps)}, ret{std::move(r)} {}
+        FuncType(
+            std::vector<TypePtr> ps,
+            std::vector<TypePtr> pos,
+            std::vector<TypePtr> kw,
+            TypePtr r
+        ) noexcept :
+        params{std::move(ps)},
+        pos_params{std::move(pos)},
+        kw_params{std::move(kw)},
+        ret{std::move(r)}
+        { }
 
         std::string text(const size_t = 0) const override;
         bool involvesT(const Type& T) const override;
@@ -225,6 +237,7 @@ namespace type {
 
         TypePtr clone() const override { return std::make_shared<FuncType>(*this); }
     };
+
 
 
     struct VariadicType final : Type {

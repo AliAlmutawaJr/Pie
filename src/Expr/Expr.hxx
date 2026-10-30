@@ -1455,9 +1455,16 @@ struct Closure : Expr {
     using Param = std::variant<RegularParam, unpack::PatternPtr>;
 
     std::vector<Param> params;
+    std::vector<Param> pos_params;
+    std::vector<Param> kw_params;
     type::FuncType type;
     std::optional<size_t> variadic_index;
+
     std::vector<ExprPtr> defaults;
+    std::vector<ExprPtr> pos_defaults;
+    std::vector<ExprPtr> kw_defaults;
+
+
     ExprPtr body;
 
     // vm::Chunk compiled_body;
@@ -1474,13 +1481,27 @@ struct Closure : Expr {
 
     std::vector<interp::NameSpace*> spaces;
 
-    Closure(std::vector<Param> ps, type::FuncType t, std::optional<size_t> v_index, std::vector<ExprPtr> default_values, ExprPtr b, util::SourceSpan sp = {}) noexcept
-    :
+    Closure(
+        std::vector<Param> ps,
+        std::vector<Param> pos,
+        std::vector<Param> kw,
+        type::FuncType t,
+        std::optional<size_t> v_index,
+        std::vector<ExprPtr> defaults,
+        std::vector<ExprPtr> pos_defaults,
+        std::vector<ExprPtr> kw_defaults,
+        ExprPtr b,
+        util::SourceSpan sp = {}
+    ) noexcept :
     Expr{std::move(sp)},
     params{std::move(ps)},
+    pos_params{std::move(pos)},
+    kw_params{std::move(kw)},
     type{std::move(t)},
     variadic_index{std::move(v_index)},
-    defaults{std::move(default_values)},
+    defaults{std::move(defaults)},
+    pos_defaults{std::move(pos_defaults)},
+    kw_defaults{std::move(kw_defaults)},
     body{std::move(b)}
     { }
 
@@ -1529,53 +1550,73 @@ struct Closure : Expr {
 
 
     std::string stringify(const size_t indent = 0) const override {
+
+        auto stringifyParam = [indent] (
+            const Param& param,
+            const type::TypePtr& type,
+            const ExprPtr& def
+        ) {
+            std::string s;
+
+            if (std::holds_alternative<RegularParam>(param)) {
+                const auto& p = get<RegularParam>(param);
+                s += p.is_syntax ? '`' + p.expr->stringify(indent + 4) + '`' : p.expr->stringify(indent + 4);
+            }
+            else s = unpack::stringifyPattern(get<unpack::PatternPtr>(param).get());
+
+
+            if (not type::shouldReassign(type)) s += ": " + type->text();
+            if (def) s += " = " + def->stringify();
+
+            return s;
+        };
+
+
+        // 0: (a, b)    1: (a; b), (a, b;), (; a, b)    2: (a; b; c), (a; b;), (; a; b)
+        const int walls = pos_params.empty() and kw_params.empty() ? 0
+                        : params.empty() ? 1 : 2;
+
+
         std::string s = "(";
 
-        if (not params.empty()) {
-            if (variadic_index and *variadic_index == 0) s += "...";
+        size_t v_index {};
+        for (
+            std::string comma = "";
+            const auto& [param, type, def] : std::views::zip(pos_params, type.pos_params, pos_defaults)
+        ) {
+            s += comma + (variadic_index == v_index++ ? "..." : "") + stringifyParam(param, type, def);
+            comma = ", ";
+        }
 
-            if (std::holds_alternative<RegularParam>(params.front()))
-                s += get<RegularParam>(params.front()).expr->stringify();
-            else
-                s += unpack::stringifyPattern(get<unpack::PatternPtr>(params.front()).get());
+        if (walls >= 1) s += "; ";
 
+        for (
+            std::string comma = "";
+            const auto& [param, type, def] : std::views::zip(params, type.params, defaults)
+        ) {
+            s += comma + (variadic_index == v_index++ ? "..." : "") + stringifyParam(param, type, def);
+            comma = ", ";
+        }
 
-            if (not type::shouldReassign(type.params.front()))
-                s += ": " + type.params.front()->text(indent);
+        if (walls >= 2) s += "; ";
 
-
-            if (params.size() == defaults.size())
-                s += " `=` " + defaults.front()->stringify();
+        for (
+            std::string comma = "";
+            const auto& [param, type, def] : std::views::zip(kw_params, type.kw_params, kw_defaults)
+        ) {
+            s += comma + (variadic_index == v_index++ ? "..." : "") + stringifyParam(param, type, def);
+            comma = ", ";
         }
 
 
+        if (s.ends_with(' ')) s.pop_back();
 
-        const size_t v_ind = variadic_index ? *variadic_index : 0;
-        for(size_t i{1}, j{params.size() - 1}; const auto& [param, type] : std::views::zip(params, type.params) | std::views::drop(1)) {
+        s += ")" + (type::shouldReassign(type.ret) ? "" : ": " + type.ret->text()) + " => " + body->stringify(indent);
 
-            if (i == v_ind) s += "...";
-
-            s += ", ";
-
-            if (std::holds_alternative<RegularParam>(param))
-                s += get<RegularParam>(param).expr->stringify();
-            else
-                s += unpack::stringifyPattern(get<unpack::PatternPtr>(param).get());
-
-
-            if (not type::shouldReassign(type))
-                s+= ": " + type->text(indent);
-
-            // s += ", " + name.expr->stringify() + (type::shouldReassign(type) ? "" : ": " + type->text());
-            if (j <= defaults.size()) {
-                s += " `=` " + defaults[defaults.size() - j]->stringify();
-            }
-
-            --j; // will underflow during the last iteration, but that's fine
-        }
-
-        return s + ")" + (type::shouldReassign(type.ret)? + "" : ": " + type.ret->text()) + " => " + body->stringify(indent);
+        return s;
     }
+
+
 
     bool involvesName(const std::string_view sv) const override {
         if (sv == stringify()) return true;

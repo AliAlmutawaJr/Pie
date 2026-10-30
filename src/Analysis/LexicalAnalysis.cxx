@@ -8,6 +8,7 @@
 #include "../Lex/Lexer.hxx"
 #include "../Parser/Parser.hxx"
 #include "../Diagnostic/Exceptions.hxx"
+#include "Declarations.hxx"
 #include "Diagnostic/Sources.hxx"
 #include "Expr/Expr.hxx"
 #include "../Builtins/Builtins.hxx"
@@ -446,11 +447,12 @@ void LexicalAnalysis::operator()(expr::Closure *c) {
         if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
     }
 
-    ScopeGuard sg{this};
 
-
-    const size_t diff = c->params.size() - c->defaults.size();
-    for (size_t i{}; const auto& [param, type] : std::views::zip(c->params, c->type.params)) {
+    auto process = [this] (
+        expr::Closure::Param& param,
+        const type::TypePtr& type,
+        const expr::ExprPtr& def
+    ) {
         std::visit(*this, expr::Type{type}.variant());
 
         if (auto expr_type = type::isExpr(type)) {
@@ -461,7 +463,6 @@ void LexicalAnalysis::operator()(expr::Closure *c) {
         if (std::holds_alternative<expr::unpack::PatternPtr>(param)) {
             constexpr auto INFERRED = true;
             checkPattern(get<expr::unpack::PatternPtr>(param).get(), INFERRED);
-            // std::visit(*this, param.expr->variant());
         }
         else {
             auto& regular_param = get<expr::Closure::RegularParam>(param);
@@ -469,11 +470,22 @@ void LexicalAnalysis::operator()(expr::Closure *c) {
             addVar(regular_param.expr->stringify(), regular_param.ID);
         }
 
-        if (i >= diff) std::visit(*this, c->defaults[i - diff]->variant());
+        if (def) std::visit(*this, def->variant());
+    };
 
 
-        ++i;
-    }
+    ScopeGuard sg{this};
+
+
+
+    for (const auto& [param, type, def] : std::views::zip(c->pos_params, c->type.pos_params, c->pos_defaults))
+        process(param, type, def);
+
+    for (const auto& [param, type, def] : std::views::zip(c->params, c->type.params, c->defaults))
+        process(param, type, def);
+
+    for (const auto& [param, type, def] : std::views::zip(c->kw_params, c->type.kw_params, c->kw_defaults))
+        process(param, type, def);
 
     std::visit(*this, expr::Type{c->type.ret}.variant());
     std::visit(*this, c->body->variant());
@@ -1091,8 +1103,10 @@ void LexicalAnalysis::visitType(const type::TypePtr& type) {
         std::visit(*this, expr_type->t->variant());
         // else util::error<except::NameLookup>("Type `" + type->text() + "` not found!");
     }
-    else if ([[maybe_unused]] const auto func = type::isFunction(type)) {
+    else if (const auto func = type::isFunction(type)) {
+        for (const auto& param_type : func->pos_params) visitType(param_type);
         for (const auto& param_type : func->params) visitType(param_type);
+        for (const auto& param_type : func->kw_params) visitType(param_type);
         visitType(func->ret);
     }
     else if(const auto var = type::isList(type)) {

@@ -334,15 +334,33 @@ namespace type {
 
     // * Function Type * //
     std::string FuncType::text(const size_t indent) const {
-        std::string t = params.empty() ? "" : params[0]->text(indent);
-        for (size_t i = 1; i < params.size(); ++i)
-            t += ", " + params[i]->text(indent);
+        const size_t walls = pos_params.empty() and kw_params.empty() ? 0 : params.empty() ? 1 : 2;
+
+        std::string t;
+        std::string comma;
+
+        for (const auto& type : pos_params) t += comma + type->text(indent), comma = ", ";
+
+        if (walls >= 1) t += "; ", comma = "";
+
+        for (const auto& type : params    ) t += comma + type->text(indent), comma = ", ";
+
+        if (walls >= 2) t += "; ", comma = "";
+
+        for (const auto& type : kw_params ) t += comma + type->text(indent), comma = ", ";
+
+
+        if (t.ends_with(' ')) t.pop_back();
+
 
         return '(' + t + ") -> " + ret->text(indent);
     }
+
+
     bool FuncType::involvesT(const Type& T) const {
-        for (const auto& type : params)
-            if (type->involvesT(T)) return true;
+        for (const auto& type : pos_params) if (type->involvesT(T)) return true;
+        for (const auto& type : params    ) if (type->involvesT(T)) return true;
+        for (const auto& type : kw_params ) if (type->involvesT(T)) return true;
 
         return ret->involvesT(T);
     }
@@ -360,11 +378,29 @@ namespace type {
         // this could throw, but it should never do since we check it above
         const auto& that = dynamic_cast<const FuncType&>(other);
 
-        if (params.size() != that.params.size()) return false;
 
-        for (const auto& [type1, type2] : std::views::zip(params, that.params)) {
+        // positional-only and either are the same "zone" in a type:
+        // a caller who only has the type has no names,
+        // so they can only pass those by position
+        std::vector<TypePtr> mine = pos_params;
+        mine.insert(mine.end(), params.begin(), params.end());
+
+        std::vector<TypePtr> theirs = that.pos_params;
+        theirs.insert(theirs.end(), that.params.begin(), that.params.end());
+
+        if (mine.size() != theirs.size()) return false;
+
+        for (const auto& [type1, type2] : std::views::zip(mine, theirs)) {
             if (not (*type2 >= *type1)) return false; // args have an inverse relationship
         }
+
+        // keyword-only
+        if (kw_params.size() != that.kw_params.size()) return false;
+
+        for (const auto& [type1, type2] : std::views::zip(kw_params, that.kw_params)) {
+            if (not (*type2 >= *type1)) return false;
+        }
+
 
         return *ret >= *that.ret;
     }
