@@ -4298,7 +4298,8 @@ There are no mistakes with art.)";
         const std::vector<expr::Closure::Param>& params,
         const std::vector<type::TypePtr>& params_types,
         const std::optional<size_t> variadic_index,
-        auto named_args // copy: we erase from it
+        auto named_args, // copy since we erase from it
+        const size_t pos_only // the first `pos_only` params can't be named.
     ) {
         std::vector<std::pair<expr::Closure::Param, type::TypePtr>> pos_params;
         std::optional<size_t> pos_variadic;
@@ -4307,7 +4308,7 @@ There are no mistakes with art.)";
             const auto& param = params[i];
 
             // patterns are always positional
-            if (std::holds_alternative<expr::Closure::RegularParam>(param)) {
+            if (i >= pos_only and std::holds_alternative<expr::Closure::RegularParam>(param)) {
                 const auto name = get<expr::Closure::RegularParam>(param).expr->stringify();
                 if (named_args.contains(name)) {
                     named_args.erase(name); // only the first param with this name is taken
@@ -4377,7 +4378,7 @@ There are no mistakes with art.)";
             type::TypePtr type;
             ssize_t id{};
 
-            for (const auto& [p, t] : std::views::zip(func.params, func.type.params)) {
+            for (const auto& [p, t] : std::views::zip(func.params, func.type.params) | std::views::drop(func.pos_params.size())) {
                 if (std::holds_alternative<expr::Closure::RegularParam>(p)) {
                     const auto& param = get<expr::Closure::RegularParam>(p);
                     if (param.expr->stringify() == name) {
@@ -4631,14 +4632,13 @@ There are no mistakes with art.)";
             func.params,
             func.type.params,
             func.variadic_index,
-            call->named_args
+            call->named_args,
+            func.pos_params.size()
         );
 
         const size_t P = pos_params.size();
         const size_t F = P - defaults.size(); // first defaulted param
         const size_t v = pos_variadic_index.value_or(P);
-
-
 
 
 
@@ -4653,23 +4653,15 @@ There are no mistakes with art.)";
         std::vector<type::TypePtr> new_pos_types;
         std::vector<type::TypePtr> new_either_types;
         std::vector<type::TypePtr> new_kw_types;
+        std::vector<std ::string > new_kw_names;
  
         std::vector<expr::ExprPtr> new_pos_defaults;
         std::vector<expr::ExprPtr> new_either_defaults;
         std::vector<expr::ExprPtr> new_kw_defaults;
- 
 
 
         std::optional<size_t> new_variadic_index;
         for (size_t i{}; i < P; ++i) {
-            // if (not curry_binds) {
-            //     if (i == v) new_variadic_index = new_params.size();
-
-            //     const auto& [param, type] = pos_params[i];
-            //     new_params.push_back(param);
-            //     new_types .push_back(type );
-            // }
-
             const auto curry_binds = i == v ? args_size > v : i - (i > v) < args_size;
             if (curry_binds) continue;
  
@@ -4705,6 +4697,10 @@ There are no mistakes with art.)";
             new_kw.push_back(param);
             new_kw_types.push_back(type);
             new_kw_defaults.push_back(def);
+            new_kw_names.push_back(
+                std::holds_alternative<expr::Closure::RegularParam>(param) ?
+                    get<expr::Closure::RegularParam>(param).expr->stringify() : ""
+            );
         }
  
 
@@ -4716,7 +4712,8 @@ There are no mistakes with art.)";
                 std::move(new_either_types),
                 std::move(new_pos_types),
                 std::move(new_kw_types),
-                func.type.ret
+                func.type.ret,
+                std::move(new_kw_names)
             },
             new_variadic_index,
             std::move(new_either_defaults),
@@ -4729,7 +4726,7 @@ There are no mistakes with art.)";
         positionalCall(
             func,
             std::move(pos_params),
-            std::move(new_variadic_index),
+            std::move(pos_variadic_index),
             std::move(defaults),
             std::move(expand_at),
             args,
@@ -4763,21 +4760,6 @@ There are no mistakes with art.)";
             current_space = std::move(old_spaces);
         }};
 
-
-        // check for invalid named arguments
-        // for (const auto& [name, _] : call->named_args) {
-        //     auto result = std::ranges::find_if(
-        //         func.params,
-        //         [&name] (const auto& param) {
-        //             if (not std::holds_alternative<expr::Closure::RegularParam>(param)) return false;
-
-        //             return get<expr::Closure::RegularParam>(param).expr->stringify() == name;
-        //         }
-        //     );
-
-        //     if (result == func.params.end())
-        //         util::error("Named argument `" + name + "` does not name a parameter name!");
-        // }
 
         for (const auto& [name, _] : call->named_args) {
             const auto is_named = [&name] (const auto& param) {
@@ -4825,6 +4807,7 @@ There are no mistakes with art.)";
         const size_t variadic_index = func.variadic_index.value_or(func.type.params.size());
         const bool variadic_is_named =
             is_variadic
+            and variadic_index >= func.pos_params.size()
             and std::holds_alternative<expr::Closure::RegularParam>(func.params[variadic_index])
             and call->named_args.contains(get<expr::Closure::RegularParam>(func.params[variadic_index]).expr->stringify());
 
@@ -4835,7 +4818,7 @@ There are no mistakes with art.)";
 
 
         size_t named_positional {};
-        for (const auto& param : func.params)
+        for (const auto& param : func.params | std::views::drop(func.pos_params.size()))
             named_positional +=
                 std::holds_alternative<expr::Closure::RegularParam>(param)
                 and call->named_args.contains(get<expr::Closure::RegularParam>(param).expr->stringify());
@@ -4850,29 +4833,25 @@ There are no mistakes with art.)";
         std::vector<expr::ExprPtr> new_defaults;
         {
             auto named_args = call->named_args;
-            // removed named arguments that are before of default values
             const auto args_before_defaults = func.params.size() - func.defaults.size();
-            for (size_t i{}; i < args_before_defaults; ++i) {
-                if (not std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) continue;
-                const auto& param = get<expr::Closure::RegularParam>(func.params[i]);
 
-                auto name = param.expr->stringify();
-                if (named_args.contains(name)) {
-                    named_args.erase(name);
-                }
+            // removed named arguments that are before of default values (positional-only ones can't be named)
+            for (size_t i = func.pos_params.size(); i < args_before_defaults; ++i) {
+                if (not std::holds_alternative<expr::Closure::RegularParam>(func.params[i])) continue;
+                named_args.erase(get<expr::Closure::RegularParam>(func.params[i]).expr->stringify());
             }
 
-            for (const auto& [param, def] : std::views::zip(func.params | std::views::drop(args_before_defaults), func.defaults)) {
-                if (std::holds_alternative<expr::Closure::RegularParam>(param)) {
-                    const auto& p = get<expr::Closure::RegularParam>(param);
+            for (size_t i = args_before_defaults; i < func.params.size(); ++i) {
+                const auto& param = func.params[i];
 
-                    if (named_args.contains(p.expr->stringify())) {
-                        named_args.erase(p.expr->stringify());
-                        continue;
-                    }
-                }
+                if (
+                    i >= func.pos_params.size() and
+                    std::holds_alternative<expr::Closure::RegularParam>(param) and
+                    // erase returns how many it removed
+                    named_args.erase(get<expr::Closure::RegularParam>(param).expr->stringify())
+                ) continue;
 
-                new_defaults.push_back(def);
+                new_defaults.push_back(func.defaults[i - args_before_defaults]);
             }
         }
 
@@ -4916,7 +4895,7 @@ There are no mistakes with art.)";
 
 
         bindNamedArgs(call, func, args_env);
-        auto [pos_params, pos_variadic_index] = positionalParams(func.params, func.type.params, func.variadic_index, call->named_args);
+        auto [pos_params, pos_variadic_index] = positionalParams(func.params, func.type.params, func.variadic_index, call->named_args, func.pos_params.size());
         positionalCall(
             func,
             std::move(pos_params),
@@ -5210,7 +5189,7 @@ There are no mistakes with art.)";
 
             const size_t n = params.size();
             assert(n == types.size()); // should never fire
-            for (size_t i{}; auto&& [param, type] : std::views::zip(params, types)) {
+            for (const auto& [param, type] : std::views::zip(params, types)) {
 
                 bool found{};
                 for (const auto& seen_param : seen) {
@@ -5248,7 +5227,7 @@ There are no mistakes with art.)";
 
                     if (
                         c->variadic_index       and
-                        i == *c->variadic_index and
+                        v_index == *c->variadic_index and
                         not type::isVariadic(type)
                     )
                     util::error(
@@ -5259,7 +5238,7 @@ There are no mistakes with art.)";
 
                 seen.push_back(&param);
 
-                i++; ++v_index;
+                ++v_index;
             }
         };
 
@@ -5345,7 +5324,6 @@ There are no mistakes with art.)";
 
     ValueType operator()(const expr::Fix *fix) {
         if (const auto& var = getVar(fix->var_ID, liftName(fix)); var) return *var;
-        // return std::visit(*this, fix->func->variant());
 
         if (const auto& var = getVar(fix->funcs[0]->var_ID, liftName(fix->funcs[0].get())); var)
             util::error("Can only assign operators to closure literals: " + fix->stringify());
@@ -5413,26 +5391,12 @@ There are no mistakes with art.)";
 
             case PREFIX:
                 addPrefixOp(fix->name, fix);
-                // if (prefixOpsContain(fix->name))
-                //     findPrefixOp(fix->name)->funcs.push_back(func_copy); // assuming each fix expression has a single func in it
-                // else
-                //     env.back()->prefix_op_env[fix->name] = with(fix);
                 break;
 
             case EXFIX : {
                 auto exfix = dynamic_cast<const expr::Exfix*>(fix);
                 addPrefixOp(exfix->name , fix);
                 addOp(exfix->name2, fix);
-                // addPrefixOp(exfix->name2, fix);
-                // auto exfix = dynamic_cast<const expr::Exfix*>(fix);
-                // if (prefixOpsContain(fix->name)) {
-                //     findPrefixOp(exfix->name )->funcs.push_back(func_copy);
-                //     findPrefixOp(exfix->name2)->funcs.push_back(func_copy);
-                // }
-                // else {
-                //     env.back()->prefix_op_env[exfix->name ] = with(fix);
-                //     env.back()->prefix_op_env[exfix->name2] = with(fix);
-                // }
 
             }
             break;
@@ -5440,9 +5404,6 @@ There are no mistakes with art.)";
             case INFIX :
             case SUFFIX:
                 addOp(fix->name, fix);
-                // if (opsContain(fix->name))
-                //     findOp(fix->name)->funcs.push_back(func_copy);
-                // else env.back()->op_env[fix->name] = with(fix);
                 break;
 
             case MIXFIX: {
@@ -5452,35 +5413,6 @@ There are no mistakes with art.)";
                 else                    addOp      (mixfix->name, mixfix);
 
                 for (const auto& sub_name : mixfix->rest) addOp(sub_name, mixfix);
-                // auto mixfix = dynamic_cast<const expr::Operator*>(fix);
-                // if (mixfix->isPrefix()) {
-                //     if (prefixOpsContain(mixfix->name)) {
-                //         findPrefixOp(mixfix->name)->funcs.push_back(func_copy);
-                //         for (const auto& sub_name : mixfix->rest) {
-                //             findOp(sub_name)->funcs.push_back(func_copy);
-                //         }
-                //     }
-                //     else {
-                //         env.back()->prefix_op_env[mixfix->name] = with(mixfix);
-
-                //         for (const auto& sub_name : mixfix->rest)
-                //             env.back()->op_env[sub_name] = with(mixfix);
-                //     }
-                // }
-                // else {
-                //     if (opsContain(fix->name)) {
-                //         findOp(fix->name)->funcs.push_back(func_copy);
-                //         for (const auto& sub_name : mixfix->rest) {
-                //             findOp(sub_name)->funcs.push_back(func_copy);
-                //         }
-                //     }
-                //     else {
-                //         env.back()->op_env[mixfix->name] = with(mixfix);
-
-                //         for (const auto& sub_name : mixfix->rest)
-                //             env.back()->op_env[sub_name] = with(mixfix);
-                //     }
-                // }
             }
 
             default:;
@@ -6572,7 +6504,8 @@ There are no mistakes with art.)";
                 std::move(params),
                 std::move(pos_params),
                 std::move(kw_params),
-                validateType(func_type->ret)
+                validateType(func_type->ret),
+                func_type->kw_names
             );
         }
         else if (const auto *variadic_type = type::isVariadic(type)) {
@@ -6628,16 +6561,8 @@ There are no mistakes with art.)";
         if (std::holds_alternative<type::TypePtr> (value)) return type::builtins::Type();
 
         if (std::holds_alternative<expr::Closure>(value)) {
-            const auto& func = get<expr::Closure>(value);
-
-            type::FuncType type{{}, {}, {}, {}};
-            for (const auto& t : func.type.pos_params) type.pos_params.push_back(t);
-            for (const auto& t : func.type.params    ) type.params    .push_back(t);
-            for (const auto& t : func.type.kw_params ) type.kw_params .push_back(t);
-
-
-            type.ret = func.type.ret;
-            return std::make_shared<type::FuncType>(std::move(type));
+            // just copy everything
+            return std::make_shared<type::FuncType>(get<expr::Closure>(value).type);
         }
 
         if (std::holds_alternative<value::BuiltinFunction>(value)) {

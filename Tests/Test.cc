@@ -35,9 +35,6 @@
 
 
 
-
-
-
 .: .: man
 .: show = (x: String) => std::print(x);
 .: shows = (xs: {String}) => {
@@ -52,9 +49,380 @@
 .: std::print(l);
 .: .: shows(l);
 .: .: std::print(l);
-
-
 */
+
+
+TEST_CASE("Pos, Either, and KW Arguments", "[Param]") {
+{
+    const auto src = R"PIE(
+f0 = (a, b)   => __builtin_print(a, b);
+f1 = (a, b;)  => __builtin_print(a, b);
+f2 = (; a, b) => __builtin_print(a, b);
+f3 = (a; b)   => __builtin_print(a, b);
+f4 = (a; b;)  => __builtin_print(a, b);
+f5 = (; a; b) => __builtin_print(a, b);
+f6 = (a; b; c) => __builtin_print(a, b, c);
+
+f0(1, 2);
+f1(1, 2);
+f2(a = 1, b = 2);
+f3(1, b = 2);
+f4(1, 2);
+f5(1, b = 2);
+f6(1, 2, c = 3);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(1 2
+1 2
+1 2
+1 2
+1 2
+1 2
+1 2 3)");
+}
+{
+    const auto src = R"PIE(
+h = (; mode = "fast", target) => __builtin_print(mode, target);
+h(target = "out");
+h(target = "out", mode = "slow");
+
+d = (a; k = a) => __builtin_print(a, k);
+d(5);
+
+p = (...xs; sep = "|") => __builtin_print(xs..., sep);
+p(1, 2, 3);
+p(1, 2, 3, sep = "-");
+p();
+
+e = (a; ...xs;) => __builtin_print(a, xs...);
+e(1, 2, 3);
+
+u = (; {a, b} = {1, 2}) => __builtin_print(a, b);
+u();
+
+v1 = (a = 1; b = 2; c) => __builtin_print(a, b, c);
+v1(c = 3);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(fast out
+slow out
+5 5
+1 2 3 |
+1 2 3 -
+|
+1 2 3
+1 2
+1 2 3)");
+}
+{
+    const auto src = R"PIE(
+s = (a, b, c) => __builtin_print(a, b, c);
+{...pack} = {1, 2};
+s(pack..., b = 100);
+
+z = (a; b, c; d = 0) => __builtin_print(a, b, c, d);
+z(1, 3, b = 2);
+z(1, c = 3, b = 2, d = 4);
+
+w = (a; b, c;) => __builtin_print(a, b, c);
+w(pack..., c = 9);
+
+x1 = (x; x)   => __builtin_print(x);
+x2 = (x; ; x) => __builtin_print(x);
+x1(1, x = 2);
+x2(1, x = 2);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(1 100 2
+1 2 3 0
+1 2 3 4
+1 2 9
+2
+2)");
+}
+}
+
+
+
+TEST_CASE("Pos, Either, and KW Arguments 2", "[Param]") {
+{
+    const auto src = R"PIE(
+f = (a; b) => __builtin_print(a, b);
+f1 = f(1);
+f1(b = 2);
+f2 = f(b = 2);
+f2(1);
+
+g = (a, b; k) => __builtin_print(a, b, k);
+g1 = g(1);
+g1(2, k = 3);
+g2 = g(1, k = 3);
+g2(2);
+
+c = (a; b, k = 5) => __builtin_print(a, b, k);
+c1 = c(1);
+c1(b = 2);
+
+d = (a, b = 7; k) => __builtin_print(a, b, k);
+d1 = d(1);
+d1(k = 3);
+d2 = d(1, 8);
+d2(k = 3);
+
+v = (a, ...xs; k) => __builtin_print(a, xs..., k);
+v1 = v(1, 2, 3);
+v1(k = 4);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(1 2
+1 2
+1 2 3
+1 2 3
+1 2 5
+1 7 3
+1 8 3
+1 2 3 4)");
+}
+}
+
+
+TEST_CASE("Pos, Either, and KW and Types Arguments 3", "[Param][Type]") {
+{
+    const auto src = R"PIE(
+__builtin_print((a, b) => 0);
+__builtin_print((; a, b) => 0);
+__builtin_print((a; b) => 0);
+__builtin_print((; a; b) => 0);
+__builtin_print((a; b; c) => 0);
+__builtin_print((a; ...xs; k) => 0);
+
+f = (a: Int; b: Int): Int => 0;
+__builtin_print(f(1));
+__builtin_print(__builtin_type(f));
+__builtin_print(__builtin_type(f(1)));
+__builtin_print(__builtin_type(f(b = 2)));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((a: Any, b: Any): Any => 0
+(; a: Any, b: Any): Any => 0
+(a: Any; b: Any): Any => 0
+(; a: Any; b: Any): Any => 0
+(a: Any; b: Any; c: Any): Any => 0
+(a: Any; ...xs: ...Any; k: Any): Any => 0
+(; b: Int): Int => 0
+(Int; b: Int) -> Int
+(; b: Int) -> Int
+(Int;) -> Int)");
+}
+{
+    const auto src = R"PIE(
+T1 = (Int; Double; x: String) -> Any;
+T2 = (Int, Double;) -> Any;
+T3 = (; a: Int, b: String) -> Any;
+T4 = (width: Int, height: Int) -> Any;
+T5 = ({a, {b, c}}: (Int, (Int, Int))) -> Int;
+T6 = ((Int; k: Int) -> Any; f: (Int) -> Any) -> Any;
+T7 = (Int) -> (Int) -> Int;
+
+__builtin_print(T1);
+__builtin_print(T2);
+__builtin_print(T3);
+__builtin_print(T4);
+__builtin_print(T5);
+__builtin_print(T6);
+__builtin_print(T7);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"((Int; Double; x: String) -> Any
+(Int, Double;) -> Any
+(; a: Int, b: String) -> Any
+(Int, Int) -> Any
+((Int, (Int, Int))) -> Int
+((Int; k: Int) -> Any; f: (Int) -> Any) -> Any
+(Int) -> (Int) -> Int)");
+}
+}
+
+
+
+TEST_CASE("Pos, Either, and KW Arguments Type Checking", "[Param][Type]") {
+{
+    const auto src = R"PIE(
+T = (Int; Double; x: String) -> Any;
+f1: T = (n: Int; d: Double; x: String) => 0;
+f2: T = (x: Int; d: Double; x: String, y: String = "wow") => 0;
+
+f3: (Int)  -> Any = (x: Int;) => 0;
+f4: (Int;) -> Any = (x: Int)  => 0;
+
+U = (; a: Int, b: Int) -> Any;
+f5: U = (; b: Int, a: Int) => 0;
+
+f6: (Int) -> Any = (a: Int, b: String = "Hello") => 0;
+f7: (Int; k: Int) -> Any = (x: Any; k: Any) => 0;
+
+f8: ((; a: Int, b: Int) -> Any) -> Any = (g: (; b: Int, a: Int) -> Any) => 0;
+f9: ((Int;) -> Any) -> Any = (g: (Int) -> Any) => 0;
+
+apply = (g: (Int; k: Int) -> Any) => g(1, k = 2);
+__builtin_print(apply((x: Int; k: Int, extra = 3) => __builtin_add(x, k)));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == "3");
+}
+{
+    const auto src = R"PIE(
+f: (Int) -> Any = (a: Int, b: Int) => 0;
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+f: (Int, Double) -> Int = (x: Int) => 0;
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+f: (; a: Int, b: Int) -> Any = (; a: Int, b: Int, c: Int) => 0;
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+f: (; a: Int, b: Int) -> Any = (; a: Int) => 0;
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+f: (; a: Int) -> Any = (a: Int;) => 0;
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+f: (; k: Any) -> Any = (; k: Int) => 0;
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+{
+    const auto src = R"PIE(
+f: ((; a: Int) -> Any) -> Any = (g: (; a: Int, b: Int) -> Any) => 0;
+)PIE";
+
+    REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
+}
+}
+
+
+TEST_CASE("Invalid Pos, Either, and KW Arguments", "[Param]") {
+{
+    const auto src = R"PIE(
+f = (a; b; c; d) => 0;
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f = (a b) => 0;
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f = (a, ; b) => 0;
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f = (a; b;) => 0;
+f(2, a = 1);
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f = (a; b) => 0;
+f(1, 2);
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f = (a; b) => 0;
+{...pack} = {1, 2};
+f(pack...);
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f = (a; b) => 0;
+f(1, c = 2);
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f = (a = 1; b; c) => 0;
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f = (; {a, b}) => 0;
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f = (a; ...xs) => 0;
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f = (a; b) => 0;
+m = f(b = 2);
+m(a = 1);
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+Q = (Int; String; Bool) -> Any;
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+infix + = (a; b) => 0;
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
 
 
 TEST_CASE("Eager Unpackmeters", "[Param][Type]") {

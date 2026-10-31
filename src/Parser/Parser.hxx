@@ -363,6 +363,8 @@ public:
             return std::make_shared<type::VariadicType>(parseType<false>());
         }
 
+
+
         // either a function type or a tuple
         if (check(L_PAREN)) {
             if (check(R_PAREN, 1)) { // nullary function or unit 
@@ -386,48 +388,131 @@ public:
             bool seen_comma = false;
             const bool func_type = [this, &seen_comma] {
                 size_t i = 1; // skip the L_PAREN check above
-                for (; /* not atEnd(i) and */ not check(R_PAREN , i); ++i) {
-                    if (check(L_BRACE, i)) while (not check(R_BRACE, i)) ++i;
-                    if (check(L_PAREN, i)) while (not check(R_PAREN, i)) ++i;
-
-                    /* old code vvvv. new: could be a tuple */
-                    // if (check(COMMA, i)) return true; // Comma Separated List can only appear in function arguments list
-
-                    if (check(COMMA, i)) seen_comma = true;
+                for (size_t depth{}; not (depth == 0 and check(R_PAREN, i)); ++i) {
+                    if      (check(L_PAREN, i) or check(L_BRACE, i)) ++depth;
+                    else if (check(R_PAREN, i) or check(R_BRACE, i)) --depth;
+                    else if (depth == 0 and check(COMMA, i)) seen_comma = true;
                 }
                 ++i;
 
                 return check(THIN_ARROW, i); // ( ... ) ->
-                return false;
             }();
 
 
-            if (func_type) { // function type with more than one parameter
+            if (func_type) {
                 consume(L_PAREN);
 
-                                // ps, pos, kw, r
-                type::FuncType type{{}, {}, {}, {}};
+                // POS vs BOTH vs KW, same as closure()
+                enum class Phase { NONE, ONE, TWO, } phase {};
 
-                type.params.push_back(parseType());
-                bool seen_variadic = type::isVariadic(type.params.back());
+                std::vector<type::TypePtr> vec1;
+                std::vector<type::TypePtr> vec2;
+                std::vector<type::TypePtr> vec3;
 
-                while(match(COMMA)) {
-                    type.params.push_back(parseType());
+                // each entry's name, "" if it had none. only kept for keyword-only
+                std::vector<std::string> names_1;
+                std::vector<std::string> names_2;
+                std::vector<std::string> names_3;
 
-                    if (type::isVariadic(type.params.back())) {
-                        if (seen_variadic)
-                            util::error<except::SyntaxError>("Variadic parameters can only appear once in parameter list!");
-                        else seen_variadic = true;
+                std::vector<type::TypePtr>* current = &vec1;
+                std::vector<std::string>* current_names = &names_1;
+
+                // check for preceeding semis
+                if (match(SEMI)) { phase = Phase::ONE; current = &vec2; current_names = &names_2; }
+                if (match(SEMI)) { phase = Phase::TWO; current = &vec3; current_names = &names_3; }
+
+                do {
+
+                    const bool has_name = [this] {
+                        for (size_t depth{}, i{}; not (depth == 0 and check(R_PAREN, i)); ++i) {
+                            if      (check(L_PAREN, i) or check(L_BRACE, i)) ++depth;
+                            else if (check(R_PAREN, i) or check(R_BRACE, i)) --depth;
+                            else if (depth == 0 and (check(COMMA, i) or check(SEMI, i))) return false;
+                            else if (depth == 0 and check(COLON, i)) return true;
+                        }
+
+                        return false;
+                    }();
+
+                    std::string name;
+                    if (has_name) {
+                        if (check(L_BRACE)) {
+                            name = expr::unpack::stringifyPattern(parseUnpackmentPattern<Context::FOLLOWED_BY_COLON>().get());
+                        }
+                        else {
+                            constexpr bool DONT_PARSE_TYPE = false; // stop at the colon
+                            name = parseExpr<DONT_PARSE_TYPE, Context::FOLLOWED_BY_COLON>()->stringify();
+                        }
+
+                        consume(COLON);
                     }
+
+                    current->push_back(parseType());
+                    current_names->push_back(std::move(name));
+
+
+                    if (match(COMMA)) continue;
+
+                    if (match(SEMI)) {
+                        do {
+                            switch (phase) {
+                                case Phase::NONE: phase = Phase::ONE; current = &vec2; current_names = &names_2; break;
+                                case Phase::ONE : phase = Phase::TWO; current = &vec3; current_names = &names_3; break;
+                                case Phase::TWO : util::error(lookAhead().span, "Can't have more than 2 `;` in a function type");
+                            }
+                        }
+                        while (match(SEMI));
+
+                        if (match(R_PAREN)) break;
+                        continue;
+                    }
+
+                    if (match(R_PAREN)) break;
+
+                    util::error(consume().span, "Missing separator!");
+                } while (true);
+
+
+                // keyword-only entries need a name: they can only be passed by one
+                // (before the reorder below, keyword-only is vec2 in phase ONE, and vec3 in phase TWO)
+                if (phase != Phase::NONE) {
+                    const auto& kw_named = phase == Phase::ONE ? names_2 : names_3;
+                    if (std::ranges::any_of(kw_named, [](const std::string& s) { return s.empty(); }))
+                        util::error(lookAhead().span, "Keyword-only parameters in a function type need a name, like `(; b: Bool) -> Any`");
                 }
 
-                consume(R_PAREN);
+
                 consume(THIN_ARROW);
+                auto ret = parseType();
 
-                type.ret = parseType();
-                return std::make_shared<type::FuncType>(std::move(type));
+                switch (phase) {
+                    case Phase::NONE: // all of it was "either"
+                        return std::make_shared<type::FuncType>(
+                            std::move(vec1),
+                            std::move(vec2),
+                            std::move(vec3),
+                            std::move(ret)
+                        );
+
+                    case Phase::ONE:  // positional-only ; keyword-only
+                        return std::make_shared<type::FuncType>(
+                            std::move(vec3),
+                            std::move(vec1),
+                            std::move(vec2),
+                            std::move(ret),
+                            std::move(names_2)
+                        );
+
+                    case Phase::TWO:  // positional-only ; either ; keyword-only
+                        return std::make_shared<type::FuncType>(
+                            std::move(vec2),
+                            std::move(vec1),
+                            std::move(vec3),
+                            std::move(ret),
+                            std::move(names_3)
+                        );
+                }
             }
-
 
             // tuple
             if (seen_comma) {
@@ -444,6 +529,7 @@ public:
 
                 return type::TupleOf(std::move(types));
             }
+
 
             // just a grouping at this point, which means it's an expression
             return std::make_shared<type::ExprType>(parseExpr());
@@ -1304,7 +1390,6 @@ public:
         auto param = parseExpr<DONT_PARSE_TYPE>(prec::ASSIGNMENT_VALUE);
         if (auto s = expr::is<expr::Syntax>(param.get())) {
             // todo: remove this check in the future
-            // if (not defaults.empty())
             if (std::ranges::any_of(defaults, [](const expr::ExprPtr& e) { return e != nullptr; }))
                 util::error("Syntax parameter's can't come after defaulted parameters!");
 
@@ -1425,16 +1510,17 @@ public:
             // consume(R_PAREN);
         }
 
+        {
+            bool seen{};
+            for (const auto& def : defaults_1) {
+                if (def) seen = true;
+                else if (seen) util::error(token.span, "All default values must appear at the end!");
+            }
 
-        for (bool seen{}; const auto& def : defaults_1) {
-            if (def) seen = true;
-            else if (seen) util::error(token.span, "All default values must appear at the end!");
-        }
-
-
-        if (phase == Phase::TWO) for (bool seen{}; const auto& def : defaults_2) {
-            if (def) seen = true;
-            else if (seen) util::error(token.span, "All default values must appear at the end!");
+            if (phase == Phase::TWO) for (const auto& def : defaults_2) {
+                if (def) seen = true;
+                else if (seen) util::error(token.span, "All default values must appear at the end!");
+            }
         }
 
 
@@ -1518,6 +1604,14 @@ public:
             );
             break;
         }
+
+
+        for (const auto& param : func->kw_params)
+            func->type.kw_names.push_back(
+                std::holds_alternative<expr::Closure::RegularParam>(param)
+                    ? get<expr::Closure::RegularParam>(param).expr->stringify()
+                    : "" // a pattern has none (it always has a default, so nothing asks for it)
+            );
 
         return func;
     }
@@ -2189,9 +2283,9 @@ public:
         enum class FUNC { EXPR, TYPE, NOT, };
         const auto what = [this] {
             size_t i{};
-            for (; /* not atEnd(i) and */ not check(R_PAREN , i); ++i) {
-                if (check(L_BRACE, i)) while (not check(R_BRACE, i)) ++i;
-                if (check(L_PAREN, i)) while (not check(R_PAREN, i)) ++i;
+            for (size_t depth{}; depth != 0  or not check(R_PAREN , i); ++i) {
+                if      (check(L_PAREN, i) or check(L_BRACE, i)) ++depth;
+                else if (check(R_PAREN, i) or check(R_BRACE, i)) --depth;
             }
             ++i;
 

@@ -216,21 +216,25 @@ namespace type {
         std::vector<TypePtr> kw_params;
         TypePtr ret;
 
+        std::vector<std::string> kw_names;     // in step with kw_params
+
         FuncType(
             std::vector<TypePtr> ps,
             std::vector<TypePtr> pos,
             std::vector<TypePtr> kw,
-            TypePtr r
+            TypePtr r,
+            std::vector<std::string> kwargs = {}
         ) noexcept :
         params{std::move(ps)},
         pos_params{std::move(pos)},
         kw_params{std::move(kw)},
-        ret{std::move(r)}
+        ret{std::move(r)},
+        kw_names{std::move(kwargs)}
         { }
 
         std::string text(const size_t = 0) const override;
         bool involvesT(const Type& T) const override;
-        bool typeCheck(interp::Visitor*, const value::Value&, const TypePtr& other) const override { return *this >= *other; }
+        bool typeCheck(interp::Visitor*, const value::Value&, const TypePtr& other) const override;
 
         bool operator>(const Type& other) const override;
         bool operator>=(const Type& other) const override;

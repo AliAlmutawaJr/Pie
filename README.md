@@ -58,10 +58,12 @@ If you're a windows dev and would like to contribute to Pie, writing a guide on 
 - [ ] Add pattern matching against code!
 - [ ] Improve error messages (add line and column numbers)
 - [ ] Add generators/coroutines!
+- [ ] Design a system for variadic operators
 - [ ] Make `=` and `=>` overloadable
 - [ ] Better File IO
 - [ ] Move from Make to Bake
 - [ ] Breaking Out of Nested Loops
+- [ ] Bind parameter zones directly instead of flattening (internal)
 - [ ] World domination
 - [ ] Simplify Closure Captures without performance penalty (internal)
 - [ ] Clean up builtin functions code (internal)

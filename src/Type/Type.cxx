@@ -347,7 +347,9 @@ namespace type {
 
         if (walls >= 2) t += "; ", comma = "";
 
-        for (const auto& type : kw_params ) t += comma + type->text(indent), comma = ", ";
+
+        for (const auto& [name, type] : std::views::zip(kw_names, kw_params))
+            t += comma + name + ": " + type->text(indent), comma = ", ";
 
 
         if (t.ends_with(' ')) t.pop_back();
@@ -365,6 +367,54 @@ namespace type {
         return ret->involvesT(T);
     }
 
+
+    bool FuncType::typeCheck(interp::Visitor*, const value::Value& value, const TypePtr& other) const {
+        const auto* closure = std::get_if<expr::Closure>(&value);
+        if (not closure) return *this >= *other;
+
+        // positional-only and either: one zone
+        std::vector<TypePtr> mine = pos_params;
+        mine.insert(mine.end(), params.begin(), params.end());
+
+        std::vector<TypePtr> theirs = closure->type.pos_params;
+        theirs.insert(theirs.end(), closure->type.params.begin(), closure->type.params.end());
+
+        const bool has_pack =
+            std::ranges::any_of(mine,   [](const TypePtr& t) { return isVariadic(t) != nullptr; }) or
+            std::ranges::any_of(theirs, [](const TypePtr& t) { return isVariadic(t) != nullptr; });
+
+        if (has_pack) {
+            if (mine.size() != theirs.size()) return false; // packs: same shape, for now
+        }
+        else {
+            size_t defaulted {};
+            for (const auto& def : closure->pos_defaults) defaulted += def != nullptr;
+            for (const auto& def : closure->defaults)     defaulted += def != nullptr;
+
+            // T passes exactly mine.size() args. the closure must take that many: not more than it has, not fewer than it requires
+            if (theirs.size() < mine.size() or theirs.size() - defaulted > mine.size()) return false;
+        }
+
+        for (const auto& [type1, type2] : std::views::zip(mine, theirs))
+            if (not (*type2 >= *type1)) return false;
+
+
+        // keyword-only, by name. every one T passes: the closure has it, and takes what T gives
+        for (const auto& [name, type] : std::views::zip(kw_names, kw_params)) {
+            const auto it = std::ranges::find(closure->type.kw_names, name);
+            if (it == closure->type.kw_names.end()) return false;
+
+            if (not (*closure->type.kw_params[it - closure->type.kw_names.begin()] >= *type)) return false;
+        }
+
+        // every one only the closure has: T never passes it, so it needs a default
+        for (const auto& [name, def] : std::views::zip(closure->type.kw_names, closure->kw_defaults))
+            if (not def and std::ranges::find(kw_names, name) == kw_names.end()) return false;
+
+        return *ret >= *closure->type.ret;
+    }
+
+
     bool FuncType::operator>(const Type& other) const {
         if (shouldReassign(other)) return true;
         return strictlyGreater(*this, other);
@@ -373,36 +423,34 @@ namespace type {
     bool FuncType::operator>=(const Type& other) const {
         if (shouldReassign(other)) return true;
         if (const auto u = isUnion(other)) return acceptsEvery(*this, *u);
-        if (not dynamic_cast<const FuncType*>(&other)) return false;
 
-        // this could throw, but it should never do since we check it above
-        const auto& that = dynamic_cast<const FuncType&>(other);
+        const auto* that = dynamic_cast<const FuncType*>(&other);
+        if (not that) return false;
 
 
-        // positional-only and either are the same "zone" in a type:
-        // a caller who only has the type has no names,
-        // so they can only pass those by position
         std::vector<TypePtr> mine = pos_params;
         mine.insert(mine.end(), params.begin(), params.end());
 
-        std::vector<TypePtr> theirs = that.pos_params;
-        theirs.insert(theirs.end(), that.params.begin(), that.params.end());
+        std::vector<TypePtr> theirs = that->pos_params;
+        theirs.insert(theirs.end(), that->params.begin(), that->params.end());
 
         if (mine.size() != theirs.size()) return false;
 
-        for (const auto& [type1, type2] : std::views::zip(mine, theirs)) {
+        for (const auto& [type1, type2] : std::views::zip(mine, theirs))
             if (not (*type2 >= *type1)) return false; // args have an inverse relationship
+
+
+        if (kw_names.size() != that->kw_names.size()) return false;
+
+        // match by name only
+        for (const auto& [name, type] : std::views::zip(kw_names, kw_params)) {
+            const auto it = std::ranges::find(that->kw_names, name);
+            if (it == that->kw_names.end()) return false;
+
+            if (not (*that->kw_params[it - that->kw_names.begin()] >= *type)) return false;
         }
 
-        // keyword-only
-        if (kw_params.size() != that.kw_params.size()) return false;
-
-        for (const auto& [type1, type2] : std::views::zip(kw_params, that.kw_params)) {
-            if (not (*type2 >= *type1)) return false;
-        }
-
-
-        return *ret >= *that.ret;
+        return *ret >= *that->ret;
     }
 
 
