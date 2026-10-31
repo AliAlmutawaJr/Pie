@@ -1465,6 +1465,11 @@ struct Closure : Expr {
     std::vector<ExprPtr> kw_defaults;
 
 
+    std::vector<Param>         hidden_params;
+    std::vector<type::TypePtr> hidden_types;
+    std::vector<ExprPtr>       hidden_defaults;
+
+
     ExprPtr body;
 
     // vm::Chunk compiled_body;

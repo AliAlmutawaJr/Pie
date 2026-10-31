@@ -58,6 +58,7 @@ If you're a windows dev and would like to contribute to Pie, writing a guide on 
 - [ ] Add pattern matching against code!
 - [ ] Improve error messages (add line and column numbers)
 - [ ] Add generators/coroutines!
+- [ ] Encode parameter's default value within the type system `= ...`
 - [ ] Design a system for variadic operators
 - [ ] Make `=` and `=>` overloadable
 - [ ] Better File IO

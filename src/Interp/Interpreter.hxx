@@ -999,8 +999,7 @@ public:
         if (std::holds_alternative<expr::Closure>(value)) {
             auto& closure = get<expr::Closure>(value);
             // we verified types are compatible so this is fine..should be...I hope
-            if (const auto *t = type::isFunction(type))
-                closure.type = *t;
+            if (const auto *t = type::isFunction(type)) narrowClosureType(closure, *t);
             else if (not type::isAny(type)) util::error();
         }
 
@@ -1189,7 +1188,7 @@ public:
             auto& closure = get<expr::Closure>(value);
             // we verified types are compatible so this is fine..should be...I hope
             if (const auto* t = dynamic_cast<type::FuncType*>(type.get()))
-                closure.type = *t;
+                narrowClosureType(closure, *t);
             else if (const auto* t = dynamic_cast<type::BuiltinType*>(type.get()); t and t->text() != "Any")
                     util::error();
         }
@@ -4270,6 +4269,75 @@ There are no mistakes with art.)";
 
 
 
+
+    static void narrowClosureType(expr::Closure& closure, const type::FuncType& declared) {
+        std::vector<type::TypePtr> positional = declared.pos_params;
+        positional.insert(positional.end(), declared.params.begin(), declared.params.end());
+ 
+ 
+
+        std::vector<expr::Closure::Param> dropped_params;
+        std::vector<type::TypePtr>        dropped_types;
+        std::vector<expr::ExprPtr>        dropped_defaults;
+ 
+        while (closure.pos_params.size() + closure.params.size() > positional.size()) {
+            auto& params   = closure.params.empty() ? closure.pos_params      : closure.params;
+            auto& types    = closure.params.empty() ? closure.type.pos_params : closure.type.params;
+            auto& defaults = closure.params.empty() ? closure.pos_defaults    : closure.defaults;
+ 
+            // front, so they stay in their original order
+            dropped_params  .insert(dropped_params  .begin(), std::move(params  .back()));
+            dropped_types   .insert(dropped_types   .begin(), std::move(types   .back()));
+            dropped_defaults.insert(dropped_defaults.begin(), std::move(defaults.back()));
+ 
+            params  .pop_back();
+            types   .pop_back();
+            defaults.pop_back();
+        }
+ 
+
+        // before any hidden from an earlier conversion, those came after these
+        closure.hidden_params  .insert(closure.hidden_params  .begin(), dropped_params  .begin(), dropped_params  .end());
+        closure.hidden_types   .insert(closure.hidden_types   .begin(), dropped_types   .begin(), dropped_types   .end());
+        closure.hidden_defaults.insert(closure.hidden_defaults.begin(), dropped_defaults.begin(), dropped_defaults.end());
+ 
+ 
+
+        // keyword-only params the type doesn't name
+        for (size_t i{}; i < closure.kw_params.size(); ) {
+            if (std::ranges::find(declared.kw_names, closure.type.kw_names[i]) != declared.kw_names.end()) {
+                ++i;
+                continue;
+            }
+ 
+            closure.hidden_params  .push_back(std::move(closure.kw_params[i]));
+            closure.hidden_types   .push_back(std::move(closure.type.kw_params[i]));
+            closure.hidden_defaults.push_back(std::move(closure.kw_defaults[i]));
+ 
+            closure.kw_params     .erase(closure.kw_params     .begin() + i);
+            closure.type.kw_params.erase(closure.type.kw_params.begin() + i);
+            closure.type.kw_names .erase(closure.type.kw_names .begin() + i);
+            closure.kw_defaults   .erase(closure.kw_defaults   .begin() + i);
+        }
+ 
+ 
+        // what's left
+        for (size_t i{}; i < positional.size(); ++i) {
+            if (i < closure.type.pos_params.size()) closure.type.pos_params[i] = positional[i];
+            else closure.type.params[i - closure.type.pos_params.size()] = positional[i];
+        }
+ 
+        for (const auto& [name, type] : std::views::zip(declared.kw_names, declared.kw_params)) {
+            const auto it = std::ranges::find(closure.type.kw_names, name);
+            closure.type.kw_params[it - closure.type.kw_names.begin()] = type;
+        }
+ 
+        closure.type.ret = declared.ret;
+    }
+
+
+
+
     static size_t argsSize(
         const std::vector<pie::expr::ExprPtr>& args,
         const std::vector<std::pair<size_t, std::vector<value::Value>>>& expand_at
@@ -4628,6 +4696,7 @@ There are no mistakes with art.)";
         value::Environment args_env = func.envs.env.env;
 
         bindNamedArgs(call, func, args_env);
+        sg.addEnv(args_env); // so defaults can use the named args
         auto [pos_params, pos_variadic_index] = positionalParams(
             func.params,
             func.type.params,
@@ -4721,6 +4790,11 @@ There are no mistakes with art.)";
             std::move(new_kw_defaults),
             func.body
         };
+
+        // propogate the hidden params
+        closure.hidden_params   = func.hidden_params;
+        closure.hidden_types    = func.hidden_types;
+        closure.hidden_defaults = func.hidden_defaults;
 
 
         positionalCall(
@@ -4895,6 +4969,7 @@ There are no mistakes with art.)";
 
 
         bindNamedArgs(call, func, args_env);
+        sg.addEnv(args_env); // so defaults can use named args
         auto [pos_params, pos_variadic_index] = positionalParams(func.params, func.type.params, func.variadic_index, call->named_args, func.pos_params.size());
         positionalCall(
             func,
@@ -4911,28 +4986,52 @@ There are no mistakes with art.)";
 
 
 
-        // keyword-only params that weren't passed by name take their defaults
+
+        // binding in declaration order so a default can use any param declared before it.
+        const auto declaredAt = [] (const expr::Closure::Param& param) {
+            if (std::holds_alternative<expr::Closure::RegularParam>(param))
+                return get<expr::Closure::RegularParam>(param).ID;
+
+
+            // pattern case
+            ssize_t id = -1;
+            expr::unpack::forEachName(get<expr::unpack::PatternPtr>(param).get(), [&id] (const expr::ExprPtr& name) {
+                if (id == -1) id = name->var_ID;
+            });
+            return id;
+        };
+
+
+        std::vector<std::tuple<ssize_t, const expr::Closure::Param*, type::TypePtr, expr::ExprPtr>> from_defaults;
         for (const auto& [param, type, def] : std::views::zip(func.kw_params, func.type.kw_params, func.kw_defaults)) {
             if (
                 std::holds_alternative<expr::Closure::RegularParam>(param)
-                and // already bound by named arg?
-                call->named_args.contains(get<expr::Closure::RegularParam>(param).expr->stringify())
-            ) continue;
- 
+                and call->named_args.contains(get<expr::Closure::RegularParam>(param).expr->stringify())
+            ) continue; // bound by name
 
-            const bool syntax = isSyntaxParam(param);
- 
+            from_defaults.emplace_back(declaredAt(param), &param, type, def);
+        }
+
+        for (const auto& [param, type, def] : std::views::zip(func.hidden_params, func.hidden_types, func.hidden_defaults))
+            from_defaults.emplace_back(declaredAt(param), &param, type, def);
+
+        std::ranges::sort(from_defaults, {}, [] (const auto& entry) { return std::get<0>(entry); });
+
+        for (const auto& [_, param, type, def] : from_defaults) {
+            const bool syntax = isSyntaxParam(*param);
+
             value::Value value;
-            if (syntax) value = def->variant(); // we know def is not null since it was checked above (missing_keyword)
-            else        value = checkArg(std::visit(*this, def->variant()).value, type, param);
- 
+            if (syntax) value = def->variant();
+            else        value = checkArg(std::visit(*this, def->variant()).value, type, *param);
+
             value::Environment param_env;
-            bindParam(param, {std::move(value), type->clone()}, param_env);
- 
+            bindParam(*param, {std::move(value), type->clone()}, param_env);
+
             sg.addEnv(param_env);
             for (auto& [id, entry] : param_env) args_env[id] = std::move(entry);
         }
- 
+
+
 
         const auto involvesParam = [&type = func.type.ret](const auto& p) {
             return

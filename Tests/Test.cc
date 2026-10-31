@@ -52,6 +52,8 @@
 */
 
 
+
+
 TEST_CASE("Pos, Either, and KW Arguments", "[Param]") {
 {
     const auto src = R"PIE(
@@ -245,7 +247,92 @@ __builtin_print(T7);
 
 
 
+TEST_CASE("Pos, Either, and KW Arguments Type Checking 3", "[Param][Type]") {
+{
+    const auto src = R"PIE(
+f: (; a: Any) -> Any = (; b = 1, a = b) => __builtin_print(a, b);
+f();
+f(a = 5);
+
+g: (; a: Any) -> Any = (; a = 2, b = a) => __builtin_print(a, b);
+g();
+g(a = 7);
+
+h: (Int; k: Any) -> Any = (x: Int, y = 10; k = y) => __builtin_print(x, y, k);
+h(1);
+h(1, k = 3);
+
+m: (; b: Any) -> Any = (; a = 1, b = a, c = b) => __builtin_print(a, b, c);
+m();
+m(b = 5);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(1 1
+5 1
+2 2
+7 7
+1 10 10
+1 10 3
+1 1 1
+1 5 5)");
+}
+}
+
+TEST_CASE("Pos, Either, and KW Arguments Type Checking 2", "[Param][Type]") {
+{
+    const auto src = R"PIE(
+f: (Int) -> Any = (a: Int, b: String = "Hello") => __builtin_print(a, b);
+f(1);
+ 
+g: (; a: String, b: Int) -> Any = (; b: Int, a: String, c = 3) => __builtin_print(a, b, c);
+g(b = 2, a = "x");
+ 
+h: (Int, Int) -> Any = (x: Int, y: Int = 10, z: Int = y) => __builtin_print(x, y, z);
+h(1, 2);
+k: (Int) -> Any = h;
+k(1);
+ 
+__builtin_print(f);
+__builtin_print(__builtin_type(f));
+)PIE";
+ 
+    REQUIRE(pie::test::run(src) == R"(1 Hello
+x 2 3
+1 2 2
+1 10 10
+(a: Int): Any => __builtin_print(a, b)
+(Int) -> Any)");
+}
+{
+    const auto src = R"PIE(
+f: (Int) -> Any = (a: Int, b: String = "Hello") => 0;
+f(1, "meow");
+)PIE";
+ 
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+f: (Int) -> Any = (a: Int, b: String = "Hello") => 0;
+f(1, b = "meow");
+)PIE";
+ 
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+g: (; a: Int) -> Any = (; a: Int, c = 3) => 0;
+g(a = 1, c = 4);
+)PIE";
+ 
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
+
+
 TEST_CASE("Pos, Either, and KW Arguments Type Checking", "[Param][Type]") {
+
 {
     const auto src = R"PIE(
 T = (Int; Double; x: String) -> Any;
@@ -320,6 +407,7 @@ f: ((; a: Int) -> Any) -> Any = (g: (; a: Int, b: Int) -> Any) => 0;
     REQUIRE_THROWS_AS(pie::test::run(src), pie::except::TypeMismatch);
 }
 }
+
 
 
 TEST_CASE("Invalid Pos, Either, and KW Arguments", "[Param]") {

@@ -29,7 +29,7 @@ catch (...) {
 
 
 static int pieMain(int argc, char *argv[]) {
-    constexpr auto VERSION = "1.13.1";
+    constexpr auto VERSION = "1.13.2";
 
     using std::operator""s ;
     using std::operator""sv;
