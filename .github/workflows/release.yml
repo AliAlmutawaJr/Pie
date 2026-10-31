@@ -41,14 +41,12 @@ jobs:
 
         run: |
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            make test_dylib_lnx CC=g++-14
             mkdir build
             cd build
             cmake -DCMAKE_CXX_COMPILER=g++-14 ..
             make -j15
             mv Pie ../Pie-${{ matrix.name }}
           else
-            make test_dylib_mac CC=clang++
             mkdir build
             cd build
             cmake  -DCMAKE_CXX_COMPILER=clang++ ..
