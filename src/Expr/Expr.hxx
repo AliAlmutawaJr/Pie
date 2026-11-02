@@ -343,6 +343,12 @@ struct Tuple : Expr {
             );
     }
 
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Tuple>(*this);
+        for (auto& e : copy->elts) e = splice(e, fillings);
+        return copy;
+    }
+
     Node variant() override { return this; }
 };
 
@@ -1437,6 +1443,15 @@ struct ListComp : Expr {
         // return body->matches(that->body.get(), captures);
     }
 
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<ListComp>(*this);
+        copy->var   = unpack::splicePattern(var.get(), fillings);
+        copy->kind  = splice(kind , fillings);
+        copy->guard = splice(guard, fillings);
+        copy->body  = splice(body , fillings);
+        return copy;
+    }
+
 
 
     bool involvesName(const std::string_view sv) const override {
@@ -1445,15 +1460,6 @@ struct ListComp : Expr {
             or (kind and kind->involvesName(sv))
             or (guard and guard->involvesName(sv))
             or body->involvesName(sv);
-    }
-
-    ExprPtr fillWith(const Fillings& fillings) const override {
-        auto copy = std::make_shared<ListComp>(*this);
-        copy->var   = unpack::splicePattern(var.get(), fillings);
-        copy->kind  = splice(kind , fillings);
-        copy->guard = splice(guard, fillings);
-        copy->body  = splice(body , fillings);
-        return copy;
     }
 
     Node variant() override { return this; }
@@ -1512,7 +1518,6 @@ struct MapComp : Expr {
         // return body1->matches(that->body1.get(), captures) and body2->matches(that->body2.get(), captures);
     }
 
-
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify()
             or (var and sv == unpack::stringifyPattern(var.get()))
@@ -1520,6 +1525,16 @@ struct MapComp : Expr {
             or (guard and guard->involvesName(sv))
             or body1->involvesName(sv)
             or body2->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<MapComp>(*this);
+        copy->var   = unpack::splicePattern(var.get(), fillings);
+        copy->kind  = splice(kind , fillings);
+        copy->guard = splice(guard, fillings);
+        copy->body1 = splice(body1, fillings);
+        copy->body2 = splice(body2, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -1596,6 +1611,12 @@ struct Namespace : Expr {
 
     bool involvesName(const std::string_view) const override {
         return false; // temp
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Namespace>(*this);
+        for (auto& e : copy->space) e = splice(e, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -2049,6 +2070,12 @@ struct OpCall : Expr {
                 return e->involvesName(sv);
             }
         );
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<OpCall>(*this);
+        for (auto& e : copy->exprs) e = splice(e, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -2526,6 +2553,12 @@ struct Block : Expr {
         );
     }
 
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Block>(*this);
+        for (auto& e : copy->lines) e = splice(e, fillings);
+        return copy;
+    }
+
     Node variant() override { return this; }
 };
 
@@ -2576,6 +2609,12 @@ struct Cascade : Expr {
 
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify();
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Cascade>(*this);
+        for (auto& e : copy->lines) e = splice(e, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }

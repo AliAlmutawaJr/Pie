@@ -573,6 +573,7 @@ void LexicalAnalysis::operator()(expr::ListComp *comp) {
     // the extra argument `{}` acts as a tag for static dispatch
     // is means "introduce new names instead of acting as assignment"
     if (comp->var) checkPattern(comp->var.get(), {});
+    else addVar("_", std::to_underlying(ReservedIDs::UNNAMED)); // implicit loop var
 
     if (comp->guard) std::visit(*this, comp->guard->variant());
 

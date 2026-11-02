@@ -76,6 +76,7 @@ class Parser {
         FOLLOWED_BY_ASSIGNMENT,
         MAP,
         CALL,
+        TUPLE,
         FOLLOWED_BY_COLON,
         PACK,
         // LOOP_VAR,
@@ -212,7 +213,7 @@ public:
                     return hole;
                 }
 
-                // a hole that binds to any expression: `\{2 + 3}`
+                // `\{2 + 3}`
                 if (in_syntax and token.text == expr::HOLE_PREFIX and check(L_BRACE)) {
                     consume(L_BRACE);
 
@@ -376,7 +377,7 @@ public:
             case L_PAREN: return call(std::move(left));
 
             case ELLIPSIS:
-                if (CTX == Context::CALL) return left; // in expansion
+                if (CTX == Context::CALL or CTX == Context::TUPLE) return left; // in expansion
                 [[fallthrough]];
 
 
@@ -2363,17 +2364,30 @@ public:
         }
 
 
-        // todo: fix this algorithm
         const bool fold_expr = [this] {
-            for (size_t i{}; /* not atEnd(i) */; ++i) {
-                if (check(R_PAREN , i)) return false;
-                if (check(COLON   , i)) return false;
-                if (check(ELLIPSIS, i)) return true ;
+            for (size_t i{}, depth{}; not atEnd(i); ++i) {
+                if (check(L_PAREN, i) or check(L_BRACE, i)) {
+                    ++depth;
+                    continue;
+                }
 
+                if (check(R_PAREN, i) or check(R_BRACE, i)) {
+                    if (depth == 0) return false;
+                    --depth;
+                    continue;
+                }
 
-                if (check(L_BRACE, i)) while (not check(R_BRACE, i)) ++i;
-                if (check(L_PAREN, i)) while (not check(R_PAREN, i)) ++i;
+                if (depth != 0) continue;
+
+                if (check(COLON, i)) return false;
+                if (check(ELLIPSIS, i)) {
+                    if (check(ELLIPSIS, 0)) return true;
+
+                    const auto before = lookAhead(i - 1).text;
+                    if (opsContain(before) and findOp(before)->type() == INFIX) return true;
+                }
             }
+
             return false;
         }();
 
@@ -2381,27 +2395,37 @@ public:
 
         // auto exprs = parseCommaList();
 
+        constexpr bool DONT_PARSE_TYPE = false;
 
-        // just a grouping `(x)`
-        std::vector expr = {parseExpr()};
+        std::vector<expr::ExprPtr> exprs;
+
+        exprs.push_back(parseExpr<DONT_PARSE_TYPE, Context::TUPLE>());
+        if (match(ELLIPSIS)) exprs[0] = std::make_shared<expr::Expansion>(std::move(exprs)[0]);
+
         // tuple
         if (match(COMMA)) {
-            if (match(R_PAREN)) return std::make_shared<expr::Tuple>(std::move(expr));
+            if (match(R_PAREN)) return std::make_shared<expr::Tuple>(std::move(exprs));
 
             do {
-                expr.push_back(parseExpr());
+                exprs.push_back(parseExpr<DONT_PARSE_TYPE, Context::TUPLE>());
+                if (match(ELLIPSIS)) exprs.back() = std::make_shared<expr::Expansion>(std::move(exprs).back());
 
                 if (match(R_PAREN)) break;
 
                 consume(COMMA);
             } while(not match(R_PAREN));
 
-            return std::make_shared<expr::Tuple>(std::move(expr));
+            return std::make_shared<expr::Tuple>(std::move(exprs));
         }
+
+
+        // should I allow this??
+        if (expr::is<expr::Expansion>(exprs.front().get()))
+            util::error<except::SyntaxError>(lookAhead().span, "An expansion in parentheses needs a comma to be a tuple!");
 
         // just a grouping!
         consume(R_PAREN);
-        return std::make_shared<expr::Grouping>(std::move(expr).front());
+        return std::make_shared<expr::Grouping>(std::move(exprs).front());
     }
 
 
