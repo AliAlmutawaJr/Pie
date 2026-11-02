@@ -90,6 +90,8 @@ class Visitor {
     // _this_ (or self) context
     std::vector<value::Object> selves{};
 
+    std::vector<expr::ExprPtr> spliced_code;
+
 
     // loop context
     ssize_t loop_counter{};
@@ -1405,23 +1407,21 @@ public:
         using Pack = expr::unpack::Pack;
 
 
-        const auto fail = [ /* [[maybe_unused]] */ &] (const auto& msg) -> bool {
-            // (void) expr_str; // to silence compiler warning
-            if constexpr (MODE != TEST) util::error("In Unpackment:\n" + expr_str() + "\n" + msg());
-            return false;
-        };
-
 
         if constexpr (MODE == VARIADIC) {
             (*record)[pattern].push_back(valuetype.value);
         }
         else {
-            if (pattern->value and std::visit(*this, pattern->value->variant()).value != valuetype.value)
-                return fail([&] {
-                    return "Pattern: " + expr::unpack::stringifyPattern(pattern) +
-                           "\nValue: `" + pattern->value->stringify() +
-                           "` didn't match value: " + value::stringify(valuetype.value);
-                });
+            if (pattern->value and std::visit(*this, pattern->value->variant()).value != valuetype.value) {
+                if constexpr (MODE != TEST)
+                    util::error(
+                        "In Unpackment:\n" + expr_str() + "\n"
+                        "Pattern: " + expr::unpack::stringifyPattern(pattern) + "\n"
+                        "Value: `" + pattern->value->stringify() +
+                        "` didn't match value: " + value::stringify(valuetype.value)
+                    );
+                else return false;
+            }
 
 
             if (pattern->type) {
@@ -1445,6 +1445,51 @@ public:
                 }
             }
         }
+
+
+
+        if (auto code = dynamic_cast<const expr::unpack::Syntax*>(pattern)) {
+            if (not std::holds_alternative<expr::Node>(valuetype.value)) {
+                if constexpr (MODE != TEST)
+                    util::error(
+                        "In Unpackment:\n" + expr_str() + "\n"
+                        "Code pattern " + expr::unpack::stringifyPattern(pattern) +
+                        " can only match Syntax. Got: " + value::stringify(valuetype.value)
+                    );
+                else return false;
+            }
+
+
+            auto target = expr::toExpr(get<expr::Node>(valuetype.value));
+
+            expr::Captures captures;
+            if (not code->expr->matches(target, captures)) {
+                if constexpr (MODE != TEST)
+                    util::error(
+                        "In Unpackment:\n" + expr_str() + "\n"
+                        "Code pattern " + expr::unpack::stringifyPattern(pattern) +
+                        " didn't match: " + target->stringify()
+                    );
+                else return false;
+            }
+
+
+            if constexpr (MODE != VARIADIC) {
+                for (const auto& hole : code->holes) {
+                    const auto name = hole->expr->stringify();
+                    addVar(
+                        name,
+                        hole->var_ID,
+                        std::make_shared<value::Value>(captures.at(name)->variant()),
+                        type::builtins::Syntax()
+                    );
+                }
+            }
+
+            return true;
+        }
+
+
 
 
         // supposedly I don't need to check if the expression is a name
@@ -1511,12 +1556,17 @@ public:
                 (*record)[pack_pattern].push_back(std::move(pack));
             }
             else {
-                if (pack_pattern->value and std::visit(*this, pack_pattern->value->variant()).value != pack)
-                    return fail([&] {
-                        return "Pattern: " + expr::unpack::stringifyPattern(pack_pattern) +
-                               "\nValue: `" + pack_pattern->value->stringify() +
-                               "` didn't match value (pack): " + value::stringify(pack);
-                    });
+                if (pack_pattern->value and std::visit(*this, pack_pattern->value->variant()).value != pack) {
+                    if constexpr (MODE != TEST)
+                        util::error(
+                            "In Unpackment:\n" + expr_str() + "\n"
+                            "Pattern: " + expr::unpack::stringifyPattern(pack_pattern) + "\n"
+                            "Value: `" + pack_pattern->value->stringify() +
+                            "` didn't match value (pack): " + value::stringify(pack)
+                        );
+                    else return false;
+                }
+
 
                 if (pack_pattern->type) {
                     auto pack_type = validateType(pack_pattern->type);
@@ -1572,10 +1622,13 @@ public:
     }
 
 
+
+
     template <bool INFERRED>
     void bindPattern(const auto& expr_str, const expr::unpack::Pattern *pattern, ValueType valuetype) {
         matchPattern<INFERRED ? PatternMode::INFER : PatternMode::REASSIGN>(expr_str, pattern, std::move(valuetype));
     }
+
 
     bool testBindPattern(const auto& expr_str, const expr::unpack::Pattern *pattern, ValueType valuetype) {
         return matchPattern<PatternMode::TEST>(expr_str, pattern, std::move(valuetype));
@@ -2509,11 +2562,59 @@ There are no mistakes with art.)";
     }
 
 
+    ValueType operator()(const expr::Hole*) {
+        util::error();
+    }
+
+
     ValueType operator()(const expr::Syntax *syn) {
         if (const auto& var = getVar(syn->var_ID, liftName(syn)); var) return *var;
 
-        // return std::visit(*this, syn->expr->variant());
-        return {syn->expr->variant(), type::builtins::Syntax()};
+
+        if (syn->holes.empty()) return {syn->expr->variant(), type::builtins::Syntax()};
+
+
+        // code goes in as it is, and a few kinds of values go in as literals
+        expr::Fillings fillings;
+        for (const auto& hole : syn->holes) {
+            auto name = hole->expr->stringify();
+
+            if (fillings.contains(name)) continue;
+
+            // what its expression is bound to, or else what it evaluates to.
+            // a plain name has to be bound.
+            // a hole where a param is declared (`(\p) => ...`) never got an ID, so it's always looked up by name
+            const value::Value value = [&] {
+                const auto id = hole->var_ID == -1 ? std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::DYNAMIC) : hole->var_ID;
+                if (const auto var = getVar(id, LIFT(name)); var) return var->value;
+
+                if (dynamic_cast<const expr::Name*>(hole->expr.get()))
+                    util::error("Hole `" + hole->stringify() + "` has nothing to fill it with!");
+
+                return std::visit(*this, hole->expr->variant()).value;
+            }();
+            auto& filling = fillings[name];
+
+            if (std::holds_alternative<expr::Node>(value)) {
+                expr::Expr* code = std::visit([] (auto* node) -> expr::Expr* { return node; }, get<expr::Node>(value));
+                filling = expr::ExprPtr{expr::ExprPtr{}, code}; // doesn't own it: the code it came from does
+            }
+            else if (std::holds_alternative<BigInt     >(value)) filling = std::make_shared<expr::Num   >(stringify(value), hole->span);
+            else if (std::holds_alternative<double     >(value)) filling = std::make_shared<expr::Num   >(stringify(value), hole->span);
+            else if (std::holds_alternative<bool       >(value)) filling = std::make_shared<expr::Bool  >(get<bool>(value), hole->span);
+            else if (std::holds_alternative<std::string>(value)) filling = std::make_shared<expr::String>(get<std::string>(value), hole->span);
+            else util::error(
+                "Can only fill hole `" + hole->stringify() + "` with code, a number, a string, or a boolean. Got: " +
+                stringify(value) + " which is " + typeOf(value)->text()
+            );
+        }
+
+        auto code = expr::splice(syn->expr, fillings);
+
+        spliced_code.push_back(code);
+        return {code->variant(), type::builtins::Syntax()};
+
+        // return {syn->expr->variant(), type::builtins::Syntax()};
     }
 
 
@@ -6550,7 +6651,7 @@ There are no mistakes with art.)";
 
     void print(const value::Value& value, const bool new_line = true, const bool show_hidden = false) {
         // fall back
-        std::print("{}{}", stringify(value, {}, show_hidden), new_line? '\n' : '\0');
+        std::print("{}{}", stringify(value, {}, show_hidden), new_line? "\n" : "");
     }
 
 

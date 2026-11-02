@@ -36,12 +36,44 @@ struct StringID {
 
 
 
+
+
+inline bool optionalMatches(const ExprPtr& mine, const ExprPtr& theirs, Captures& captures) {
+    if (not mine or not theirs) return not mine and not theirs;
+    return mine->matches(theirs.get(), captures);
+}
+
+
+inline bool sameType(const type::TypePtr& mine, const type::TypePtr& theirs) {
+    if (not mine or not theirs) return not mine and not theirs; // if they're both null, I guess they're equal
+
+    return *mine == *theirs;
+}
+
+
+
+inline ExprPtr splice(const ExprPtr& e, const Fillings& fillings) {
+    if (not e) return e;
+
+    auto spliced = e->fillWith(fillings);
+
+    return spliced ? spliced : e;
+}
+
+
 struct Num : Expr {
     std::string num;
 
     explicit Num(std::string n, util::SourceSpan sp) noexcept : Expr{std::move(sp)}, num{std::move(n)} { }
 
     std::string stringify(const size_t = 0) const override { return num; }
+
+
+
+    bool matches(Expr* code, Captures&) const override {
+        const auto* that = dynamic_cast<const Num*>(code);
+        return that and num == that->num;
+    }
 
     bool involvesName(const std::string_view sv) const override { return sv == stringify(); }
 
@@ -56,6 +88,11 @@ struct Bool : Expr {
 
     std::string stringify(const size_t = 0) const override { return boolean ? "true" : "false"; }
 
+    bool matches(Expr* code, Captures&) const override {
+        const auto* that = dynamic_cast<const Bool*>(code);
+        return that and boolean == that->boolean;
+    }
+
     bool involvesName(const std::string_view sv) const override { return sv == stringify(); }
 
     Node variant() override { return this; }
@@ -68,6 +105,11 @@ struct String : Expr {
     explicit String(std::string s, util::SourceSpan sp) noexcept : Expr{std::move(sp)} , str{std::move(s)} {}
 
     std::string stringify(const size_t = 0) const override { return '"' + str + '"'; }
+
+    bool matches(Expr* code, Captures&) const override {
+        const auto* that = dynamic_cast<const String*>(code);
+        return that and str == that->str;
+    }
 
     bool involvesName(const std::string_view sv) const override { return sv == stringify(); }
 
@@ -97,11 +139,27 @@ struct FString : Expr {
         return '"' + s + '"';
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const FString*>(code);
+        if (not that or str != that->str or exprs.size() != that->exprs.size()) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(exprs, that->exprs))
+            if (mine.first != theirs.first or not mine.second->matches(theirs.second.get(), captures)) return false;
+
+        return true;
+    }
+
     bool involvesName(const std::string_view sv) const override {
         for (const auto& expr : exprs)
             if (expr.second->involvesName(sv)) return true;
 
         return sv == stringify();
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<FString>(*this);
+        for (auto& [_, e] : copy->exprs) e = splice(e, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -114,6 +172,11 @@ struct Name : Expr {
     explicit Name(std::string n, util::SourceSpan sp = {}) noexcept : Expr{std::move(sp)}, name{std::move(n)} { }
 
     std::string stringify(const size_t = 0) const override { return name; }
+
+    bool matches(Expr* code, Captures&) const override {
+        const auto* that = dynamic_cast<const Name*>(code);
+        return that and name == that->name;
+    }
 
     bool involvesName(const std::string_view sv) const override { return sv == stringify(); }
 
@@ -162,10 +225,26 @@ struct List : Expr {
         return s + "}";
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const List*>(code);
+        if (not that or elements.size() != that->elements.size()) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(elements, that->elements))
+            if (not mine->matches(theirs.get(), captures)) return false;
+
+        return true;
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or std::ranges::any_of(elements, [sv] (const auto& e) {
             return e->involvesName(sv);
         });
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<List>(*this);
+        for (auto& e : copy->elements) e = splice(e, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -192,11 +271,32 @@ struct Map : Expr {
         return s + "}";
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Map*>(code);
+        if (not that or items.size() != that->items.size()) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(items, that->items)) {
+            if (not mine.first ->matches(theirs.first .get(), captures)) return false;
+            if (not mine.second->matches(theirs.second.get(), captures)) return false;
+        }
+
+        return true;
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or std::ranges::any_of(items, [sv] (const auto& e) {
             const auto& [key, value] = e;
             return key->involvesName(sv) or value->involvesName(sv); 
         });
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Map>(*this);
+        for (auto& [key, value] : copy->items) {
+            key   = splice(key  , fillings);
+            value = splice(value, fillings);
+        }
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -225,6 +325,16 @@ struct Tuple : Expr {
         return s;
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Tuple*>(code);
+        if (not that or elts.size() != that->elts.size()) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(elts, that->elts))
+            if (not mine->matches(theirs.get(), captures)) return false;
+
+        return true;
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify()
             or std::ranges::any_of(
@@ -247,8 +357,19 @@ struct Expansion : Expr {
         return pack->stringify(indent) + "...";
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Expansion*>(code);
+        return that and pack->matches(that->pack.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or pack->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Expansion>(*this);
+        copy->pack = splice(pack, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -271,8 +392,19 @@ struct UnaryFold : Expr {
             return "(... " + op + ' ' + pack->stringify(indent) + ')';
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const UnaryFold*>(code);
+        return that and op == that->op and left_to_right == that->left_to_right and pack->matches(that->pack.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or pack->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<UnaryFold>(*this);
+        copy->pack = splice(pack, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -293,8 +425,24 @@ struct SeparatedUnaryFold : Expr {
         return '(' + lhs->stringify(indent) + ' ' + op1 + " ... " + op2 + ' ' + rhs->stringify(indent) + ')';
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const SeparatedUnaryFold*>(code);
+        return that
+            and op1 == that->op1
+            and op2 == that->op2
+            and lhs->matches(that->lhs.get(), captures)
+            and rhs->matches(that->rhs.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or lhs->involvesName(sv) or rhs->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<SeparatedUnaryFold>(*this);
+        copy->lhs = splice(lhs, fillings);
+        copy->rhs = splice(rhs, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -334,8 +482,26 @@ struct BinaryFold : Expr {
             return "(... " + op + ' ' + pack->stringify(indent) + ' ' + op + ' ' + init->stringify(indent) + ')';
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const BinaryFold*>(code);
+        return that
+            and op == that->op
+            and left_to_right == that->left_to_right
+            and pack->matches(that->pack.get(), captures)
+            and init->matches(that->init.get(), captures)
+            and optionalMatches(sep, that->sep, captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or pack->involvesName(sv) or init->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<BinaryFold>(*this);
+        copy->pack = splice(pack, fillings);
+        copy->init = splice(init, fillings);
+        copy->sep = splice(sep, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -368,9 +534,25 @@ struct Assignment : Expr {
         return lhs->stringify(indent) + " = " + rhs->stringify(indent + 4);
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Assignment*>(code);
+        return that
+            and is_syntax == that->is_syntax
+            and rhs->matches(that->rhs.get(), captures)
+            and sameType(type, that->type)
+            and lhs->matches(that->lhs.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         // todo: check the type
         return sv == stringify() or lhs->involvesName(sv) or rhs->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Assignment>(*this);
+        copy->lhs = splice(lhs, fillings);
+        copy->rhs = splice(rhs, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -393,12 +575,105 @@ struct InferredAssignment : Expr {
         return name.name + " := " + rhs->stringify(indent + 4);
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const InferredAssignment*>(code);
+        return that and name.name == that->name.name and rhs->matches(that->rhs.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or name.name == sv or rhs->involvesName(sv);
     }
 
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<InferredAssignment>(*this);
+        copy->rhs = splice(rhs, fillings);
+        return copy;
+    }
+
     Node variant() override { return this; }
 };
+
+
+
+struct Hole : Expr {
+    ExprPtr expr;
+
+
+    explicit Hole(ExprPtr e, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    expr{std::move(e)}
+    { }
+
+
+    std::string stringify([[maybe_unused]] const size_t indent = 0) const override {
+        auto name = expr->stringify();
+
+        if (dynamic_cast<const Name*>(expr.get())) return std::string{HOLE_PREFIX} + name;
+        return std::string{HOLE_PREFIX} + '{' + name + '}';
+    }
+
+    bool involvesName(const std::string_view sv) const override {
+        return sv == stringify() or expr->involvesName(sv);
+    }
+
+    bool matches(Expr* code, Captures& captures) const override {
+        auto name = expr->stringify();
+
+        // the same hole twice (`\a + \a`) has to capture the same code both times
+        if (const auto it = captures.find(name); it != captures.end()) {
+            Captures none;
+            return it->second->matches(code, none);
+        }
+
+        captures[name] = code;
+        return true;
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto name = expr->stringify();
+
+        if (not fillings.contains(name)) util::error("Name '" + name + "' not found in fillings!");
+
+        return fillings.at(name);
+    }
+
+    Node variant() override { return this; }
+};
+
+
+
+struct Syntax : Expr {
+    ExprPtr expr;
+    std::vector<std::shared_ptr<Hole>> holes;
+    Syntax(ExprPtr e, util::SourceSpan sp = {}) noexcept
+    :
+    Expr{std::move(sp)},
+    expr{std::move(e)}
+    { }
+
+    std::string stringify(const size_t indent = 0) const override {
+        return '`' + expr->stringify(indent + 4) + '`';
+    }
+
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Syntax*>(code);
+        return that and expr->matches(that->expr.get(), captures);
+    }
+
+    bool involvesName(const std::string_view sv) const override {
+        return sv == stringify() or expr->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Syntax>(*this);
+        copy->expr = splice(expr, fillings);
+        return copy;
+    }
+
+    Node variant() override { return this; }
+};
+
 
 
 namespace unpack {
@@ -464,6 +739,15 @@ struct Pack : Pattern {
 
 
 
+struct Syntax : Pattern {
+    ExprPtr expr;
+    std::vector<std::shared_ptr<Hole>> holes;
+
+    Syntax(ExprPtr e, std::vector<std::shared_ptr<Hole>> hs) noexcept
+    : expr{std::move(e)}, holes{std::move(hs)} { }
+};
+
+
 inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t indent = 0) {
     std::string s;
     if (auto expr = dynamic_cast<const unpack::Expr*>(pattern)) {
@@ -507,6 +791,9 @@ inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t
         // if (pack->expr) s += pack->expr->stringify(indent + 4);
         if (pack->pattern) s += stringifyPattern(pack->pattern.get(), indent + 4);
     }
+    else if (auto syn = dynamic_cast<const unpack::Syntax*>(pattern)) {
+        s = '`' + syn->expr->stringify(indent) + '`';
+    }
     else util::error();
 
 
@@ -516,6 +803,72 @@ inline std::string stringifyPattern(const unpack::Pattern *pattern, const size_t
     return s;
 }
 
+
+
+
+inline bool patternMatches(const Pattern *mine, const Pattern *theirs, Captures& captures) {
+    if (not mine or not theirs) return not mine and not theirs;
+
+    if (not sameType(mine->type, theirs->type)) return false;
+    if (not optionalMatches(mine->value, theirs->value, captures)) return false;
+
+    if (auto e = dynamic_cast<const Expr*>(mine)) {
+        const auto t = dynamic_cast<const Expr*>(theirs);
+        return t and optionalMatches(e->expr, t->expr, captures);
+    }
+
+    if (auto list = dynamic_cast<const List*>(mine)) {
+        const auto t = dynamic_cast<const List*>(theirs);
+        if (not t or list->patterns.size() != t->patterns.size()) return false;
+
+        for (const auto& [p1, p2] : std::views::zip(list->patterns, t->patterns))
+            if (not patternMatches(p1.get(), p2.get(), captures)) return false;
+
+        return true;
+    }
+
+    if (auto pack = dynamic_cast<const Pack*>(mine)) {
+        const auto t = dynamic_cast<const Pack*>(theirs);
+        return t and patternMatches(pack->pattern.get(), t->pattern.get(), captures);
+    }
+
+    if (auto syn = dynamic_cast<const Syntax*>(mine)) {
+        const auto t = dynamic_cast<const Syntax*>(theirs);
+        return t and syn->expr->matches(t->expr.get(), captures);
+    }
+
+    return false;
+}
+
+
+inline PatternPtr splicePattern(const Pattern *pattern, const Fillings& fillings) {
+    if (not pattern) return nullptr;
+
+    PatternPtr copy;
+
+    if (auto e = dynamic_cast<const Expr*>(pattern)) {
+        auto c = std::make_shared<Expr>(*e);
+        c->expr = splice(e->expr, fillings);
+        copy = std::move(c);
+    }
+    else if (auto list = dynamic_cast<const List*>(pattern)) {
+        auto c = std::make_shared<List>(*list);
+        for (auto& sub : c->patterns) sub = splicePattern(sub.get(), fillings);
+        copy = std::move(c);
+    }
+    else if (auto pack = dynamic_cast<const Pack*>(pattern)) {
+        auto c = std::make_shared<Pack>(*pack);
+        c->pattern = splicePattern(pack->pattern.get(), fillings);
+        copy = std::move(c);
+    }
+    else if (auto code = dynamic_cast<const Syntax*>(pattern)) {
+        copy = std::make_shared<Syntax>(*code); // its holes are its own
+    }
+    else util::error();
+
+    copy->value = splice(pattern->value, fillings);
+    return copy;
+}
 
 
 inline bool patternInvolves(const unpack::Pattern *pattern, const std::string_view sv) {
@@ -536,6 +889,9 @@ inline bool patternInvolves(const unpack::Pattern *pattern, const std::string_vi
     else if (auto pack = dynamic_cast<const unpack::Pack*>(pattern)) {
         // return pack->expr->involvesName(sv);
         if (pack->pattern) return patternInvolves(pack->pattern.get(), sv);
+    }
+    else if (auto syn = dynamic_cast<const unpack::Syntax*>(pattern)) {
+        return syn->expr->involvesName(sv);
     }
     else util::error();
 
@@ -568,6 +924,7 @@ inline void forEachName(const Pattern *pattern, const auto& fn) {
 } // namespace unpack
 
 
+
 struct Unpackment : Expr {
     // guranteed to have at leats one element
     unpack::PatternPtr pattern;
@@ -594,10 +951,25 @@ struct Unpackment : Expr {
         return s;
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Unpackment*>(code);
+        return that
+            and unpack::patternMatches(pattern.get(), that->pattern.get(), captures)
+            and sameType(type, that->type)
+            and rhs->matches(that->rhs.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify()
             or patternInvolves(pattern.get(), sv)
             or rhs->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Unpackment>(*this);
+        copy->pattern = unpack::splicePattern(pattern.get(), fillings);
+        copy->rhs = splice(rhs, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -625,10 +997,24 @@ struct InferredUnpackment : Expr {
             + rhs->stringify(indent + 4);
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const InferredUnpackment*>(code);
+        return that
+            and unpack::patternMatches(pattern.get(), that->pattern.get(), captures)
+            and rhs->matches(that->rhs.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify()
             or patternInvolves(pattern.get(), sv)
             or rhs->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<InferredUnpackment>(*this);
+        copy->pattern = unpack::splicePattern(pattern.get(), fillings);
+        copy->rhs = splice(rhs, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -664,6 +1050,23 @@ struct Class : Expr {
         return s + std::string(indent, ' ') + "}";
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Class*>(code);
+        if (not that or fields.size() != that->fields.size()) return false;
+
+
+        for (const auto& [mine, theirs] : std::views::zip(fields, that->fields)) {
+            const auto& [my_name, my_type, my_expr] = mine;
+            const auto& [his_name, his_type, his_expr] = theirs;
+
+            if (my_name.name != his_name.name)                  return false;
+            if (not sameType(my_type, his_type))                return false;
+            if (not my_expr->matches(his_expr.get(), captures)) return false;
+        }
+
+        return true;
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or std::ranges::any_of(fields,
             [sv] (const auto& e) {
@@ -671,6 +1074,12 @@ struct Class : Expr {
                 return expr->involvesName(sv);
             }
         );
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Class>(*this);
+        for (auto& [_, __, value] : copy->fields) value = splice(value, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -696,6 +1105,17 @@ struct Union : Expr {
         }
 
         return s + std::string(indent, ' ') + "}";
+    }
+
+    bool matches(Expr* code, [[maybe_unused]] Captures& captures) const override {
+        const auto* that = dynamic_cast<const Union*>(code);
+        if (not that or types.size() != that->types.size()) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(types, that->types))
+            if (not sameType(mine, theirs)) return false;
+            // if (not mine->matches(theirs.get(), captures)) return false;
+
+        return true;
     }
 
     bool involvesName(const std::string_view name) const override {
@@ -746,6 +1166,33 @@ struct Match : Expr {
         return s + std::string(indent, ' ') + "}";
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Match*>(code);
+        if (not that or cases.size() != that->cases.size() or not expr->matches(that->expr.get(), captures)) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(cases, that->cases)) {
+            if (not unpack::patternMatches(mine.pattern.get(), theirs.pattern.get(), captures)) return false;
+            if (not optionalMatches(mine.guard, theirs.guard, captures)) return false;
+            if (not mine.body->matches(theirs.body.get(), captures)) return false;
+        }
+
+        return true;
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Match>(*this);
+        copy->expr = splice(expr, fillings);
+
+        for (auto& kase : copy->cases) {
+            kase.pattern = unpack::splicePattern(kase.pattern.get(), fillings);
+            kase.guard   = splice(kase.guard, fillings);
+            kase.body    = splice(kase.body , fillings);
+        }
+
+        return copy;
+    }
+
+
     // todo: fix this by checking every expression. Even inside Single
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or expr->involvesName(sv);
@@ -765,6 +1212,11 @@ struct Type : Expr {
     { }
 
     std::string stringify(const size_t indent = 0) const override { return type->text(indent); }
+
+    bool matches(Expr* code, Captures&) const override {
+        const auto* that = dynamic_cast<const Type*>(code);
+        return that and sameType(type, that->type);
+    }
 
     bool involvesName(const std::string_view) const override {
         return false; // temp
@@ -809,10 +1261,49 @@ struct Loop : Expr {
 
         // s += "\n" + std::string(indent, ' ') + "}";
 
-        if (els) s += "else => " + els->stringify();
+        if (els) s += " => " + els->stringify();
 
         return s;
     }
+
+
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Loop*>(code);
+
+        return that
+            and unpack::patternMatches(var.get(), that->var.get(), captures)
+            and optionalMatches(kind, that->kind, captures)
+            and body->matches(that->body.get(), captures)
+            and optionalMatches(els, that->els, captures);
+
+        // if (not that) return false;
+
+        // if (not var  != not that->var ) return false;
+        // if (not kind != not that->kind) return false;
+
+        // // body can never be null!
+        // // if (not body != not that->body) return false;
+
+        // if (not els  != not that->els ) return false;
+
+
+        // if (var  and not unpack::patternMatches(var.get(), that->var.get(), captures)) return false;
+
+        // if (kind and not kind->matches(that->kind.get(), captures)) return false;
+        // if (els  and not els ->matches(that->els .get(), captures)) return false;
+
+        // return body->matches(that->body.get(), captures);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Loop>(*this);
+        copy->var  = unpack::splicePattern(var.get(), fillings);
+        copy->kind = splice(kind, fillings);
+        copy->body = splice(body, fillings);
+        copy->els  = splice(els , fillings);
+        return copy;
+    }
+
 
     bool involvesName(const std::string_view sv) const override {
         if (sv == stringify()) return true;
@@ -843,8 +1334,19 @@ struct Break : Expr {
         return "break";
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Break*>(code);
+        return that and optionalMatches(expr, that->expr, captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or expr->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Break>(*this);
+        copy->expr = splice(expr, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -866,8 +1368,19 @@ struct Continue : Expr {
         return "continue";
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Continue*>(code);
+        return that and optionalMatches(expr, that->expr, captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or expr->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Continue>(*this);
+        copy->expr = splice(expr, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -901,12 +1414,46 @@ struct ListComp : Expr {
     }
 
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const ListComp*>(code);
+
+        return that
+            and unpack::patternMatches(var.get(), that->var.get(), captures)
+            and optionalMatches(kind , that->kind , captures)
+            and optionalMatches(guard, that->guard, captures)
+            and body->matches(that->body.get(), captures);
+
+        // if (not that) return false;
+
+        // if (not var   != not that->var  ) return false;
+        // if (not kind  != not that->kind ) return false;
+        // if (not guard != not that->guard) return false;
+
+
+        // if (var  and not unpack::patternMatches(var.get(), that->var.get(), captures)) return false;
+
+        // if (kind and not kind->matches(that->kind.get(), captures)) return false;
+
+        // return body->matches(that->body.get(), captures);
+    }
+
+
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify()
             or (var and sv == unpack::stringifyPattern(var.get()))
             or (kind and kind->involvesName(sv))
             or (guard and guard->involvesName(sv))
             or body->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<ListComp>(*this);
+        copy->var   = unpack::splicePattern(var.get(), fillings);
+        copy->kind  = splice(kind , fillings);
+        copy->guard = splice(guard, fillings);
+        copy->body  = splice(body , fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -941,6 +1488,31 @@ struct MapComp : Expr {
     }
 
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const MapComp*>(code);
+
+        return that
+            and unpack::patternMatches(var.get(), that->var.get(), captures)
+            and optionalMatches(kind , that->kind , captures)
+            and optionalMatches(guard, that->guard, captures)
+            and body1->matches(that->body1.get(), captures)
+            and body2->matches(that->body2.get(), captures);
+
+        // if (not that) return false;
+
+        // if (not var   != not that->var  ) return false;
+        // if (not kind  != not that->kind ) return false;
+        // if (not guard != not that->guard) return false;
+
+
+        // if (var  and not unpack::patternMatches(var.get(), that->var.get(), captures)) return false;
+
+        // if (kind and not kind->matches(that->kind.get(), captures)) return false;
+
+        // return body1->matches(that->body1.get(), captures) and body2->matches(that->body2.get(), captures);
+    }
+
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify()
             or (var and sv == unpack::stringifyPattern(var.get()))
@@ -969,8 +1541,19 @@ struct Access : Expr {
         return var->stringify(indent) + '.' + name;
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Access*>(code);
+        return that and name == that->name and var->matches(that->var.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or var->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Access>(*this);
+        copy->var = splice(var, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -999,6 +1582,16 @@ struct Namespace : Expr {
         }
 
         return s + std::string(indent, ' ') + "}";
+    }
+
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Namespace*>(code);
+        if (not that or name != that->name or space.size() != that->space.size()) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(space, that->space))
+            if (not mine->matches(theirs.get(), captures)) return false;
+
+        return true;
     }
 
     bool involvesName(const std::string_view) const override {
@@ -1031,6 +1624,11 @@ struct Use : Expr {
             s += space + "::";
 
         return (global ? "use ::" : "use " ) + s + name.name;
+    }
+
+    bool matches(Expr* code, Captures&) const override {
+        const auto* that = dynamic_cast<const Use*>(code);
+        return that and global == that->global and name.name == that->name.name and spaces == that->spaces;
     }
 
     bool involvesName(const std::string_view sv) const override {
@@ -1071,6 +1669,14 @@ struct UseSpace : Expr {
         }
 
         return s + (pull_ops ? "::" : "");
+    }
+
+    bool matches(Expr* code, Captures&) const override {
+        const auto* that = dynamic_cast<const UseSpace*>(code);
+        return that
+            and global == that->global
+            and pull_ops == that->pull_ops
+            and spaces == that->spaces;
     }
 
     bool involvesName(const std::string_view sv) const override {
@@ -1122,6 +1728,17 @@ struct UseFix : Expr {
         return s + "::" + op_name;
     }
 
+
+    bool matches(Expr* code, Captures&) const override {
+        const auto* that = dynamic_cast<const UseFix*>(code);
+        return that
+            and global == that->global
+            and op_name == that->op_name
+            and filter == that->filter
+            and spaces == that->spaces;
+    }
+
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify();
     }
@@ -1150,6 +1767,11 @@ struct Import : Expr {
 
 
         return "import " + s;
+    }
+
+    bool matches(Expr* code, Captures&) const override {
+        const auto* that = dynamic_cast<const Import*>(code);
+        return that and path == that->path;
     }
 
     bool involvesName(const std::string_view) const override { return false; }
@@ -1182,6 +1804,11 @@ struct SpaceAccess : Expr {
         return (global ? "::" : "") + s + name.name;
     }
 
+    bool matches(Expr* code, Captures&) const override {
+        const auto* that = dynamic_cast<const SpaceAccess*>(code);
+        return that and global == that->global and spaces == that->spaces and name.name == that->name.name;
+    }
+
     bool involvesName(const std::string_view) const override {
         return false; // qualified names don't involve other names!
     }
@@ -1190,31 +1817,6 @@ struct SpaceAccess : Expr {
 };
 
 
-struct Syntax : Expr {
-    ExprPtr expr;
-    Syntax(ExprPtr e, util::SourceSpan sp = {}) noexcept
-    :
-    Expr{std::move(sp)},
-    expr{std::move(e)}
-    { }
-
-    std::string stringify(const size_t indent = 0) const override {
-        return '`' + expr->stringify(indent + 4) + '`';
-    }
-
-    bool involvesName(const std::string_view sv) const override {
-        return sv == stringify() or expr->involvesName(sv);
-    }
-
-    Node variant() override { return this; }
-};
-
-
-
-// Only reason this is needed is to distinguish between expressions like
-// 1 + 2 and (1 + 2)
-// since they could get assigned 2 different values
-// but is this the behaviour that I want?
 struct Grouping : Expr {
     ExprPtr expr;
     Grouping(ExprPtr e, util::SourceSpan sp = {}) noexcept
@@ -1228,8 +1830,20 @@ struct Grouping : Expr {
         return expr->stringify(indent);
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        return code and expr->matches(code, captures); // skip the parens
+        // const auto* that = dynamic_cast<const Grouping*>(code);
+        // return that and expr->matches(that->expr.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or expr->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Grouping>(*this);
+        copy->expr = splice(expr, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -1253,8 +1867,19 @@ struct UnaryOp : Expr {
         return '(' + op + ' ' + expr->stringify(indent) + ')';
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const UnaryOp*>(code);
+        return that and op == that->op and expr->matches(that->expr.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or expr->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<UnaryOp>(*this);
+        copy->expr = splice(expr, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -1280,8 +1905,20 @@ struct BinOp : Expr {
         return '(' + lhs->stringify(indent) + ' ' + op + ' ' + rhs->stringify(indent) + ')';
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const BinOp*>(code);
+        return that and op == that->op and lhs->matches(that->lhs.get(), captures) and rhs->matches(that->rhs.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or lhs->involvesName(sv) or rhs->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<BinOp>(*this);
+        copy->lhs = splice(lhs, fillings);
+        copy->rhs = splice(rhs, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -1304,8 +1941,19 @@ struct PostOp : Expr {
         return '(' + expr->stringify(indent) + ' ' + op + ')';
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const PostOp*>(code);
+        return that and op == that->op and expr->matches(that->expr.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or expr->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<PostOp>(*this);
+        copy->expr = splice(expr, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -1330,8 +1978,19 @@ struct CircumOp : Expr {
         return '(' + op1 + ' ' + expr->stringify(indent) + ' ' + op2 + ')';
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const CircumOp*>(code);
+        return that and op1 == that->op1 and op2 == that->op2 and expr->matches(that->expr.get(), captures);
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or expr->involvesName(sv);
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<CircumOp>(*this);
+        copy->expr = splice(expr, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -1372,6 +2031,16 @@ struct OpCall : Expr {
         }
 
         return '(' + s + ')';
+    }
+
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const OpCall*>(code);
+        if (not that or first != that->first or rest != that->rest or op_pos != that->op_pos) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(exprs, that->exprs))
+            if (not mine->matches(theirs.get(), captures)) return false;
+
+        return true;
     }
 
     bool involvesName(const std::string_view sv) const override {
@@ -1424,6 +2093,23 @@ struct Call : Expr {
         return s + ')';
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Call*>(code);
+        if (not that or args.size() != that->args.size() or named_args.size() != that->named_args.size()) return false;
+
+        if (not func->matches(that->func.get(), captures)) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(args, that->args))
+            if (not mine->matches(theirs.get(), captures)) return false;
+
+        for (const auto& [name, mine] : named_args) {
+            const auto it = that->named_args.find(name);
+            if (it == that->named_args.end() or not mine->matches(it->second.get(), captures)) return false;
+        }
+
+        return true;
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or func->involvesName(sv)
             or std::ranges::any_of(named_args,
@@ -1437,6 +2123,14 @@ struct Call : Expr {
                     return e->involvesName(sv);
                 }
             );
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Call>(*this);
+        copy->func = splice(func, fillings);
+        for (auto& e : copy->args) e = splice(e, fillings);
+        for (auto& [_, e] : copy->named_args) e = splice(e, fillings);
+        return copy;
     }
 
     Node variant() override { return this; }
@@ -1454,12 +2148,33 @@ struct Closure : Expr {
 
     using Param = std::variant<RegularParam, unpack::PatternPtr>;
 
+    static bool paramMatches(const Param& p1, const Param& p2, Captures &captures) {
+        const bool regular1 = std::holds_alternative<RegularParam>(p1);
+        const bool regular2 = std::holds_alternative<RegularParam>(p2);
+
+        if (regular1 != regular2) return false;
+
+        if (not regular1) { // implied (and not regular2)
+            const auto& pat1 = get<unpack::PatternPtr>(p1);
+            const auto& pat2 = get<unpack::PatternPtr>(p2);
+
+            return unpack::patternMatches(pat1.get(), pat2.get(), captures);
+        }
+
+        const auto& param1 = get<RegularParam>(p1);
+        const auto& param2 = get<RegularParam>(p2);
+
+        return param1.is_syntax == param2.is_syntax and param1.expr->matches(param2.expr.get(), captures);
+    }
+
+
     std::vector<Param> params;
     std::vector<Param> pos_params;
     std::vector<Param> kw_params;
     type::FuncType type;
     std::optional<size_t> variadic_index;
 
+    // invariant: these are the same length as the vecs above, respectively!
     std::vector<ExprPtr> defaults;
     std::vector<ExprPtr> pos_defaults;
     std::vector<ExprPtr> kw_defaults;
@@ -1622,6 +2337,131 @@ struct Closure : Expr {
     }
 
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Closure*>(code);
+
+        if (not that) return false;
+
+        // do the fast checks first
+        if (variadic_index != that->variadic_index) return false;
+
+        if (pos_params.size() != that->pos_params.size()) return false;
+        if (params    .size() != that->params    .size()) return false;
+        if (kw_params .size() != that->kw_params .size()) return false;
+
+        // sorta implied. Should I keep it? Same thign for type.params
+        // if (pos_defaults.size() != that->pos_defaults.size()) return false;
+        // if (defaults    .size() != that->defaults    .size()) return false;
+        // if (kw_defaults .size() != that->kw_defaults .size()) return false;
+
+        // if (hidden_params  .size() != that->hidden_params  .size()) return false;
+        // if (hidden_types   .size() != that->hidden_types   .size()) return false;
+        // if (hidden_defaults.size() != that->hidden_defaults.size()) return false;
+
+
+
+        // then go in order so that captures happen in order!
+        for (
+            const auto& [
+                mine, his,
+                my_def, his_def,
+                my_param_type, his_param_type
+            ]
+            :
+            std::views::zip(
+                pos_params, that->pos_params,
+                pos_defaults, that->pos_defaults,
+                type.pos_params, that->type.pos_params
+            )
+        ) {
+            // quick checks!
+            if (not my_def != not his_def) return false;
+            if (not my_param_type != not his_param_type) return false;
+
+            if (not paramMatches(mine, his, captures)) return false;
+            if (my_def /* and his_def */ and not my_def->matches(his_def.get(), captures)) return false;
+            if (sameType(my_param_type, his_param_type)) return false;
+        }
+
+
+        for (
+            const auto& [
+                mine, his,
+                my_def, his_def,
+                my_param_type, his_param_type
+            ]
+            :
+            std::views::zip(
+                params, that->params,
+                defaults, that->defaults,
+                type.params, that->type.params
+            )
+        ) {
+            // quick checks!
+            if (not my_def != not his_def) return false;
+            if (not my_param_type != not his_param_type) return false;
+
+            if (not paramMatches(mine, his, captures)) return false;
+            if (my_def /* and his_def */ and not my_def->matches(his_def.get(), captures)) return false;
+            if (sameType(my_param_type, his_param_type)) return false;
+        }
+
+
+        for (
+            const auto& [
+                mine, his,
+                my_def, his_def,
+                my_param_type, his_param_type
+            ]
+            :
+            std::views::zip(
+                kw_params, that->kw_params,
+                kw_defaults, that->kw_defaults,
+                type.kw_params, that->type.kw_params
+            )
+        ) {
+            // quick checks!
+            if (not my_def != not his_def) return false;
+            if (not my_param_type != not his_param_type) return false;
+
+            if (not paramMatches(mine, his, captures)) return false;
+            if (my_def /* and his_def */ and not my_def->matches(his_def.get(), captures)) return false;
+            if (sameType(my_param_type, his_param_type)) return false;
+        }
+
+
+        if (not sameType(type.ret, that->type.ret)) return false;
+
+        return body->matches(that->body.get(), captures);
+    }
+
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        auto copy = std::make_shared<Closure>(*this);
+
+        for (auto* zone : {&copy->pos_params, &copy->params, &copy->kw_params}) {
+            for (auto& param : *zone) {
+                if (std::holds_alternative<RegularParam>(param)) {
+                    auto& p = get<RegularParam>(param);
+                    const auto before = p.expr;
+                    p.expr = splice(p.expr, fillings);
+
+                    // a param that came from a hole is named by the code that filled it, so it takes that name's ID.
+                    // that way, the rest of that code (usually the body) finds the param
+                    if (p.expr != before and p.expr->var_ID != -1) p.ID = p.expr->var_ID;
+                }
+                else
+                    get<unpack::PatternPtr>(param) = unpack::splicePattern(get<unpack::PatternPtr>(param).get(), fillings);
+            }
+        }
+
+        for (auto* zone : {&copy->pos_defaults, &copy->defaults, &copy->kw_defaults})
+            for (auto& def : *zone) def = splice(def, fillings);
+
+        copy->body = splice(body, fillings);
+        return copy;
+    }
+
 
     bool involvesName(const std::string_view sv) const override {
         if (sv == stringify()) return true;
@@ -1666,6 +2506,16 @@ struct Block : Expr {
         }
 
         return s + std::string(indent, ' ') + "}";
+    }
+
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Block*>(code);
+        if (not that or lines.size() != that->lines.size()) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(lines, that->lines))
+            if (not mine->matches(theirs.get(), captures)) return false;
+
+        return true;
     }
 
     bool involvesName(const std::string_view sv) const override {
@@ -1714,6 +2564,16 @@ struct Cascade : Expr {
         return s;
     }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Cascade*>(code);
+        if (not that or lines.size() != that->lines.size()) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(lines, that->lines))
+            if (not mine->matches(theirs.get(), captures)) return false;
+
+        return true;
+    }
+
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify();
     }
@@ -1746,6 +2606,24 @@ struct Fix : Expr {
     shift{s}
     { }
 
+    bool matches(Expr* code, Captures& captures) const override {
+        const auto* that = dynamic_cast<const Fix*>(code);
+        if (
+            not that or
+            type()   != that->type()   or
+            OpName() != that->OpName() or
+            high     != that->high     or
+            low      != that->low      or
+            shift    != that->shift    or
+            funcs.size() != that->funcs.size()
+        ) return false;
+
+        for (const auto& [mine, theirs] : std::views::zip(funcs, that->funcs))
+            if (not mine->matches(theirs.get(), captures)) return false;
+
+        return true;
+    }
+
 
     bool involvesName(const std::string_view sv) const override {
         return sv == stringify() or std::ranges::any_of(funcs,
@@ -1753,6 +2631,12 @@ struct Fix : Expr {
                 return e->involvesName(sv);
             }
         );
+    }
+
+    ExprPtr fillWith(const Fillings& fillings) const override {
+        std::shared_ptr<Fix> copy = clone();
+        for (auto& f : copy->funcs) f = splice(f, fillings);
+        return copy;
     }
 
     virtual std::unique_ptr<Fix> clone() const = 0;
@@ -1939,7 +2823,13 @@ struct Operator : Fix {
 };
 
 template <typename T>
-T* is(expr::Expr* e) { return dynamic_cast<T*>(e); }
+T* is(Expr* e) { return dynamic_cast<T*>(e); }
+
+
+inline Expr* toExpr(const Node& node) {
+    return std::visit([] (auto* n) -> Expr* { return n; }, node);
+}
+
 
 } // namespace expr
 

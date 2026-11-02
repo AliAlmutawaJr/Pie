@@ -104,6 +104,10 @@ class Parser {
     std::unordered_map<std::string, std::shared_ptr<NameSpace>> global_spaces;
     std::vector<NameSpace*> current_space;
 
+
+    bool in_syntax{};
+    std::vector<std::shared_ptr<expr::Hole>> holes;
+
 public:
 
     Parser(token::Tokens t, std::filesystem::path r = ".") noexcept
@@ -193,7 +197,38 @@ public:
             case STRING : return std::make_shared<expr::String>(std::move(token).text, std::move(token).span);
             case FSTRING: return fstring(std::move(token));
 
+
             case NAME:
+                // \name is valid, but "\" on its own is not
+                if (
+                    in_syntax and
+                    token.text.starts_with(expr::HOLE_PREFIX) and
+                    token.text.size() > expr::HOLE_PREFIX.size() and
+                    std::isalpha(static_cast<unsigned char>(token.text[expr::HOLE_PREFIX.size()]))
+                ) {
+                    auto name = std::make_shared<expr::Name>(token.text.substr(expr::HOLE_PREFIX.size()), token.span);
+                    auto hole = std::make_shared<expr::Hole>(std::move(name), std::move(token).span);
+                    holes.push_back(hole);
+                    return hole;
+                }
+
+                // a hole that binds to any expression: `\{2 + 3}`
+                if (in_syntax and token.text == expr::HOLE_PREFIX and check(L_BRACE)) {
+                    consume(L_BRACE);
+
+                    const auto holes_size = holes.size();
+                    auto binds = parseExpr();
+                    if (holes.size() != holes_size) util::error(token.span, "A hole can't be inside another hole!");
+
+                    consume(R_BRACE);
+
+                    auto hole = std::make_shared<expr::Hole>(std::move(binds), std::move(token).span);
+                    holes.push_back(hole);
+                    return hole;
+                }
+
+
+
                 if (prefixOpsContain(token.text)) return parsePrefixOperator(std::move(token));
 
                 if constexpr (not PARSE_TYPE) return std::make_shared<expr::Name>(std::move(token).text, std::move(token).span);
@@ -477,8 +512,10 @@ public:
                 // (before the reorder below, keyword-only is vec2 in phase ONE, and vec3 in phase TWO)
                 if (phase != Phase::NONE) {
                     const auto& kw_named = phase == Phase::ONE ? names_2 : names_3;
-                    if (std::ranges::any_of(kw_named, [](const std::string& s) { return s.empty(); }))
+                    if (std::ranges::any_of(kw_named, [](const std::string& s) { return s.empty(); })) {
+                        // todo: make this span the whole zone
                         util::error(lookAhead().span, "Keyword-only parameters in a function type need a name, like `(; b: Bool) -> Any`");
+                    }
                 }
 
 
@@ -698,6 +735,7 @@ public:
     }
 
 
+
     expr::ExprPtr match() {
         using enum token::TokenKind;
 
@@ -721,7 +759,7 @@ public:
             do {
                 cases.push_back({
                     // parseMatchPattern(),
-                    parseUnpackmentPattern(),
+                    check(BACKTICK) ? syntaxPattern() : parseUnpackmentPattern(),
                     match(COMMA) ? parseExpr() : EMPTY_COND,
                     EMPTY_BODY
                 });
@@ -2023,6 +2061,23 @@ public:
     }
 
 
+    expr::unpack::PatternPtr syntaxPattern() {
+        using enum token::TokenKind;
+
+        consume(BACKTICK);
+
+        in_syntax = true;
+        holes.clear();
+
+        auto syn = parseExpr();
+        consume(BACKTICK);
+
+        in_syntax = false;
+
+        return std::make_shared<expr::unpack::Syntax>(std::move(syn), std::move(holes));
+    }
+
+
     expr::ExprPtr unpackment() {
         using enum token::TokenKind;
 
@@ -2354,10 +2409,24 @@ public:
         util::Deferred d{[this] { consume(token::TokenKind::BACKTICK); }};
 
 
+        // auto syn = std::make_shared<expr::Syntax>(parseExpr());
+
+        // holes in a syntax literal get filled in when it's evaluated: `\a + 1`.
+        // nested in a code pattern or another literal, its holes belong to the outer one
+        const bool outer = in_syntax;
+        if (not outer) {
+            in_syntax = true;
+            holes.clear();
+        }
+
         auto syn = std::make_shared<expr::Syntax>(parseExpr());
 
-        if (auto fix = analysis::exprContains<expr::Fix>(syn->expr))
-            unAddOp(fix);
+        if (not outer) syn->holes = std::move(holes);
+
+
+        in_syntax = outer;
+
+        if (auto fix = analysis::exprContains<expr::Fix>(syn->expr)) unAddOp(fix);
 
 
         return syn;

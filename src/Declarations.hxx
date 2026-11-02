@@ -1,11 +1,12 @@
 #pragma once
 
+#include <vector>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <variant>
 #include <memory>
-#include <vector>
+
 
 
 #include <boost/multiprecision/cpp_int.hpp>
@@ -16,6 +17,7 @@
 
 
 using BigInt = boost::multiprecision::cpp_int;
+
 
 namespace pie {
 
@@ -74,6 +76,11 @@ namespace value {
 
 namespace expr {
 
+
+// in case I wanna change it, maybe to something lile "$"
+inline constexpr std::string_view HOLE_PREFIX = "\\";
+
+
 // has to be pointers kuz we're forward declareing
 // has to be forward declared bc we're using in in the class bellow
 using Node = std::variant<
@@ -111,6 +118,7 @@ using Node = std::variant<
     struct UseFix            *,
     struct Import            *,
     struct SpaceAccess       *,
+    struct Hole              *,
     struct Syntax            *,
     struct Grouping          *,
     struct UnaryOp           *,
@@ -129,7 +137,12 @@ using Node = std::variant<
 >;
 
 
-using ExprPtr = std::shared_ptr<struct Expr>;
+struct Expr;
+
+using ExprPtr = std::shared_ptr<Expr>;
+using Captures = std::unordered_map<std::string, Expr*>;
+using Fillings = std::unordered_map<std::string, ExprPtr>;
+
 
 struct Expr {
     util::SourceSpan span;
@@ -144,6 +157,11 @@ struct Expr {
     virtual ~Expr() = default;
     virtual std::string stringify(const size_t = 0) const = 0;
     virtual bool involvesName(const std::string_view) const = 0;
+
+
+    virtual bool matches([[maybe_unused]] Expr* code, Captures&) const = 0;
+    virtual ExprPtr fillWith(const Fillings&) const { return nullptr; }
+
     virtual Node variant() = 0;
 };
 

@@ -170,6 +170,7 @@ public:
 
     void visitType(const type::TypePtr&);
 
+    void operator()(expr::Hole*);
     void operator()(expr::Syntax*);
 
     void operator()(expr::Type*);

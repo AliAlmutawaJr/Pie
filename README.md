@@ -56,16 +56,18 @@ If you're a windows dev and would like to contribute to Pie, writing a guide on 
 ### Todo (in order of priority)
 
 - [ ] Add pattern matching against code!
-- [ ] Improve error messages (add line and column numbers)
 - [ ] Add generators/coroutines!
-- [ ] Encode parameter's default value within the type system `= ...`
+- [ ] Improve error messages (add line and column numbers)
+- [ ] LSP
 - [ ] Design a system for variadic operators
+- [ ] World domination
+- [ ] Encode parameter's default value within the type system `= ...`
 - [ ] Make `=` and `=>` overloadable
 - [ ] Better File IO
-- [ ] Move from Make to Bake
+- [ ] Named Arguments for class constructors!
 - [ ] Breaking Out of Nested Loops
 - [ ] Bind parameter zones directly instead of flattening (internal)
-- [ ] World domination
+- [ ] Move from Make to Bake
 - [ ] Simplify Closure Captures without performance penalty (internal)
 - [ ] Clean up builtin functions code (internal)
 - [ ] `Expr::involveName()` seems to be not exhastive, especially with Closure. Check it.
@@ -167,6 +169,7 @@ If you're a windows dev and would like to contribute to Pie, writing a guide on 
 - [TheDevConnor](https://github.com/TheDevConnor)
 - [aesmail](https://github.com/aesmail)
 - [TheDevConnor](https://github.com/TheDevConnor)
+- [Noah Altunian](https://github.com/naltun)
 
 
 ## Quotes About Pie Lang:

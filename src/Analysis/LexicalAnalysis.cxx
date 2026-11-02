@@ -377,14 +377,25 @@ void LexicalAnalysis::checkPattern(expr::unpack::Pattern *pattern, [[maybe_unuse
         // nameless pack
         if (not pack->pattern) return;
         checkPattern(pack->pattern.get(), {});
+    }
+    // should I add one in the uninferred overload too?
+    // effectively allowing reassigning to outer vars..
+    else if (auto syn = dynamic_cast<expr::unpack::Syntax*>(pattern)) {
+        // holes declare their names. the same name twice is the same hole
+        std::unordered_map<std::string, ssize_t> ids;
 
-        // if (const auto id = findVariable(pack->expr->stringify()); id) {
-        //     pack->expr->var_ID = *id;
-        //     if (*id != std::to_underlying(ReservedIDs::DYNAMIC)) return;
-        // }
+        for (const auto& hole : syn->holes) {
+            auto name = hole->expr->stringify();
 
-        // pack->expr->var_ID = next();
-        // addVar(pack->expr->stringify(), pack->expr->var_ID);
+            auto [it, fresh] = ids.try_emplace(name, -1);
+
+            if (fresh) {
+                it->second = next();
+                addVar(name, it->second);
+            }
+
+            hole->var_ID = it->second;
+        }
     }
     else util::error();
 
@@ -1129,6 +1140,11 @@ void LexicalAnalysis::visitType(const type::TypePtr& type) {
     }
 }
 
+
+void LexicalAnalysis::operator()(expr::Hole *hole) {
+    std::visit(*this, hole->expr->variant());
+    hole->var_ID = hole->expr->var_ID;
+}
 
 
 void LexicalAnalysis::operator()(expr::Syntax *syn) {
