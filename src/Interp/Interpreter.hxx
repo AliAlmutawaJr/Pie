@@ -603,7 +603,7 @@ public:
                 value::Environment args_env;
 
                 bindParam(func->params[ first_idx], {std::move(ret  ), func->type.params[ first_idx]}, args_env);
-                bindParam(func->params[second_idx], {std::move(value), func->type.params[second_idx]}, args_env);
+                bindParam(func->params[second_idx], {value, func->type.params[second_idx]}, args_env);
                 // args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].expr->stringify()}, std::make_shared<value::Value>(ret  ), func->type.params[ first_idx]};
                 // args_env[func->params[second_idx].ID] = {{func->params[second_idx].expr->stringify()}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
 
@@ -633,7 +633,7 @@ public:
 
 
                 bindParam(func->params[ first_idx], {std::move(ret  ), func->type.params[ first_idx]}, args_env);
-                bindParam(func->params[second_idx], {std::move(value), func->type.params[second_idx]}, args_env);
+                bindParam(func->params[second_idx], {value, func->type.params[second_idx]}, args_env);
 
                 // args_env[func->params[1 - fold->left_to_right].ID] =
                 //     {{func->params[1 - fold->left_to_right].expr->stringify()}, std::make_shared<value::Value>(ret)  , func->type.params[1 - fold->left_to_right]};
@@ -725,7 +725,7 @@ public:
 
             value::Environment args_env;
             bindParam(func->params[ first_idx], {std::move(ret  ), func->type.params[ first_idx]}, args_env);
-            bindParam(func->params[second_idx], {std::move(value), func->type.params[second_idx]}, args_env);
+            bindParam(func->params[second_idx], {value, func->type.params[second_idx]}, args_env);
             // args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].expr->stringify()}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
             // args_env[func->params[second_idx].ID] = {{func->params[second_idx].expr->stringify()}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
 
@@ -848,7 +848,7 @@ public:
 
 
                 bindParam(func->params[ first_idx], {std::move(ret  ), func->type.params[ first_idx]}, args_env);
-                bindParam(func->params[second_idx], {std::move(value), func->type.params[second_idx]}, args_env);
+                bindParam(func->params[second_idx], {value, func->type.params[second_idx]}, args_env);
                 // args_env[func->params[ first_idx].ID] = {{func->params[ first_idx].expr->stringify()}, std::make_shared<value::Value>(ret)  , func->type.params[ first_idx]};
                 // args_env[func->params[second_idx].ID] = {{func->params[second_idx].expr->stringify()}, std::make_shared<value::Value>(value), func->type.params[second_idx]};
 
