@@ -273,9 +273,9 @@ function(configure_pie_target target)
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wpedantic>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wredundant-move>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wpessimizing-move>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wreturn-std-move>
+        # $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wreturn-std-move> # gcc doesn't support these flags
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wself-move>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wmove>
+        # $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wmove> # gcc doesn't support these flags
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-braces>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-deprecated-declarations>
     )
