@@ -52,9 +52,350 @@
 */
 
 
+TEST_CASE("Code Patterns", "[Match][Syntax][Hole]") {
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+print = __builtin_print;
+match `1 + 2` { `$a + $b` => print(a, b); };
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    1
+} Syntax {
+    2
+})");
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+x = 1; y = 2;
+same = (`code`) => match code { `$a + $a` => "same"; _ => "different"; };
+__builtin_print(same(x + x), same(x + y));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(same different)");
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+infix * = (a, b) => __builtin_mul(a, b);
+kind = (`code`) => match code { `$a * $b` => "product"; `$a + $b` => "sum"; _ => "other"; };
+__builtin_print(kind(1 + 2), kind(1 * 2), kind(1));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(sum product other)");
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+match `1 + 2` { `${2 + 3} + 2` => __builtin_print(2 + 3); };
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    1
+})");
+}
+{
+    const auto src = R"PIE(
+infix * = (a, b) => __builtin_mul(a, b);
+match `2 * 3` { `$+ * $1` => __builtin_print(+, 1); };
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    2
+} Syntax {
+    3
+})");
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+kind = (`code`) => match code {
+    `($p) => $p + 1` => "adds one";
+    `(x) => $body`   => "takes x";
+    _                => "other";
+};
+__builtin_print(kind((y) => y + 1), kind((x) => 0), kind((y) => 0));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(adds one takes x other)");
+}
+{
+    const auto src = R"PIE(
+x = 1;
+kind = (`code`) => match code { `match $e { = 0 => $z; $n => $m; }` => "zero or else"; _ => "other"; };
+__builtin_print(kind(match x { = 0 => 1; n => n; }), kind(match x { = 1 => 1; n => n; }));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(zero or else other)");
+}
+{
+    const auto src = R"PIE(
+f = (a, b) => a;
+match `f(1, b = 2)` { `f($a, b = $b)` => __builtin_print(a, b); };
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    1
+} Syntax {
+    2
+})");
+}
+}
 
 
-// ============================================
+TEST_CASE("Splicing", "[Match][Syntax][Hole]") {
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+infix * = (a, b) => __builtin_mul(a, b);
+swap = (`code`) => match code { `$a + $b` => `$b + $a`; };
+__builtin_print(swap(1 + 2 * 3));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    ((2 * 3) + 1)
+})");
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+n = 10; s = "hi"; b = true;
+__builtin_print(`f($n, $s, $b)`);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    f(10, "hi", true)
+})");
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+infix * = (a, b) => __builtin_mul(a, b);
+n = 10;
+__builtin_print(__builtin_eval(`${n * 2} + 1`));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(21)");
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+v = 0;
+make = (`param`, `body`) => `($param) => $body`;
+inc = __builtin_eval(make(v, v + 1));
+__builtin_print(inc(41));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(42)");
+}
+{
+    const auto src = R"PIE(
+infix * = (a, b) => __builtin_mul(a, b);
+y = 2;
+simplify = (`code`) => match code { `$a * 1` => a; other => other; };
+__builtin_print(__builtin_eval(simplify(y * 1)), __builtin_eval(simplify(y * y)));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(2 4)");
+}
+{
+    const auto src = R"PIE(
+f = (...xs) => 0;
+forward = (`code`) => match code { `f($...args)` => `g(0, $...args)`; };
+__builtin_print(forward(f(1, 2)), forward(f()));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    g(0, 1, 2)
+} Syntax {
+    g(0)
+})");
+}
+{
+    const auto src = R"PIE(
+pieces = {1, "two", true};
+__builtin_print(`g($...pieces)`);
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    g(1, "two", true)
+})");
+}
+{
+    const auto src = R"PIE(
+g = (x) => x;
+__builtin_print(`f($g)`);
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+__builtin_print(`f($nothing)`);
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+n = 5;
+__builtin_print(`f($...n)`);
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+__builtin_print(`f(1 +`);
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
+
+TEST_CASE("Pack Holes", "[Match][Syntax][Hole]") {
+{
+    const auto src = R"PIE(
+f = (...xs) => 0;
+count = (`code`) => match code { `f($...args)` => __builtin_len({args...}); };
+__builtin_print(count(f()), count(f(1)), count(f(1, 2, 3)));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(0 1 3)");
+}
+{
+    const auto src = R"PIE(
+f = (...xs) => 0;
+match `f(1, 2, 3, 4)` { `f($first, $...middle, $last)` => __builtin_print(first, last, middle...); };
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    1
+} Syntax {
+    4
+} Syntax {
+    2
+} Syntax {
+    3
+})");
+}
+{
+    const auto src = R"PIE(
+f = (...xs) => 0;
+mirrored = (`code`) => match code { `f($...a, 0, $...a)` => "yes"; _ => "no"; };
+__builtin_print(mirrored(f(1, 2, 0, 1, 2)), mirrored(f(0)), mirrored(f(1, 0, 2)), mirrored(f(1, 2, 0, 1)));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(yes yes no no)");
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+match `f(10, 20)` { `f($...{1 + 2})` => __builtin_print(1 + 2...); };
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    10
+} Syntax {
+    20
+})");
+}
+{
+    const auto src = R"PIE(
+match `{1, 2, 3}` { `{$head, $..._}` => __builtin_print(head); };
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    1
+})");
+}
+{
+    const auto src = R"PIE(
+match `{1, 2, 3}` { `{$head, $...tail}` => __builtin_print(`{$...tail, $head}`); };
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    {2, 3, 1}
+})");
+}
+{
+    const auto src = R"PIE(
+match `f(1)` { `f($...)` => 0; };
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+match `f(1, 2)` { `f($...a, $...b)` => 0; };
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+match `1 + 2` { `$...a + 2` => 0; };
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
+
+
+TEST_CASE("Hole Prefix", "[Match][Syntax][Hole]") {
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+$x = 10;
+match `$$x + 1` { `$$x + $n` => __builtin_print(n); };
+n = 3;
+__builtin_print(__builtin_eval(`$$x + $n`));
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    1
+}
+13)");
+}
+{
+    const auto src = R"PIE(
+prefix(LOW +) $ = (x) => __builtin_neg(x);
+match `$$ 5` { `$$ $x` => __builtin_print(x); };
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(Syntax {
+    5
+})");
+}
+{
+    const auto src = R"PIE(
+match `f(1)` { `$ x` => 0; };
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+prefix(LOW +) $ = (x) => __builtin_neg(x);
+match `f(1)` { `$ 5` => 0; };
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+{
+    const auto src = R"PIE(
+infix + = (a, b) => __builtin_add(a, b);
+match `f(1)` { `${$a + 1}` => 0; };
+)PIE";
+
+    REQUIRE_THROWS(pie::test::run(src));
+}
+}
 
 
 

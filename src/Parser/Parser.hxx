@@ -126,7 +126,8 @@ public:
     {}
 
 
-    [[nodiscard]] bool atEnd(const size_t offset = 0) const noexcept {
+    [[nodiscard]] bool atEnd(const size_t offset = 0) noexcept {
+        // return check(token::TokenKind::END, offset);
         const auto distance = std::distance(iterator_beginning, token_iterator);
         return distance + offset >= tokens_size or std::next(token_iterator, offset)->kind == token::TokenKind::END;
 
@@ -314,7 +315,7 @@ public:
             case L_BRACE : return LBrace();
 
             // either a grouping or a closure - (or a closure type)
-            case L_PAREN : return LParen<PARSE_TYPE, CTX>(std::move(token));
+            case L_PAREN : return LParen<CTX>(std::move(token));
 
             case BACKTICK: return backticks(); 
 
@@ -2305,7 +2306,7 @@ public:
     }
 
 
-    template <bool PARSE_TYPE = true, Context CTX>
+    template <Context CTX>
     expr::ExprPtr LParen(token::Token token) {
         using enum token::TokenKind;
 
@@ -2396,7 +2397,7 @@ public:
 
 
         const bool fold_expr = [this] {
-            for (size_t i{}, depth{}; not atEnd(i); ++i) {
+            for (size_t i{}, depth{}; not check(END, i); ++i) {
                 if (check(L_PAREN, i) or check(L_BRACE, i)) {
                     ++depth;
                     continue;
@@ -2412,7 +2413,7 @@ public:
 
                 if (check(COLON, i)) return false;
                 if (check(ELLIPSIS, i)) {
-                    if (check(ELLIPSIS, 0)) return true;
+                    if (i == 0) return true;
 
                     const auto before = lookAhead(i - 1).text;
                     if (opsContain(before) and findOp(before)->type() == INFIX) return true;
@@ -2426,11 +2427,10 @@ public:
 
         // auto exprs = parseCommaList();
 
-        constexpr bool DONT_PARSE_TYPE = false;
 
         std::vector<expr::ExprPtr> exprs;
 
-        exprs.push_back(parseExpr<DONT_PARSE_TYPE, Context::TUPLE>());
+        exprs.push_back(parseExpr<true, Context::TUPLE>());
         if (match(ELLIPSIS)) exprs[0] = std::make_shared<expr::Expansion>(std::move(exprs)[0]);
 
         // tuple
@@ -2438,7 +2438,7 @@ public:
             if (match(R_PAREN)) return std::make_shared<expr::Tuple>(std::move(exprs));
 
             do {
-                exprs.push_back(parseExpr<DONT_PARSE_TYPE, Context::TUPLE>());
+                exprs.push_back(parseExpr<true, Context::TUPLE>());
                 if (match(ELLIPSIS)) exprs.back() = std::make_shared<expr::Expansion>(std::move(exprs).back());
 
                 if (match(R_PAREN)) break;
