@@ -7,6 +7,12 @@ space std {
     len   = __builtin_len;
     isEmpty  = (cont) => __builtin_eq(__builtin_len(cont), 0);
 
+    get = __builtin_get;
+    set = __builtin_set;
+
+    push = __builtin_push;
+    pop  = __builtin_pop;
+
     eval  = __builtin_eval ;
     reset = __builtin_reset;
     defer = __builtin_defer;
@@ -21,6 +27,7 @@ space std {
 
     Pack = (...args) => args;
     PackOf = (T: Type) => (...args: ...T): ...T => args;
+    toPack = __builtin_into_pack;
 
 
     infix + = (a: String, b: String) => __builtin_concat(a, b);

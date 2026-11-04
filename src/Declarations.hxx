@@ -77,8 +77,8 @@ namespace value {
 namespace expr {
 
 
-// in case I wanna change it, maybe to something lile "$"
-inline constexpr std::string_view HOLE_PREFIX = "\\";
+// in case I wanna change it, maybe to something like "$"
+inline constexpr std::string_view HOLE_PREFIX = "$";
 
 
 // has to be pointers kuz we're forward declareing
@@ -140,7 +140,7 @@ using Node = std::variant<
 struct Expr;
 
 using ExprPtr = std::shared_ptr<Expr>;
-using Captures = std::unordered_map<std::string, Expr*>;
+using Captures = std::unordered_map<std::string, ExprPtr>;
 using Fillings = std::unordered_map<std::string, ExprPtr>;
 
 

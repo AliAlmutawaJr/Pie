@@ -52,13 +52,17 @@ inline bool sameType(const type::TypePtr& mine, const type::TypePtr& theirs) {
 
 
 
-inline ExprPtr splice(const ExprPtr& e, const Fillings& fillings) {
+inline ExprPtr fill(const ExprPtr& e, const Fillings& fillings) {
     if (not e) return e;
 
     auto spliced = e->fillWith(fillings);
 
     return spliced ? spliced : e;
 }
+
+
+inline bool sequenceMatches(const std::vector<ExprPtr>& mine, const std::vector<ExprPtr>& theirs, Captures& captures);
+inline std::vector<ExprPtr> fillSequence(const std::vector<ExprPtr>& es, const Fillings& fillings);
 
 
 struct Num : Expr {
@@ -158,7 +162,7 @@ struct FString : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<FString>(*this);
-        for (auto& [_, e] : copy->exprs) e = splice(e, fillings);
+        for (auto& [_, e] : copy->exprs) e = fill(e, fillings);
         return copy;
     }
 
@@ -227,12 +231,7 @@ struct List : Expr {
 
     bool matches(Expr* code, Captures& captures) const override {
         const auto* that = dynamic_cast<const List*>(code);
-        if (not that or elements.size() != that->elements.size()) return false;
-
-        for (const auto& [mine, theirs] : std::views::zip(elements, that->elements))
-            if (not mine->matches(theirs.get(), captures)) return false;
-
-        return true;
+        return that and sequenceMatches(elements, that->elements, captures);
     }
 
     bool involvesName(const std::string_view sv) const override {
@@ -243,7 +242,7 @@ struct List : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<List>(*this);
-        for (auto& e : copy->elements) e = splice(e, fillings);
+        copy->elements = fillSequence(elements, fillings);
         return copy;
     }
 
@@ -293,8 +292,8 @@ struct Map : Expr {
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Map>(*this);
         for (auto& [key, value] : copy->items) {
-            key   = splice(key  , fillings);
-            value = splice(value, fillings);
+            key   = fill(key  , fillings);
+            value = fill(value, fillings);
         }
         return copy;
     }
@@ -327,12 +326,7 @@ struct Tuple : Expr {
 
     bool matches(Expr* code, Captures& captures) const override {
         const auto* that = dynamic_cast<const Tuple*>(code);
-        if (not that or elts.size() != that->elts.size()) return false;
-
-        for (const auto& [mine, theirs] : std::views::zip(elts, that->elts))
-            if (not mine->matches(theirs.get(), captures)) return false;
-
-        return true;
+        return that and sequenceMatches(elts, that->elts, captures);
     }
 
     bool involvesName(const std::string_view sv) const override {
@@ -345,7 +339,7 @@ struct Tuple : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Tuple>(*this);
-        for (auto& e : copy->elts) e = splice(e, fillings);
+        copy->elts = fillSequence(elts, fillings);
         return copy;
     }
 
@@ -374,7 +368,7 @@ struct Expansion : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Expansion>(*this);
-        copy->pack = splice(pack, fillings);
+        copy->pack = fill(pack, fillings);
         return copy;
     }
 
@@ -409,7 +403,7 @@ struct UnaryFold : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<UnaryFold>(*this);
-        copy->pack = splice(pack, fillings);
+        copy->pack = fill(pack, fillings);
         return copy;
     }
 
@@ -446,8 +440,8 @@ struct SeparatedUnaryFold : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<SeparatedUnaryFold>(*this);
-        copy->lhs = splice(lhs, fillings);
-        copy->rhs = splice(rhs, fillings);
+        copy->lhs = fill(lhs, fillings);
+        copy->rhs = fill(rhs, fillings);
         return copy;
     }
 
@@ -504,9 +498,9 @@ struct BinaryFold : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<BinaryFold>(*this);
-        copy->pack = splice(pack, fillings);
-        copy->init = splice(init, fillings);
-        copy->sep = splice(sep, fillings);
+        copy->pack = fill(pack, fillings);
+        copy->init = fill(init, fillings);
+        copy->sep = fill(sep, fillings);
         return copy;
     }
 
@@ -556,8 +550,8 @@ struct Assignment : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Assignment>(*this);
-        copy->lhs = splice(lhs, fillings);
-        copy->rhs = splice(rhs, fillings);
+        copy->lhs = fill(lhs, fillings);
+        copy->rhs = fill(rhs, fillings);
         return copy;
     }
 
@@ -592,7 +586,7 @@ struct InferredAssignment : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<InferredAssignment>(*this);
-        copy->rhs = splice(rhs, fillings);
+        copy->rhs = fill(rhs, fillings);
         return copy;
     }
 
@@ -603,19 +597,23 @@ struct InferredAssignment : Expr {
 
 struct Hole : Expr {
     ExprPtr expr;
+    bool pack;
 
-
-    explicit Hole(ExprPtr e, util::SourceSpan sp = {}) noexcept
+    explicit Hole(ExprPtr e, const bool p = false, util::SourceSpan sp = {}) noexcept
     :
     Expr{std::move(sp)},
-    expr{std::move(e)}
+    expr{std::move(e)},
+    pack{p}
     { }
 
 
     std::string stringify([[maybe_unused]] const size_t indent = 0) const override {
         auto name = expr->stringify();
 
+        if (pack) return std::string{HOLE_PREFIX} + "..." + name;
+
         if (dynamic_cast<const Name*>(expr.get())) return std::string{HOLE_PREFIX} + name;
+
         return std::string{HOLE_PREFIX} + '{' + name + '}';
     }
 
@@ -624,6 +622,11 @@ struct Hole : Expr {
     }
 
     bool matches(Expr* code, Captures& captures) const override {
+        // `sequenceMatches` handles rest holes..
+        // getting here means one isn't in a list of things
+        if (pack) util::error();
+
+
         auto name = expr->stringify();
 
         // the same hole twice (`\a + \a`) has to capture the same code both times
@@ -632,11 +635,15 @@ struct Hole : Expr {
             return it->second->matches(code, none);
         }
 
-        captures[name] = code;
+        captures[name] = ExprPtr{ExprPtr{}, code};
         return true;
     }
 
     ExprPtr fillWith(const Fillings& fillings) const override {
+        // `fillSequence` handles rest holes..
+        // getting here means one isn't in a list of things
+        if (pack) util::error();
+
         auto name = expr->stringify();
 
         if (not fillings.contains(name)) util::error("Name '" + name + "' not found in fillings!");
@@ -646,6 +653,84 @@ struct Hole : Expr {
 
     Node variant() override { return this; }
 };
+
+
+
+// these need to be defined here since they need the full definition of expr::Hole
+inline bool sequenceMatches(const std::vector<ExprPtr>& mine, const std::vector<ExprPtr>& theirs, Captures& captures) {
+    const auto isPack = [] (const ExprPtr& e) {
+        const auto hole = dynamic_cast<const Hole*>(e.get());
+        return hole and hole->pack;
+    };
+
+
+    std::string name;
+    size_t rests{};
+
+    for (const auto& e : mine | std::views::filter(isPack)) {
+        const auto n = static_cast<const Hole&>(*e).expr->stringify();
+
+        if (rests != 0 and n != name) util::error("Pack holes in the same list of things need to have the same name!");
+
+        name = n;
+        ++rests;
+    }
+
+
+    const size_t singles = mine.size() - rests;
+
+    if (rests == 0 and theirs.size() != singles) return false;
+    if (theirs.size() < singles) return false;
+
+    // every copy of the pack hole captures the same things, so they all take the same number of them
+    if (rests != 0 and (theirs.size() - singles) % rests != 0) return false;
+    const size_t each = rests == 0 ? 0 : (theirs.size() - singles) / rests;
+
+
+    size_t t{};
+    for (const auto& m : mine) {
+        if (not isPack(m)) {
+            if (not m->matches(theirs[t++].get(), captures)) return false;
+            continue;
+        }
+
+        auto taken = std::make_shared<List>();
+        for (size_t k{}; k < each; ++k) taken->elements.push_back(ExprPtr{ExprPtr{}, theirs[t++].get()});
+
+        // the same pack hole again has to capture the same things
+        if (const auto it = captures.find(name); it != captures.end()) {
+            Captures none;
+            if (not it->second->matches(taken.get(), none)) return false;
+        }
+        else captures[name] = std::move(taken);
+    }
+
+    return true;
+}
+
+
+
+inline std::vector<ExprPtr> fillSequence(const std::vector<ExprPtr>& es, const Fillings& fillings) {
+    std::vector<ExprPtr> spliced;
+
+    for (const auto& e : es) {
+        const auto hole = dynamic_cast<const Hole*>(e.get());
+
+        if (not hole or not hole->pack) {
+            spliced.push_back(fill(e, fillings));
+            continue;
+        }
+
+        // a rest pack is filled with a `List` of everything that goes in its place
+        const auto& filling = fillings.at(hole->expr->stringify());
+        const auto list = dynamic_cast<const List*>(filling.get());
+        if (not list) util::error("Pack hole `" + hole->stringify() + "` has to be filled with a list-like thing!");
+
+        spliced.insert(spliced.end(), list->elements.begin(), list->elements.end());
+    }
+
+    return spliced;
+}
 
 
 
@@ -673,7 +758,7 @@ struct Syntax : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Syntax>(*this);
-        copy->expr = splice(expr, fillings);
+        copy->expr = fill(expr, fillings);
         return copy;
     }
 
@@ -854,7 +939,7 @@ inline PatternPtr splicePattern(const Pattern *pattern, const Fillings& fillings
 
     if (auto e = dynamic_cast<const Expr*>(pattern)) {
         auto c = std::make_shared<Expr>(*e);
-        c->expr = splice(e->expr, fillings);
+        c->expr = fill(e->expr, fillings);
         copy = std::move(c);
     }
     else if (auto list = dynamic_cast<const List*>(pattern)) {
@@ -872,7 +957,7 @@ inline PatternPtr splicePattern(const Pattern *pattern, const Fillings& fillings
     }
     else util::error();
 
-    copy->value = splice(pattern->value, fillings);
+    copy->value = fill(pattern->value, fillings);
     return copy;
 }
 
@@ -974,7 +1059,7 @@ struct Unpackment : Expr {
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Unpackment>(*this);
         copy->pattern = unpack::splicePattern(pattern.get(), fillings);
-        copy->rhs = splice(rhs, fillings);
+        copy->rhs = fill(rhs, fillings);
         return copy;
     }
 
@@ -1019,7 +1104,7 @@ struct InferredUnpackment : Expr {
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<InferredUnpackment>(*this);
         copy->pattern = unpack::splicePattern(pattern.get(), fillings);
-        copy->rhs = splice(rhs, fillings);
+        copy->rhs = fill(rhs, fillings);
         return copy;
     }
 
@@ -1084,7 +1169,7 @@ struct Class : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Class>(*this);
-        for (auto& [_, __, value] : copy->fields) value = splice(value, fillings);
+        for (auto& [_, __, value] : copy->fields) value = fill(value, fillings);
         return copy;
     }
 
@@ -1187,12 +1272,12 @@ struct Match : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Match>(*this);
-        copy->expr = splice(expr, fillings);
+        copy->expr = fill(expr, fillings);
 
         for (auto& kase : copy->cases) {
             kase.pattern = unpack::splicePattern(kase.pattern.get(), fillings);
-            kase.guard   = splice(kase.guard, fillings);
-            kase.body    = splice(kase.body , fillings);
+            kase.guard   = fill(kase.guard, fillings);
+            kase.body    = fill(kase.body , fillings);
         }
 
         return copy;
@@ -1304,9 +1389,9 @@ struct Loop : Expr {
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Loop>(*this);
         copy->var  = unpack::splicePattern(var.get(), fillings);
-        copy->kind = splice(kind, fillings);
-        copy->body = splice(body, fillings);
-        copy->els  = splice(els , fillings);
+        copy->kind = fill(kind, fillings);
+        copy->body = fill(body, fillings);
+        copy->els  = fill(els , fillings);
         return copy;
     }
 
@@ -1351,7 +1436,7 @@ struct Break : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Break>(*this);
-        copy->expr = splice(expr, fillings);
+        copy->expr = fill(expr, fillings);
         return copy;
     }
 
@@ -1385,7 +1470,7 @@ struct Continue : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Continue>(*this);
-        copy->expr = splice(expr, fillings);
+        copy->expr = fill(expr, fillings);
         return copy;
     }
 
@@ -1446,9 +1531,9 @@ struct ListComp : Expr {
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<ListComp>(*this);
         copy->var   = unpack::splicePattern(var.get(), fillings);
-        copy->kind  = splice(kind , fillings);
-        copy->guard = splice(guard, fillings);
-        copy->body  = splice(body , fillings);
+        copy->kind  = fill(kind , fillings);
+        copy->guard = fill(guard, fillings);
+        copy->body  = fill(body , fillings);
         return copy;
     }
 
@@ -1530,10 +1615,10 @@ struct MapComp : Expr {
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<MapComp>(*this);
         copy->var   = unpack::splicePattern(var.get(), fillings);
-        copy->kind  = splice(kind , fillings);
-        copy->guard = splice(guard, fillings);
-        copy->body1 = splice(body1, fillings);
-        copy->body2 = splice(body2, fillings);
+        copy->kind  = fill(kind , fillings);
+        copy->guard = fill(guard, fillings);
+        copy->body1 = fill(body1, fillings);
+        copy->body2 = fill(body2, fillings);
         return copy;
     }
 
@@ -1567,7 +1652,7 @@ struct Access : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Access>(*this);
-        copy->var = splice(var, fillings);
+        copy->var = fill(var, fillings);
         return copy;
     }
 
@@ -1601,12 +1686,7 @@ struct Namespace : Expr {
 
     bool matches(Expr* code, Captures& captures) const override {
         const auto* that = dynamic_cast<const Namespace*>(code);
-        if (not that or name != that->name or space.size() != that->space.size()) return false;
-
-        for (const auto& [mine, theirs] : std::views::zip(space, that->space))
-            if (not mine->matches(theirs.get(), captures)) return false;
-
-        return true;
+        return that and name == that->name and sequenceMatches(space, that->space, captures);
     }
 
     bool involvesName(const std::string_view) const override {
@@ -1615,7 +1695,7 @@ struct Namespace : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Namespace>(*this);
-        for (auto& e : copy->space) e = splice(e, fillings);
+        copy->space = fillSequence(space, fillings);
         return copy;
     }
 
@@ -1863,7 +1943,7 @@ struct Grouping : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Grouping>(*this);
-        copy->expr = splice(expr, fillings);
+        copy->expr = fill(expr, fillings);
         return copy;
     }
 
@@ -1899,7 +1979,7 @@ struct UnaryOp : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<UnaryOp>(*this);
-        copy->expr = splice(expr, fillings);
+        copy->expr = fill(expr, fillings);
         return copy;
     }
 
@@ -1937,8 +2017,8 @@ struct BinOp : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<BinOp>(*this);
-        copy->lhs = splice(lhs, fillings);
-        copy->rhs = splice(rhs, fillings);
+        copy->lhs = fill(lhs, fillings);
+        copy->rhs = fill(rhs, fillings);
         return copy;
     }
 
@@ -1973,7 +2053,7 @@ struct PostOp : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<PostOp>(*this);
-        copy->expr = splice(expr, fillings);
+        copy->expr = fill(expr, fillings);
         return copy;
     }
 
@@ -2010,7 +2090,7 @@ struct CircumOp : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<CircumOp>(*this);
-        copy->expr = splice(expr, fillings);
+        copy->expr = fill(expr, fillings);
         return copy;
     }
 
@@ -2074,7 +2154,7 @@ struct OpCall : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<OpCall>(*this);
-        for (auto& e : copy->exprs) e = splice(e, fillings);
+        for (auto& e : copy->exprs) e = fill(e, fillings);
         return copy;
     }
 
@@ -2122,12 +2202,14 @@ struct Call : Expr {
 
     bool matches(Expr* code, Captures& captures) const override {
         const auto* that = dynamic_cast<const Call*>(code);
-        if (not that or args.size() != that->args.size() or named_args.size() != that->named_args.size()) return false;
+
+        // not checking positional args because a \...pack hole may be present
+        if (not that or named_args.size() != that->named_args.size()) return false;
 
         if (not func->matches(that->func.get(), captures)) return false;
 
-        for (const auto& [mine, theirs] : std::views::zip(args, that->args))
-            if (not mine->matches(theirs.get(), captures)) return false;
+        if (not sequenceMatches(args, that->args, captures)) return false;
+
 
         for (const auto& [name, mine] : named_args) {
             const auto it = that->named_args.find(name);
@@ -2154,9 +2236,10 @@ struct Call : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Call>(*this);
-        copy->func = splice(func, fillings);
-        for (auto& e : copy->args) e = splice(e, fillings);
-        for (auto& [_, e] : copy->named_args) e = splice(e, fillings);
+        copy->func = fill(func, fillings);
+        copy->args = fillSequence(args, fillings);
+        for (auto& e : copy->args) e = fill(e, fillings);
+        for (auto& [_, e] : copy->named_args) e = fill(e, fillings);
         return copy;
     }
 
@@ -2319,9 +2402,10 @@ struct Closure : Expr {
         };
 
 
-        // 0: (a, b)    1: (a; b), (a, b;), (; a, b)    2: (a; b; c), (a; b;), (; a; b)
-        const int walls = pos_params.empty() and kw_params.empty() ? 0
-                        : params.empty() ? 1 : 2;
+        // 0: (a, b)
+        // 1: (a; b), (a, b;), (; a, b)
+        // 2: (a; b; c), (a; b;), (; a; b)
+        const int walls = pos_params.empty() and kw_params.empty() ? 0 : params.empty() ? 1 : 2;
 
 
         std::string s = "(";
@@ -2407,7 +2491,7 @@ struct Closure : Expr {
 
             if (not paramMatches(mine, his, captures)) return false;
             if (my_def /* and his_def */ and not my_def->matches(his_def.get(), captures)) return false;
-            if (sameType(my_param_type, his_param_type)) return false;
+            if (not sameType(my_param_type, his_param_type)) return false;
         }
 
 
@@ -2430,7 +2514,7 @@ struct Closure : Expr {
 
             if (not paramMatches(mine, his, captures)) return false;
             if (my_def /* and his_def */ and not my_def->matches(his_def.get(), captures)) return false;
-            if (sameType(my_param_type, his_param_type)) return false;
+            if (not sameType(my_param_type, his_param_type)) return false;
         }
 
 
@@ -2453,7 +2537,7 @@ struct Closure : Expr {
 
             if (not paramMatches(mine, his, captures)) return false;
             if (my_def /* and his_def */ and not my_def->matches(his_def.get(), captures)) return false;
-            if (sameType(my_param_type, his_param_type)) return false;
+            if ( not sameType(my_param_type, his_param_type)) return false;
         }
 
 
@@ -2471,7 +2555,7 @@ struct Closure : Expr {
                 if (std::holds_alternative<RegularParam>(param)) {
                     auto& p = get<RegularParam>(param);
                     const auto before = p.expr;
-                    p.expr = splice(p.expr, fillings);
+                    p.expr = fill(p.expr, fillings);
 
                     // a param that came from a hole is named by the code that filled it, so it takes that name's ID.
                     // that way, the rest of that code (usually the body) finds the param
@@ -2483,9 +2567,9 @@ struct Closure : Expr {
         }
 
         for (auto* zone : {&copy->pos_defaults, &copy->defaults, &copy->kw_defaults})
-            for (auto& def : *zone) def = splice(def, fillings);
+            for (auto& def : *zone) def = fill(def, fillings);
 
-        copy->body = splice(body, fillings);
+        copy->body = fill(body, fillings);
         return copy;
     }
 
@@ -2537,12 +2621,7 @@ struct Block : Expr {
 
     bool matches(Expr* code, Captures& captures) const override {
         const auto* that = dynamic_cast<const Block*>(code);
-        if (not that or lines.size() != that->lines.size()) return false;
-
-        for (const auto& [mine, theirs] : std::views::zip(lines, that->lines))
-            if (not mine->matches(theirs.get(), captures)) return false;
-
-        return true;
+        return that and sequenceMatches(lines, that->lines, captures);
     }
 
     bool involvesName(const std::string_view sv) const override {
@@ -2555,7 +2634,7 @@ struct Block : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Block>(*this);
-        for (auto& e : copy->lines) e = splice(e, fillings);
+        copy->lines = fillSequence(lines, fillings);
         return copy;
     }
 
@@ -2613,7 +2692,7 @@ struct Cascade : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         auto copy = std::make_shared<Cascade>(*this);
-        for (auto& e : copy->lines) e = splice(e, fillings);
+        for (auto& e : copy->lines) e = fill(e, fillings);
         return copy;
     }
 
@@ -2674,7 +2753,7 @@ struct Fix : Expr {
 
     ExprPtr fillWith(const Fillings& fillings) const override {
         std::shared_ptr<Fix> copy = clone();
-        for (auto& f : copy->funcs) f = splice(f, fillings);
+        for (auto& f : copy->funcs) f = fill(f, fillings);
         return copy;
     }
 

@@ -1477,11 +1477,27 @@ public:
             if constexpr (MODE != VARIADIC) {
                 for (const auto& hole : code->holes) {
                     const auto name = hole->expr->stringify();
+
+                    value::ValuePtr value;
+                    type::TypePtr type;
+                    if (hole->pack) {
+                        std::vector<value::Value> pieces;
+                        for (const auto& piece : static_cast<const expr::List&>(*captures.at(name)).elements)
+                            pieces.push_back(piece->variant());
+
+                        value = std::make_shared<value::Value>(value::makePack(std::move(pieces)));
+                        type = type::VariadicOf(type::builtins::Syntax());
+                    }
+                    else {
+                        value = std::make_shared<value::Value>(captures.at(name)->variant());
+                        type = type::builtins::Syntax();
+                    }
+
                     addVar(
                         name,
                         hole->var_ID,
-                        std::make_shared<value::Value>(captures.at(name)->variant()),
-                        type::builtins::Syntax()
+                        std::move(value),
+                        std::move(type)
                     );
                 }
             }
@@ -2593,28 +2609,43 @@ There are no mistakes with art.)";
 
                 return std::visit(*this, hole->expr->variant()).value;
             }();
-            auto& filling = fillings[name];
 
-            if (std::holds_alternative<expr::Node>(value)) {
-                expr::Expr* code = std::visit([] (auto* node) -> expr::Expr* { return node; }, get<expr::Node>(value));
-                filling = expr::ExprPtr{expr::ExprPtr{}, code}; // doesn't own it: the code it came from does
+
+
+            const auto toCode = [this, &hole] (const value::Value& value) -> expr::ExprPtr {
+                if (std::holds_alternative<expr::Node>(value))
+                    return expr::ExprPtr{expr::ExprPtr{}, expr::toExpr(get<expr::Node>(value))}; // non-owning!
+
+                // return std::make_shared<expr::Syntax>();
+                if (std::holds_alternative<BigInt     >(value)) return std::make_shared<expr::Num   >(stringify(value)       , hole->span);
+                if (std::holds_alternative<double     >(value)) return std::make_shared<expr::Num   >(stringify(value)       , hole->span);
+                if (std::holds_alternative<bool       >(value)) return std::make_shared<expr::Bool  >(get<bool>(value)       , hole->span);
+                if (std::holds_alternative<std::string>(value)) return std::make_shared<expr::String>(get<std::string>(value), hole->span);
+
+                util::error("Can't fill a hole with a non-syntax. Got: " + stringify(value));
+            };
+
+            if (not hole->pack) {
+                fillings[name] = toCode(value);
+                continue;
             }
-            else if (std::holds_alternative<BigInt     >(value)) filling = std::make_shared<expr::Num   >(stringify(value), hole->span);
-            else if (std::holds_alternative<double     >(value)) filling = std::make_shared<expr::Num   >(stringify(value), hole->span);
-            else if (std::holds_alternative<bool       >(value)) filling = std::make_shared<expr::Bool  >(get<bool>(value), hole->span);
-            else if (std::holds_alternative<std::string>(value)) filling = std::make_shared<expr::String>(get<std::string>(value), hole->span);
-            else util::error(
-                "Can only fill hole `" + hole->stringify() + "` with code, a number, a string, or a boolean. Got: " +
-                stringify(value) + " which is " + typeOf(value)->text()
-            );
+
+            // a rest hole takes a pack or a list, and is filled with a `List` of all of it
+            const value::Elements* elements = nullptr;
+            if      (std::holds_alternative<value::Pack>(value)) elements = get<value::Pack>(value).get();
+            else if (std::holds_alternative<value::List>(value)) elements = get<value::List>(value).elts.get();
+            else util::error("Rest hole `" + hole->stringify() + "` can only be filled with a pack or a list. Got: " + stringify(value));
+
+            auto list = std::make_shared<expr::List>();
+            for (const auto& element : elements->values) list->elements.push_back(toCode(element));
+
+            fillings[name] = std::move(list);
         }
 
-        auto code = expr::splice(syn->expr, fillings);
+        auto code = expr::fill(syn->expr, fillings);
 
         spliced_code.push_back(code);
         return {code->variant(), type::builtins::Syntax()};
-
-        // return {syn->expr->variant(), type::builtins::Syntax()};
     }
 
 
@@ -7236,7 +7267,7 @@ There are no mistakes with art.)";
 
     void addBuiltinGlobals(const size_t ID) {
 
-        auto nextID =  [ID = ID] mutable {
+        auto nextID = [ID = ID] mutable {
             auto index = ID++;
             // skip reserved IDs
             if (index == std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::UNNAMED)) {

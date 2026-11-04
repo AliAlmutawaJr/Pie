@@ -200,34 +200,65 @@ public:
 
 
             case NAME:
-                // \name is valid, but "\" on its own is not
-                if (
-                    in_syntax and
-                    token.text.starts_with(expr::HOLE_PREFIX) and
-                    token.text.size() > expr::HOLE_PREFIX.size() and
-                    std::isalpha(static_cast<unsigned char>(token.text[expr::HOLE_PREFIX.size()]))
-                ) {
-                    auto name = std::make_shared<expr::Name>(token.text.substr(expr::HOLE_PREFIX.size()), token.span);
-                    auto hole = std::make_shared<expr::Hole>(std::move(name), std::move(token).span);
-                    holes.push_back(hole);
-                    return hole;
+                // `\name` is valid, but "\" on its own is not
+                if (in_syntax) {
+                    if (token.text == expr::HOLE_PREFIX) {
+                        // `\...`
+                        if (match(ELLIPSIS)) {
+                            expr::ExprPtr bound;
+
+                            // `\...{1 + 2}`
+                            if (match(L_BRACE)) {
+
+                                const auto holes_size = holes.size();
+                                bound = parseExpr();
+                                consume(R_BRACE);
+
+                                if (holes.size() != holes_size) util::error(token.span, "A hole can't be inside another hole!");
+                            }
+                            // `\...args`
+                            else if (check(NAME)) {
+                                auto name_token = consume();
+                                bound = std::make_shared<expr::Name>(std::move(name_token).text, std::move(name_token).span);
+                            }
+                            else util::error(token.span, "A hole pack needs a name!");
+
+                            auto hole = std::make_shared<expr::Hole>(std::move(bound), true, std::move(token).span);
+                            holes.push_back(hole);
+                            return hole;
+                        }
+
+                        // `\{2 + 3}`
+                        else if (match(L_BRACE)) {
+
+                            const auto holes_size = holes.size();
+                            auto bound = parseExpr();
+                            consume(R_BRACE);
+
+                            if (holes.size() != holes_size) util::error(token.span, "A hole can't be inside another hole!");
+
+
+                            auto hole = std::make_shared<expr::Hole>(std::move(bound), false, std::move(token).span);
+                            holes.push_back(hole);
+                            return hole;
+                        }
+
+                        util::error(token.span, "Cannot have a lone `$` inside syntax literals!");
+                    }
+
+                    if (token.text.starts_with(std::string{expr::HOLE_PREFIX} + std::string{expr::HOLE_PREFIX})) {
+                        // change the name so that it get's made into a expr::Name without the extra prefix
+                        token.text = token.text.substr(expr::HOLE_PREFIX.size());
+                        // explicitly doesn't return
+                        [[fallthrough]]; // is this even allowed? lmao
+                    }
+                    else if (token.text.starts_with(expr::HOLE_PREFIX)) {
+                        auto name = std::make_shared<expr::Name>(token.text.substr(expr::HOLE_PREFIX.size()), token.span);
+                        auto hole = std::make_shared<expr::Hole>(std::move(name), false, std::move(token).span);
+                        holes.push_back(hole);
+                        return hole;
+                    }
                 }
-
-                // `\{2 + 3}`
-                if (in_syntax and token.text == expr::HOLE_PREFIX and check(L_BRACE)) {
-                    consume(L_BRACE);
-
-                    const auto holes_size = holes.size();
-                    auto binds = parseExpr();
-                    if (holes.size() != holes_size) util::error(token.span, "A hole can't be inside another hole!");
-
-                    consume(R_BRACE);
-
-                    auto hole = std::make_shared<expr::Hole>(std::move(binds), std::move(token).span);
-                    holes.push_back(hole);
-                    return hole;
-                }
-
 
 
                 if (prefixOpsContain(token.text)) return parsePrefixOperator(std::move(token));
@@ -2430,11 +2461,6 @@ public:
 
 
     expr::ExprPtr backticks() {
-        util::Deferred d{[this] { consume(token::TokenKind::BACKTICK); }};
-
-
-        // auto syn = std::make_shared<expr::Syntax>(parseExpr());
-
         // holes in a syntax literal get filled in when it's evaluated: `\a + 1`.
         // nested in a code pattern or another literal, its holes belong to the outer one
         const bool outer = in_syntax;
@@ -2443,12 +2469,12 @@ public:
             holes.clear();
         }
 
+        util::Deferred reset{[this, outer] { in_syntax = outer; }};
+
         auto syn = std::make_shared<expr::Syntax>(parseExpr());
+        consume(token::TokenKind::BACKTICK);
 
         if (not outer) syn->holes = std::move(holes);
-
-
-        in_syntax = outer;
 
         if (auto fix = analysis::exprContains<expr::Fix>(syn->expr)) unAddOp(fix);
 
