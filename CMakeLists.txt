@@ -203,6 +203,7 @@ ExternalProject_Add(
         ${CMAKE_COMMAND} -E env
             "CC=${CMAKE_C_COMPILER}"
             "CXX=${CMAKE_CXX_COMPILER}"
+            "MAKE=${MAKE_EXECUTABLE}"
             ${LIBFFI_ARCH_ENV}
             <SOURCE_DIR>/configure
                 ${LIBFFI_CONFIGURE_ARCH_ARGS}
@@ -212,6 +213,7 @@ ExternalProject_Add(
                 --disable-shared
                 --enable-static
                 --disable-docs
+                --disable-multi-os-directory
 
     BUILD_COMMAND
         "${MAKE_EXECUTABLE}"
