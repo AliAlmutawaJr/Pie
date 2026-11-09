@@ -13,6 +13,8 @@ space std {
     push = __builtin_push;
     pop  = __builtin_pop;
 
+    reverse  = __builtin_reverse;
+
     eval  = __builtin_eval ;
     reset = __builtin_reset;
     defer = __builtin_defer;
@@ -30,9 +32,15 @@ space std {
     toPack = __builtin_into_pack;
 
 
-    infix + = (a: String, b: String) => __builtin_concat(a, b);
     infix + = (a, b) => __builtin_add(a, b);
+    infix + = (a: String, b: String) => __builtin_concat(a, b);
+
     infix * = (a, b) => __builtin_mul(a, b);
+    infix * = (a: String, b: Int) => {
+        s = "";
+        loop b s = __builtin_concat(s, a);
+    };
+
     infix(* +) ** = (a, b) => __builtin_pow(a, b);
     infix - = (a, b) => __builtin_sub(a, b);
     infix / = (a, b) => __builtin_div(a, b);
