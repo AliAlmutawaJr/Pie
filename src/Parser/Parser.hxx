@@ -109,16 +109,27 @@ class Parser {
     bool in_syntax{};
     std::vector<std::shared_ptr<expr::Hole>> holes;
 
+
+    util::SourceSpan last_span{}; 
+
 public:
 
-    Parser(token::Tokens t, std::filesystem::path r = ".") noexcept
+    Parser(
+        token::Tokens t,
+        std::filesystem::path r = ".",
+        Operators prefix_ops = {},
+        Operators ops = {}
+    ) noexcept
     : root{r.remove_filename()}         ,
       tokens{std::move(t)}              ,
       iterator_beginning{tokens.begin()},
       token_iterator{iterator_beginning},
       tokens_size{tokens.size()}        ,
       env(1)
-    { }
+    {
+        env.front().first.prefix_op_env = std::move(prefix_ops);
+        env.front().first.op_env        = std::move(ops);
+    }
 
 
     explicit Parser(std::filesystem::path r) noexcept
@@ -149,7 +160,9 @@ public:
         std::vector<expr::ExprPtr> expressions;
 
         while (not atEnd()) {
+            const auto first = lookAhead().span;
             expressions.push_back(parseExpr());
+            expressions.back()->span = {{first.span.first, last_span.span.second}, first.file};
 
             if (not match(token::TokenKind::SEMI)) {
                 const auto t = lookAhead();
@@ -1717,20 +1730,22 @@ public:
 
             do {
                 constexpr auto PARSE_TYPE = true;
-                auto arg = parseExpr<PARSE_TYPE, Context::CALL>();
+                auto arg = parseExpr<PARSE_TYPE, Context::CALL>(prec::ASSIGNMENT_VALUE);
 
-                if (auto ass = dynamic_cast<expr::Assignment*>(arg.get())) {
-                    if (match(ELLIPSIS)) util::error<except::SyntaxError>("Cannot expand pack in named argument: " + ass->stringify());
+                if (match(ASSIGN)) {
+                    auto expr = parseExpr();
+                    if (match(ELLIPSIS)) util::error<except::SyntaxError>("Cannot expand pack in named argument: " + expr->stringify());
 
-                    if (not type::shouldReassign(ass->type)) util::error<except::SyntaxError>("Can't have type annotation for named arguments: " + ass->stringify());
 
-                    const auto name = ass->lhs->stringify();
+                    // if (not type::shouldReassign(ass->type)) util::error<except::SyntaxError>("Can't have type annotation for named arguments: " + ass->stringify());
+
+                    const auto name = arg->stringify();
                     if (std::ranges::find_if(named_args, [&name] (auto&& a) { return a.first == name; }) != named_args.end())
-                        util::error("Named parameter '" + name + "' passed more than once: " + ass->stringify());
+                        util::error("Named parameter '" + name + "' passed more than once");
 
-                    named_args[std::move(name)] = std::move(ass)->rhs;
+                    // named_args[std::move(name)] = std::move(expr);
+                    named_args.insert({std::move(name), std::move(expr)});
                 }
-
                 else if (match(ELLIPSIS)) {
                     arg = std::make_shared<expr::Expansion>(std::move(arg));
 
@@ -2456,7 +2471,8 @@ public:
 
         // just a grouping!
         consume(R_PAREN);
-        return std::make_shared<expr::Grouping>(std::move(exprs).front());
+        return exprs.front();
+        // return std::make_shared<expr::Grouping>(std::move(exprs).front());
     }
 
 
@@ -3006,6 +3022,7 @@ public:
         lookAhead();
 
         const auto token = red.front();
+        last_span = token.span;
         red.pop_front();
         return token;
     }
