@@ -1427,10 +1427,35 @@ public:
         }
     }
 
+
+
+    std::optional<ValueType> checkMatchedMethod(const value::Value& value) {
+        if (not std::holds_alternative<value::Object>(value)) return {};
+
+        const auto& obj = get<value::Object>(value);
+
+        const auto& iter = std::ranges::find_if(obj.second->members, [] (const auto& member) {
+            return get<expr::Name>(member).name == "matched";
+        });
+
+        if (iter == obj.second->members.end()) return {};
+
+        const auto& value_ptr = get<value::ValuePtr>(*iter);
+
+        if (not std::holds_alternative<expr::Closure>(*value_ptr)) return {};
+
+        const auto& func = get<expr::Closure>(*value_ptr);
+
+
+        return std::visit(*this, expr::Call{std::make_shared<expr::Closure>(func)}.variant());
+    }
+
+
+
     enum class PatternMode {
-        INFER,    // declare new variables              (was bindPattern<true>)
+        INFER,     // declare new variables              (was bindPattern<true>)
         REASSIGN,  // assign to existing names/accesses  (was bindPattern<false>)
-        TEST,    // match cases: failure returns false (was testBindPattern)
+        TEST,      // match cases: failure returns false (was testBindPattern)
         VARIADIC,  // variadic patterns: no checks, no bindings; record each node's value
     };
 
@@ -1448,6 +1473,8 @@ public:
         using List = expr::unpack::List;
         using Pack = expr::unpack::Pack;
 
+
+        if (auto new_valuetype = checkMatchedMethod(valuetype.value)) valuetype = *std::move(new_valuetype);
 
 
         if constexpr (MODE == VARIADIC) {
@@ -1688,9 +1715,6 @@ public:
     }
 
 
-    bool testBindPattern(const auto& expr_str, const expr::unpack::Pattern *pattern, ValueType valuetype) {
-        return matchPattern<PatternMode::TEST>(expr_str, pattern, std::move(valuetype));
-    }
 
 
 
@@ -1704,16 +1728,16 @@ public:
         const std::vector<value::Value>& elements,
         value::Environment& out
     ) {
-        using enum PatternMode;
-        static_assert(MODE == INFER or MODE == TEST);
+        static_assert(MODE == PatternMode::INFER or MODE == PatternMode::TEST);
 
 
-        // phase 1: destructure every element; no checks, no bindings
+        // destructure every element.
+        // no checks, no bindings
         std::unordered_map<const expr::unpack::Pattern*, std::vector<value::Value>> record;
 
         for (size_t i{}; i < elements.size(); ++i) {
-            if (not matchPattern<VARIADIC>(expr_str, pattern, {elements[i], typeOf(elements[i])}, &record)) {
-                if constexpr (MODE == TEST) return false;
+            if (not matchPattern<PatternMode::VARIADIC>(expr_str, pattern, {elements[i], typeOf(elements[i])}, &record)) {
+                if constexpr (MODE == PatternMode::TEST) return false;
                 else util::error(
                     "In Unpackment:\n" + expr_str() +
                     "\nElement " + std::to_string(i + 1) + " doesn't fit the pattern " +
@@ -1728,7 +1752,7 @@ public:
         expr::unpack::forEach(pattern, [&nodes] (const expr::unpack::Pattern *node) { nodes.push_back(node); });
 
 
-        // phase 2: check each node's constraints against its pack, then bind named nodes
+        // check each node's constraints against its pack, then bind named nodes
         ScopeGuard sg{this}; // collects the variables added below; discarded if we return false
         for (const auto *node : nodes) {
             // anonymous `...` packs are not recorded
@@ -1738,7 +1762,7 @@ public:
             type::TypePtr type = typeOf(pack);
 
             if (node->value and std::visit(*this, node->value->variant()).value != pack) {
-                if constexpr (MODE == TEST) return false;
+                if constexpr (MODE == PatternMode::TEST) return false;
                 else util::error(
                     "In Unpackment:\n" + expr_str() +
                     "\nPattern: " + expr::unpack::stringifyPattern(node) +
@@ -1750,7 +1774,7 @@ public:
             if (node->type) {
                 auto expected = validateType(node->type);
 
-                if constexpr (MODE == TEST) {
+                if constexpr (MODE == PatternMode::TEST) {
                     if (not (*expected >= *type)) return false; // same rule as your pack check in TEST mode
                 }
                 else {
@@ -2598,7 +2622,7 @@ There are no mistakes with art.)";
 
         for (const auto& kase : m->cases) {
             ScopeGuard sg{this};
-            if (testBindPattern(LIFT(m->stringify()), kase.pattern.get(), valuetype)) {
+            if (matchPattern<PatternMode::TEST>(LIFT(m->stringify()), kase.pattern.get(), valuetype)) {
                 bool guard = true;
                 if (kase.guard) {
                     const value::Value& cond = std::visit(*this, kase.guard->variant()).value;

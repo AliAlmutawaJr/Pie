@@ -52,6 +52,48 @@
 */
 
 
+TEST_CASE("Customized Pattern Matching!", "[Match]") {
+{
+    const auto src = R"PIE(
+Human = class {
+    name = "";
+    age = 0;
+
+    matched = () => {1, 2, 3};
+};
+
+z = Human("Aziz", 24);
+
+match z {
+    {name: String, age: Int} => __builtin_print("{name} is {age} years old!");
+    x => __builtin_print(x);
+};
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"({1, 2, 3})");
+}
+{
+    const auto src = R"PIE(
+Human = class {
+    name = "";
+    age = 0;
+
+    matched = () => {1, 2, 3};
+};
+
+z = Human("Aziz", 24);
+
+match z {
+    {name: String, age: Int} => __builtin_print("{name} is {age} years old!");
+    {a, b, c} => __builtin_print(b);
+    x => __builtin_print(x);
+};
+)PIE";
+
+    REQUIRE(pie::test::run(src) == R"(2)");
+}
+}
+
 TEST_CASE("Code Patterns", "[Match][Syntax][Hole]") {
 {
     const auto src = R"PIE(
