@@ -146,8 +146,10 @@ namespace cli {
             }
             else {
                 interp::Visitor visitor{std::move(anal).indeces, fname};
-                for (const auto& expr : exprs)
+                for (const auto& expr : exprs) {
+                    visitor.setCurrentSpan(expr->span);
                     std::visit(visitor, expr->variant());
+                }
             }
         }
     }

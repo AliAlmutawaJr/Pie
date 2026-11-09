@@ -21,9 +21,9 @@
 There are 2 ways to install Pie
 
 ### Pre-built binaries
-Binaries exist for:
-1- Linux
-2- Macos x86
+Binaries exist for:\
+1- Linux\
+2- Macos x86\
 2- Macos Apple Silicon
 
 Check the [release section](https://github.com/AliAlmutawaJr/Pie/releases) for the download link

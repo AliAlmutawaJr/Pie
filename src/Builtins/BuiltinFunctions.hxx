@@ -80,6 +80,23 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         >
     >{},
 
+
+    MapEntry<
+        S<"statement_span">,
+        Func<
+            decltype([](const auto& v) {
+                const auto& curr_span = v->getCurrentSpan();
+                const auto& [first, last] = curr_span.span;
+                return value::makeTuple({
+                    curr_span.file,
+                    BigInt{first.line}, BigInt{first.column},
+                    BigInt{last.line},  BigInt{last.column},
+                });
+            }),
+            void
+        >
+    >{},
+
     MapEntry<
         S<"len">,
         Func<

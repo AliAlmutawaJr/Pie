@@ -100,7 +100,12 @@ class Visitor {
 
     std::vector<size_t> import_indices;
 
+    util::SourceSpan curr_span{};
+
 public:
+
+    void setCurrentSpan(util::SourceSpan span) { curr_span = std::move(span); }
+    const util::SourceSpan& getCurrentSpan() const { return curr_span; }
 
 
     Visitor(std::vector<size_t> indices, std::filesystem::path r = ".") noexcept :
@@ -971,8 +976,45 @@ public:
     }
 
 
+    // code in backticks doesn't know which variables will be around when it runs
+    // so its names are DYNAMIC
+    // which means they're found by name..
+    // assigning to one, changes the nearest variable with that name
+    // ..or makes one here
+    ValueType dynamicAssign(const expr::Assignment *ass, const expr::Name* name) {
+        value::Value value = std::visit(*this, ass->rhs->variant()).value;
+        const auto wanted = name->stringify();
+
+        for (const auto& e : std::views::reverse(env)) {
+            for (auto& [_, var] : e->env) {
+                auto& [ref, value_ptr, type] = var;
+                if (ref.name != wanted) continue;
+
+                value = typeCheck(value, type,
+                    "In assignment: " + ass->stringify() +
+                    "\nType mis-match! Expected: " + type->text() + ", got: " + typeOf(value)->text()
+                );
+                *value_ptr = value;
+                return {value, type};
+            }
+        }
+
+        const type::TypePtr type = type::shouldReassign(ass->type) ? type::builtins::Any() : validateType(ass->type);
+        value = typeCheck(value, type,
+            "In assignment: " + ass->stringify() +
+            "\nType mis-match! Expected: " + type->text() + ", got: " + typeOf(value)->text()
+        );
+        static size_t next_dynamic_ID = 220220220;
+        addVar(wanted, next_dynamic_ID++, std::make_shared<value::Value>(value), type);
+        return {value, type};
+    }
+
+
 
     ValueType nameAssign(const expr::Assignment *ass, const expr::Name* name) {
+        if (name->var_ID == std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::DYNAMIC))
+            return dynamicAssign(ass, name);
+
         type::TypePtr type = ass->type;
 
         if (ass->declares) {
@@ -2603,6 +2645,7 @@ There are no mistakes with art.)";
             const value::Value value = [&] {
                 const auto id = hole->var_ID == -1 ? std::to_underlying(analysis::LexicalAnalysis::ReservedIDs::DYNAMIC) : hole->var_ID;
                 if (const auto var = getVar(id, LIFT(name)); var) return var->value;
+                if (const auto var = dynamicLookup(name   ); var) return var->value;
 
                 if (dynamic_cast<const expr::Name*>(hole->expr.get()))
                     util::error("Hole `" + hole->stringify() + "` has nothing to fill it with!");
@@ -5667,9 +5710,10 @@ There are no mistakes with art.)";
             "id",
 
             //* nullary
-            "input_str", "input_int",
+            "input_str", "input_int", "statement_span",
 
             //* unary
+            "run",
             "type", "decltype",
             "len", "reverse", "into_pack", "into_tuple",
             "reset", "eval",
@@ -5913,6 +5957,45 @@ There are no mistakes with art.)";
             return builtinConcat(std::move(args));
         }
 
+        // // runs some text as code: {true, its value}, or {false, the error} when it doesn't parse or fails.
+        // // for code that changes while the program runs, like a code box someone types into
+        if (name == "run") {
+            auto expanded = expandArgs(args, std::move(expand_at));
+            arity_check(1, expanded);
+            if (not std::holds_alternative<std::string>(expanded[0])) util::error("`__builtin_run_text` needs a string of code");
+
+            // the operators in scope right now, inner ones over outer ones
+            Operators prefix_ops, ops;
+            for (const auto& e : env) {
+                for (const auto& [op_name, op] : e->prefix_op_env) prefix_ops[op_name] = op;
+                for (const auto& [op_name, op] : e->op_env       ) ops       [op_name] = op;
+            }
+
+            try {
+                Parser parser{lex::lex(get<std::string>(expanded[0]), true, "<text>"), ".", std::move(prefix_ops), std::move(ops)};
+                auto code = std::make_shared<expr::Syntax>(std::make_shared<expr::Block>(parser.parse()));
+
+                analysis::LexicalAnalysis anal;
+                std::visit(anal, code->variant());
+                spliced_code.push_back(code);   // keeps it alive: values can point into it
+
+                auto value = std::visit(*this, code->expr->variant()).value;
+                return value::makeList({true, std::move(value)});
+            }
+            catch (const std::exception& e) {
+                // without the terminal's colours
+                std::string message;
+                for (bool skipping = false; const char c : std::string_view{e.what()}) {
+                    if      (c == '\033') skipping = true;
+                    else if (not skipping) message += c;
+                    else if (c == 'm'   ) skipping = false;
+                }
+
+                return value::makeTuple({false, message});
+            }
+        }
+
+
         #if not WEB_PIE
         if (name == "ffi_call") {
             return ffiCall(call, std::move(args), std::move(expand_at));
@@ -5925,6 +6008,7 @@ There are no mistakes with art.)";
         const auto nullary_funcs = {
             "input_str"sv       ,
             "input_int"sv       ,
+            "statement_span"sv  ,
             "ffi_type_void"sv   ,
             "ffi_type_int"sv    ,
             "ffi_type_float"sv  ,
@@ -5949,6 +6033,7 @@ There are no mistakes with art.)";
             arity_check(0, expanded);
             if (name == "input_str"           ) return execute<0>(stdx::get<S<"input_str"       >>(functions).value, {}, this);
             if (name == "input_int"           ) return execute<0>(stdx::get<S<"input_int"       >>(functions).value, {}, this);
+            if (name == "statement_span"      ) return execute<0>(stdx::get<S<"statement_span"  >>(functions).value, {}, this);
 
             #if not WEB_PIE
             if (name == "ffi_type_int"        ) return execute<0>(stdx::get<S<"ffi_type_int"    >>(functions).value, {}, this);
@@ -5990,7 +6075,7 @@ There are no mistakes with art.)";
             "len"          ,
             "reverse"      ,
             "into_pack"    ,
-            "into_tuple"    ,
+            "into_tuple"   ,
             "eval"         ,
             "abs"          ,
             "neg"          ,
@@ -6032,7 +6117,6 @@ There are no mistakes with art.)";
             // evaluating arguments from left to right as needed
             // first argument is always evaluated
             // const value::Value value1 = std::visit(*this, args[0]->variant()).value;
-
             if (name == "type"         ) return execute<1>(stdx::get<S<"type"      >>(functions).value, {expanded[0]}, this);
             if (name == "len"          ) return execute<1>(stdx::get<S<"len"       >>(functions).value, {expanded[0]}, this);
             if (name == "reverse"      ) return execute<1>(stdx::get<S<"reverse"   >>(functions).value, {expanded[0]}, this);

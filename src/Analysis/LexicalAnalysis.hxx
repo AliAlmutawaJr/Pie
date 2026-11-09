@@ -4,6 +4,7 @@
 #include <optional>
 #include <source_location>
 #include <string>
+#include <utility>
 #include <vector>
 #include <unordered_map>
 #include <memory>
@@ -40,10 +41,11 @@ public:
     // this is an arbitrary number. Coulda been anything
     enum class ReservedIDs {
         UNNAMED = 110110110,
-        DYNAMIC,
+        DYNAMIC = 1,
+        SIZE
     };
     // may have to manually maintin this for now..oopsie :))
-    inline static constexpr auto RESERVED_IDS_SIZE = 2;
+    inline static constexpr auto RESERVED_IDS_SIZE = std::to_underlying(ReservedIDs::SIZE);
 
 
 private:
