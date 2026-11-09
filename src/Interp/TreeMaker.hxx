@@ -25,9 +25,16 @@ class TreeMaker {
 
 
     template <typename T>
-    [[nodiscard]] value::Value listOf(const std::vector<T>& ts) {
+    [[nodiscard]] value::Value listOf(const std::vector<std::shared_ptr<T>>& ts) {
         auto list = value::makeList();
         for (const auto& t : ts) list.elts->values.push_back(maybe(t));
+        return list;
+    }
+
+    template <typename T>
+    [[nodiscard]] value::Value listOf(const std::vector<T>& ts) {
+        auto list = value::makeList();
+        for (const auto& t : ts) list.elts->values.push_back(t);
         return list;
     }
 
@@ -122,11 +129,11 @@ public:
 
 
     value::Object operator()(expr::Fix*);
-    value::Object operator()(expr::Prefix*);
-    value::Object operator()(expr::Infix*);
-    value::Object operator()(expr::Suffix*);
-    value::Object operator()(expr::Exfix*);
-    value::Object operator()(expr::Operator*);
+    // value::Object operator()(expr::Prefix*);
+    // value::Object operator()(expr::Infix*);
+    // value::Object operator()(expr::Suffix*);
+    // value::Object operator()(expr::Exfix*);
+    // value::Object operator()(expr::Operator*);
 
 
     // value::Object operator()(auto*) { return {nullptr, std::make_shared<value::Members>()}; }
