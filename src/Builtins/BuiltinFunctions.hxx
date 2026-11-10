@@ -63,7 +63,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 std::getline(std::cin, out);
                 return out;
             }),
-            void
+            TypeList<>
         >
     >{},
     MapEntry<
@@ -76,7 +76,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
 
                 return BigInt{out};
             }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -93,7 +93,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     BigInt{last.line},  BigInt{last.column},
                 });
             }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -247,7 +247,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 // return reinterpret_cast<BigInt>(file);
                 return value::Address{std::format("file '{}'", std::filesystem::absolute(fname).string()), file};
             }),
-            TypeList<std::string, std::string>
+            TypeList<std::string>
         >
     >{},
 
@@ -905,7 +905,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_void">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_VOID; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -913,7 +913,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_int">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_INT; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -921,7 +921,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_float">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_FLOAT; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -929,7 +929,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_double">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_DOUBLE; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -937,7 +937,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_long_double">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_LONGDOUBLE; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -945,7 +945,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_uint8">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_UINT8; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -953,7 +953,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_sint8">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_SINT8; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -961,7 +961,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_uint16">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_UINT16; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -969,7 +969,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_sint16">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_SINT16; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -977,7 +977,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_uint32">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_UINT32; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -985,7 +985,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_sint32">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_SINT32; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -993,7 +993,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_uint64">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_UINT64; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -1001,7 +1001,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_sint64">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_SINT64; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -1009,7 +1009,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_struct">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_STRUCT; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -1017,7 +1017,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_pointer">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_POINTER; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -1026,7 +1026,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         Func<
             // any arbitrary sentinel value that is different from any FFI_TYPE_*
             decltype([](const auto&) { return FFI_TYPE_CSTRING; }),
-            void
+            TypeList<>
         >
     >{},
 
@@ -1034,7 +1034,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         S<"ffi_type_complex">,
         Func<
             decltype([](const auto&) { return FFI_TYPE_COMPLEX; }),
-            void
+            TypeList<>
         >
     >{},
 

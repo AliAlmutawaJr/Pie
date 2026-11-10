@@ -25,16 +25,22 @@ class TreeMaker {
 
 
     template <typename T>
-    [[nodiscard]] value::Value listOf(const std::vector<std::shared_ptr<T>>& ts) {
+    [[nodiscard]] value::Value listOf(const std::vector<T>& ts) {
         auto list = value::makeList();
         for (const auto& t : ts) list.elts->values.push_back(maybe(t));
         return list;
     }
 
-    template <typename T>
-    [[nodiscard]] value::Value listOf(const std::vector<T>& ts) {
+
+    [[nodiscard]] value::Value listOf(const std::vector<std::string>& ts) {
         auto list = value::makeList();
-        for (const auto& t : ts) list.elts->values.push_back(t);
+        for (const auto& t : ts) list.elts->values.push_back(makeObject({{{"node", "string"}, {"value", t}}}));
+        return list;
+    }
+
+    [[nodiscard]] value::Value listOf(const std::vector<bool>& ts) {
+        auto list = value::makeList();
+        for (const auto& t : ts) list.elts->values.push_back(makeObject({{{"node", "bool"  }, {"value", t}}}));
         return list;
     }
 

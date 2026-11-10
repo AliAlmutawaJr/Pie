@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <stdx/tuple.hpp>
+#include <string>
+#include <vector>
 
 #include "../Value/Value.hxx"
 
@@ -66,10 +68,13 @@ auto getHelper2() {
 
 
 
+
+
 template <typename Lambda, typename First, typename... Ts>
 struct Func {
     Lambda func;
-    inline static constexpr size_t count = sizeof...(Ts) + not std::is_same_v<First, void>; // + 1 for First
+    static inline constexpr size_t ARGS_COUNT = First::count;
+    inline static constexpr size_t OVERLOAD_COUNT = sizeof...(Ts) + 1; // + 1 for First
 
     template <size_t N, size_t M>
     auto get2() {
@@ -84,19 +89,27 @@ struct Func {
 // using Value = std::variant<int, double, bool, std::string, Closure>;
 struct Any { };
 
+std::string errMsg(const std::vector<value::Value>& args, const auto& that) {
+    std::string msg = "Wrong type passed to builtin function:\n";
+    for (size_t i = 1; const auto& arg : args) {
+        msg +=  "Arg " + std::to_string(i) + ": " + that->stringify(arg);
+    }
+
+    return msg;
+}
+
 
 template <size_t SIZE, size_t N = 0, typename... Ts>
 requires (SIZE == 0)
 static value::Value execute(Func<Ts...> func, const std::vector<value::Value>&, const auto& that) {
-    static_assert(SIZE == decltype(func)::count);
-
+    // static_assert(SIZE == decltype(func)::OVERLOAD_COUNT);
     return func.func(that);
 }
 
 template <size_t SIZE, size_t N = 0, typename... Ts>
 requires (SIZE == 1)
 value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, const auto& that) {
-    if constexpr (N < decltype(func)::count) {
+    if constexpr (N < decltype(func)::OVERLOAD_COUNT) {
         using T = decltype(func.template get2<N, 0>());
 
         if constexpr (not std::is_same_v<T, Any>)
@@ -113,13 +126,14 @@ value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, co
         return func.func(v1, that);
     }
 
-    pie::util::error("Wrong type passed to builtin function!");
+
+    pie::util::error(errMsg(args, that));
 }
 
 template <size_t SIZE, size_t N = 0, typename... Ts>
 requires (SIZE == 2)
 value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, const auto& that) {
-    if constexpr (N < decltype(func)::count) {
+    if constexpr (N < decltype(func)::OVERLOAD_COUNT) {
         using T1 = decltype(func.template get2<N, 0>());
         using T2 = decltype(func.template get2<N, 1>());
 
@@ -147,20 +161,14 @@ value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, co
         return func.func(v1, v2, that);
     }
 
-    else {
-        // std::string msg = "Wrong type passed to function: ";
-        // for (const auto c : NAME)
-        //     msg += c;
-        // pie::util::error(msg);
+    else  pie::util::error(errMsg(args, that));
 
-        pie::util::error("Wrong type passed to builtin function!");
-    }
 }
 
 template <size_t SIZE, size_t N = 0, typename... Ts>
 requires (SIZE == 3)
 value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, const auto& that) {
-    if constexpr (N < decltype(func)::count) {
+    if constexpr (N < decltype(func)::OVERLOAD_COUNT) {
         using T1 = decltype(func.template get2<N, 0>());
         using T2 = decltype(func.template get2<N, 1>());
         using T3 = decltype(func.template get2<N, 2>());
@@ -197,12 +205,16 @@ value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, co
 
 
         return func.func(v1, v2, v3, that);
-
     }
 
-    else pie::util::error("Wrong type passed to builtin function!");
+    else pie::util::error(errMsg(args, that));
 }
 
+
+template <typename... Ts>
+value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, const auto& that) {
+    return execute<Func<Ts...>::ARGS_COUNT>(std::move(func), args, that);
+}
 
 
 } // namespace funcs

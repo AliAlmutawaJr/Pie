@@ -1444,8 +1444,9 @@ public:
 
         if (not std::holds_alternative<expr::Closure>(*value_ptr)) return {};
 
-        const auto& func = get<expr::Closure>(*value_ptr);
+        auto& func = get<expr::Closure>(*value_ptr);
 
+        func.captureThis(obj);
 
         return std::visit(*this, expr::Call{std::make_shared<expr::Closure>(func)}.variant());
     }
@@ -1474,7 +1475,12 @@ public:
         using Pack = expr::unpack::Pack;
 
 
-        if (auto new_valuetype = checkMatchedMethod(valuetype.value)) valuetype = *std::move(new_valuetype);
+        auto og_value = valuetype.value;
+        auto type_of_value = typeOf(og_value);
+        if (auto new_valuetype = checkMatchedMethod(valuetype.value)) {
+            valuetype.value = std::move(new_valuetype)->value;
+            // valuetype = *std::move(new_valuetype)
+        }
 
 
         if constexpr (MODE == VARIADIC) {
@@ -1498,12 +1504,13 @@ public:
 
                 if constexpr (MODE == TEST) {
                     // `==` rather than >= no structural sub-typing in match cases
-                    if (not (*type == *typeOf(valuetype.value))) return false;
+                    if (not (*type == *type_of_value)) return false;
+                    // if (not (*type == *typeOf(valuetype.value))) return false;
                     // if (not (*type >= *typeOf(valuetype.value))) return false;
                 }
                 else {
                     valuetype.value = typeCheck(
-                        valuetype.value,
+                        og_value,
                         type,
                         "Type mis-match in Unpackment:\n" + expr_str() +
                         "\nPattern: " + expr::unpack::stringifyPattern(pattern) +
@@ -6055,28 +6062,28 @@ There are no mistakes with art.)";
         if (std::ranges::find(nullary_funcs, name) != nullary_funcs.end()) {
             auto expanded = expandArgs(args, std::move(expand_at));
             arity_check(0, expanded);
-            if (name == "input_str"           ) return execute<0>(stdx::get<S<"input_str"       >>(functions).value, {}, this);
-            if (name == "input_int"           ) return execute<0>(stdx::get<S<"input_int"       >>(functions).value, {}, this);
-            if (name == "statement_span"      ) return execute<0>(stdx::get<S<"statement_span"  >>(functions).value, {}, this);
+            if (name == "input_str"           ) return execute(stdx::get<S<"input_str"       >>(functions).value, {}, this);
+            if (name == "input_int"           ) return execute(stdx::get<S<"input_int"       >>(functions).value, {}, this);
+            if (name == "statement_span"      ) return execute(stdx::get<S<"statement_span"  >>(functions).value, {}, this);
 
             #if not WEB_PIE
-            if (name == "ffi_type_int"        ) return execute<0>(stdx::get<S<"ffi_type_int"    >>(functions).value, {}, this);
-            if (name == "ffi_type_pointer"    ) return execute<0>(stdx::get<S<"ffi_type_pointer">>(functions).value, {}, this);
-            if (name == "ffi_type_cstring"    ) return execute<0>(stdx::get<S<"ffi_type_cstring">>(functions).value, {}, this);
-            if (name == "ffi_type_void"       ) return execute<0>(stdx::get<S<"ffi_type_void"   >>(functions).value, {}, this);
-            if (name == "ffi_type_float"      ) return execute<0>(stdx::get<S<"ffi_type_float"  >>(functions).value, {}, this);
-            if (name == "ffi_type_double"     ) return execute<0>(stdx::get<S<"ffi_type_double" >>(functions).value, {}, this);
-            if (name == "ffi_type_long_double") return execute<0>(stdx::get<S<"ffi_type_long_double">>(functions).value, {}, this);
-            if (name == "ffi_type_uint8"      ) return execute<0>(stdx::get<S<"ffi_type_uint8"  >>(functions).value, {}, this);
-            if (name == "ffi_type_sint8"      ) return execute<0>(stdx::get<S<"ffi_type_sint8"  >>(functions).value, {}, this);
-            if (name == "ffi_type_uint16"     ) return execute<0>(stdx::get<S<"ffi_type_uint16" >>(functions).value, {}, this);
-            if (name == "ffi_type_sint16"     ) return execute<0>(stdx::get<S<"ffi_type_sint16" >>(functions).value, {}, this);
-            if (name == "ffi_type_uint32"     ) return execute<0>(stdx::get<S<"ffi_type_uint32" >>(functions).value, {}, this);
-            if (name == "ffi_type_sint32"     ) return execute<0>(stdx::get<S<"ffi_type_sint32" >>(functions).value, {}, this);
-            if (name == "ffi_type_uint64"     ) return execute<0>(stdx::get<S<"ffi_type_uint64" >>(functions).value, {}, this);
-            if (name == "ffi_type_sint64"     ) return execute<0>(stdx::get<S<"ffi_type_sint64" >>(functions).value, {}, this);
-            if (name == "ffi_type_struct"     ) return execute<0>(stdx::get<S<"ffi_type_struct" >>(functions).value, {}, this);
-            if (name == "ffi_type_complex"    ) return execute<0>(stdx::get<S<"ffi_type_complex">>(functions).value, {}, this);
+            if (name == "ffi_type_int"        ) return execute(stdx::get<S<"ffi_type_int"        >>(functions).value, {}, this);
+            if (name == "ffi_type_pointer"    ) return execute(stdx::get<S<"ffi_type_pointer"    >>(functions).value, {}, this);
+            if (name == "ffi_type_cstring"    ) return execute(stdx::get<S<"ffi_type_cstring"    >>(functions).value, {}, this);
+            if (name == "ffi_type_void"       ) return execute(stdx::get<S<"ffi_type_void"       >>(functions).value, {}, this);
+            if (name == "ffi_type_float"      ) return execute(stdx::get<S<"ffi_type_float"      >>(functions).value, {}, this);
+            if (name == "ffi_type_double"     ) return execute(stdx::get<S<"ffi_type_double"     >>(functions).value, {}, this);
+            if (name == "ffi_type_long_double") return execute(stdx::get<S<"ffi_type_long_double">>(functions).value, {}, this);
+            if (name == "ffi_type_uint8"      ) return execute(stdx::get<S<"ffi_type_uint8"      >>(functions).value, {}, this);
+            if (name == "ffi_type_sint8"      ) return execute(stdx::get<S<"ffi_type_sint8"      >>(functions).value, {}, this);
+            if (name == "ffi_type_uint16"     ) return execute(stdx::get<S<"ffi_type_uint16"     >>(functions).value, {}, this);
+            if (name == "ffi_type_sint16"     ) return execute(stdx::get<S<"ffi_type_sint16"     >>(functions).value, {}, this);
+            if (name == "ffi_type_uint32"     ) return execute(stdx::get<S<"ffi_type_uint32"     >>(functions).value, {}, this);
+            if (name == "ffi_type_sint32"     ) return execute(stdx::get<S<"ffi_type_sint32"     >>(functions).value, {}, this);
+            if (name == "ffi_type_uint64"     ) return execute(stdx::get<S<"ffi_type_uint64"     >>(functions).value, {}, this);
+            if (name == "ffi_type_sint64"     ) return execute(stdx::get<S<"ffi_type_sint64"     >>(functions).value, {}, this);
+            if (name == "ffi_type_struct"     ) return execute(stdx::get<S<"ffi_type_struct"     >>(functions).value, {}, this);
+            if (name == "ffi_type_complex"    ) return execute(stdx::get<S<"ffi_type_complex"    >>(functions).value, {}, this);
             #endif
         }
 
@@ -6141,21 +6148,21 @@ There are no mistakes with art.)";
             // evaluating arguments from left to right as needed
             // first argument is always evaluated
             // const value::Value value1 = std::visit(*this, args[0]->variant()).value;
-            if (name == "type"         ) return execute<1>(stdx::get<S<"type"      >>(functions).value, {expanded[0]}, this);
-            if (name == "len"          ) return execute<1>(stdx::get<S<"len"       >>(functions).value, {expanded[0]}, this);
-            if (name == "reverse"      ) return execute<1>(stdx::get<S<"reverse"   >>(functions).value, {expanded[0]}, this);
-            if (name == "into_pack"    ) return execute<1>(stdx::get<S<"into_pack" >>(functions).value, {expanded[0]}, this);
-            if (name == "into_tuple"   ) return execute<1>(stdx::get<S<"into_tuple">>(functions).value, {expanded[0]}, this);
-            if (name == "eval"         ) return execute<1>(stdx::get<S<"eval"      >>(functions).value, {expanded[0]}, this);
-            if (name == "abs"          ) return execute<1>(stdx::get<S<"abs"       >>(functions).value, {expanded[0]}, this);
-            if (name == "neg"          ) return execute<1>(stdx::get<S<"neg"       >>(functions).value, {expanded[0]}, this);
-            if (name == "not"          ) return execute<1>(stdx::get<S<"not"       >>(functions).value, {expanded[0]}, this);
-            if (name == "pop"          ) return execute<1>(stdx::get<S<"pop"       >>(functions).value, {expanded[0]}, this);
-            if (name == "pop_front"    ) return execute<1>(stdx::get<S<"pop_front" >>(functions).value, {expanded[0]}, this);
-            if (name == "to_int"       ) return execute<1>(stdx::get<S<"to_int"    >>(functions).value, {expanded[0]}, this);
-            if (name == "to_double"    ) return execute<1>(stdx::get<S<"to_double" >>(functions).value, {expanded[0]}, this);
-            if (name == "to_string"    ) return execute<1>(stdx::get<S<"to_string" >>(functions).value, {expanded[0]}, this);
-            if (name == "as_pack"      ) return execute<1>(stdx::get<S<"as_pack"   >>(functions).value, {expanded[0]}, this);
+            if (name == "type"         ) return execute(stdx::get<S<"type"      >>(functions).value, {expanded[0]}, this);
+            if (name == "len"          ) return execute(stdx::get<S<"len"       >>(functions).value, {expanded[0]}, this);
+            if (name == "reverse"      ) return execute(stdx::get<S<"reverse"   >>(functions).value, {expanded[0]}, this);
+            if (name == "into_pack"    ) return execute(stdx::get<S<"into_pack" >>(functions).value, {expanded[0]}, this);
+            if (name == "into_tuple"   ) return execute(stdx::get<S<"into_tuple">>(functions).value, {expanded[0]}, this);
+            if (name == "eval"         ) return execute(stdx::get<S<"eval"      >>(functions).value, {expanded[0]}, this);
+            if (name == "abs"          ) return execute(stdx::get<S<"abs"       >>(functions).value, {expanded[0]}, this);
+            if (name == "neg"          ) return execute(stdx::get<S<"neg"       >>(functions).value, {expanded[0]}, this);
+            if (name == "not"          ) return execute(stdx::get<S<"not"       >>(functions).value, {expanded[0]}, this);
+            if (name == "pop"          ) return execute(stdx::get<S<"pop"       >>(functions).value, {expanded[0]}, this);
+            if (name == "pop_front"    ) return execute(stdx::get<S<"pop_front" >>(functions).value, {expanded[0]}, this);
+            if (name == "to_int"       ) return execute(stdx::get<S<"to_int"    >>(functions).value, {expanded[0]}, this);
+            if (name == "to_double"    ) return execute(stdx::get<S<"to_double" >>(functions).value, {expanded[0]}, this);
+            if (name == "to_string"    ) return execute(stdx::get<S<"to_string" >>(functions).value, {expanded[0]}, this);
+            if (name == "as_pack"      ) return execute(stdx::get<S<"as_pack"   >>(functions).value, {expanded[0]}, this);
             if (name == "open_file"    ) {
                 std::clog << "name: " << name << std::endl;
                 // gotta normalize the file path first
@@ -6169,17 +6176,17 @@ There are no mistakes with art.)";
 
                 if (not path.is_absolute()) path = root / path;
 
-                return execute<1>(stdx::get<S<"open_file" >>(functions).value, {value::Value(path.string())}, this);
+                return execute(stdx::get<S<"open_file" >>(functions).value, {value::Value(path.string())}, this);
             }
-            if (name == "close_file"  ) return execute<1>(stdx::get<S<"close_file"  >>(functions).value, {expanded[0]}, this);
-            if (name == "is_file_open") return execute<1>(stdx::get<S<"is_file_open">>(functions).value, {expanded[0]}, this);
-            if (name == "read_file"   ) return execute<1>(stdx::get<S<"read_file"   >>(functions).value, {expanded[0]}, this);
-            if (name == "read_line"   ) return execute<1>(stdx::get<S<"read_line"   >>(functions).value, {expanded[0]}, this);
-            if (name == "read_word"   ) return execute<1>(stdx::get<S<"read_word"   >>(functions).value, {expanded[0]}, this);
+            if (name == "close_file"  ) return execute(stdx::get<S<"close_file"  >>(functions).value, {expanded[0]}, this);
+            if (name == "is_file_open") return execute(stdx::get<S<"is_file_open">>(functions).value, {expanded[0]}, this);
+            if (name == "read_file"   ) return execute(stdx::get<S<"read_file"   >>(functions).value, {expanded[0]}, this);
+            if (name == "read_line"   ) return execute(stdx::get<S<"read_line"   >>(functions).value, {expanded[0]}, this);
+            if (name == "read_word"   ) return execute(stdx::get<S<"read_word"   >>(functions).value, {expanded[0]}, this);
 
             #if not WEB_PIE
-            if (name == "dlopen"       ) return execute<1>(stdx::get<S<"dlopen"    >>(functions).value, {expanded[0]}, this);
-            if (name == "ptr_to_string") return execute<1>(stdx::get<S<"ptr_to_string">>(functions).value, {expanded[0]}, this);
+            if (name == "dlopen"       ) return execute(stdx::get<S<"dlopen"    >>(functions).value, {expanded[0]}, this);
+            if (name == "ptr_to_string") return execute(stdx::get<S<"ptr_to_string">>(functions).value, {expanded[0]}, this);
             #endif
         }
 
@@ -6218,31 +6225,31 @@ There are no mistakes with art.)";
             const auto& value2 = expanded[1];
 
             // this is disgusting..I know
-            if (name == "write_file") return execute<2>(stdx::get<S<"write_file">>(functions).value, {value1, value2}, this);
+            if (name == "write_file") return execute(stdx::get<S<"write_file">>(functions).value, {value1, value2}, this);
 
-            if (name == "get"       ) return execute<2>(stdx::get<S<"get"       >>(functions).value, {value1, value2}, this);
-            if (name == "push"      ) return execute<2>(stdx::get<S<"push"      >>(functions).value, {value1, value2}, this);
-            if (name == "remove_at" ) return execute<2>(stdx::get<S<"remove_at" >>(functions).value, {value1, value2}, this);
-            if (name == "object_has") return execute<2>(stdx::get<S<"object_has">>(functions).value, {value1, value2}, this);
-            if (name == "str_split" ) return execute<2>(stdx::get<S<"str_split" >>(functions).value, {value1, value2}, this);
-            if (name == "add"       ) return execute<2>(stdx::get<S<"add"     >>(functions).value, {value1, value2}, this);
-            if (name == "sub"       ) return execute<2>(stdx::get<S<"sub"     >>(functions).value, {value1, value2}, this);
-            if (name == "mul"       ) return execute<2>(stdx::get<S<"mul"     >>(functions).value, {value1, value2}, this);
-            if (name == "div"       ) return execute<2>(stdx::get<S<"div"     >>(functions).value, {value1, value2}, this);
-            if (name == "mod"       ) return execute<2>(stdx::get<S<"mod"     >>(functions).value, {value1, value2}, this);
-            if (name == "pow"       ) return execute<2>(stdx::get<S<"pow"     >>(functions).value, {value1, value2}, this);
-            if (name == "bit_and"   ) return execute<2>(stdx::get<S<"bit_and" >>(functions).value, {value1, value2}, this);
-            if (name == "bit_or"    ) return execute<2>(stdx::get<S<"bit_or"  >>(functions).value, {value1, value2}, this);
-            if (name == "xor"       ) return execute<2>(stdx::get<S<"xor"     >>(functions).value, {value1, value2}, this);
-            if (name == "rand_int"  ) return execute<2>(stdx::get<S<"rand_int">>(functions).value, {value1, value2}, this);
-            if (name == "gt"        ) return execute<2>(stdx::get<S<"gt"      >>(functions).value, {value1, value2}, this);
-            if (name == "geq"       ) return execute<2>(stdx::get<S<"geq"     >>(functions).value, {value1, value2}, this);
-            if (name == "eq"        ) return execute<2>(stdx::get<S<"eq"      >>(functions).value, {value1, value2}, this);
-            if (name == "leq"       ) return execute<2>(stdx::get<S<"leq"     >>(functions).value, {value1, value2}, this);
-            if (name == "lt"        ) return execute<2>(stdx::get<S<"lt"      >>(functions).value, {value1, value2}, this);
+            if (name == "get"       ) return execute(stdx::get<S<"get"       >>(functions).value, {value1, value2}, this);
+            if (name == "push"      ) return execute(stdx::get<S<"push"      >>(functions).value, {value1, value2}, this);
+            if (name == "remove_at" ) return execute(stdx::get<S<"remove_at" >>(functions).value, {value1, value2}, this);
+            if (name == "object_has") return execute(stdx::get<S<"object_has">>(functions).value, {value1, value2}, this);
+            if (name == "str_split" ) return execute(stdx::get<S<"str_split" >>(functions).value, {value1, value2}, this);
+            if (name == "add"       ) return execute(stdx::get<S<"add"     >>(functions).value, {value1, value2}, this);
+            if (name == "sub"       ) return execute(stdx::get<S<"sub"     >>(functions).value, {value1, value2}, this);
+            if (name == "mul"       ) return execute(stdx::get<S<"mul"     >>(functions).value, {value1, value2}, this);
+            if (name == "div"       ) return execute(stdx::get<S<"div"     >>(functions).value, {value1, value2}, this);
+            if (name == "mod"       ) return execute(stdx::get<S<"mod"     >>(functions).value, {value1, value2}, this);
+            if (name == "pow"       ) return execute(stdx::get<S<"pow"     >>(functions).value, {value1, value2}, this);
+            if (name == "bit_and"   ) return execute(stdx::get<S<"bit_and" >>(functions).value, {value1, value2}, this);
+            if (name == "bit_or"    ) return execute(stdx::get<S<"bit_or"  >>(functions).value, {value1, value2}, this);
+            if (name == "xor"       ) return execute(stdx::get<S<"xor"     >>(functions).value, {value1, value2}, this);
+            if (name == "rand_int"  ) return execute(stdx::get<S<"rand_int">>(functions).value, {value1, value2}, this);
+            if (name == "gt"        ) return execute(stdx::get<S<"gt"      >>(functions).value, {value1, value2}, this);
+            if (name == "geq"       ) return execute(stdx::get<S<"geq"     >>(functions).value, {value1, value2}, this);
+            if (name == "eq"        ) return execute(stdx::get<S<"eq"      >>(functions).value, {value1, value2}, this);
+            if (name == "leq"       ) return execute(stdx::get<S<"leq"     >>(functions).value, {value1, value2}, this);
+            if (name == "lt"        ) return execute(stdx::get<S<"lt"      >>(functions).value, {value1, value2}, this);
 
             #if not WEB_PIE
-            if (name == "dlsym"   ) return execute<2>(stdx::get<S<"dlsym"   >>(functions).value, {value1, value2}, this);
+            if (name == "dlsym"   ) return execute(stdx::get<S<"dlsym"   >>(functions).value, {value1, value2}, this);
             #endif
 
             util::error();
@@ -6291,14 +6298,14 @@ There are no mistakes with art.)";
             auto expanded = expandArgs(args, std::move(expand_at));
             arity_check(3, expanded);
 
-            return execute<3>(stdx::get<S<"set">>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
+            return execute(stdx::get<S<"set">>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
         }
 
         if (name == "insert_at") {
             auto expanded = expandArgs(args, std::move(expand_at));
             arity_check(3, expanded);
 
-            return execute<3>(stdx::get<S<"insert_at">>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
+            return execute(stdx::get<S<"insert_at">>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
         }
 
         if (name == "str_slice") {
