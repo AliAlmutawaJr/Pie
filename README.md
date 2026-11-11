@@ -54,30 +54,29 @@ If you're a windows dev and would like to contribute to Pie, writing a guide on 
 
 
 ### Todo (in order of priority)
-
-- [ ] Add pattern matching against code!
 - [ ] Add generators/coroutines!
 - [ ] Improve error messages (add line and column numbers)
 - [ ] LSP
+- [ ] Named Arguments for class constructors!
 - [ ] Design a system for variadic operators
-- [ ] World domination
 - [ ] Encode parameter's default value within the type system `= ...`
 - [ ] Make `=` and `=>` overloadable
+- [ ] World domination
 - [ ] Better File IO
-- [ ] Named Arguments for class constructors!
-- [ ] Breaking Out of Nested Loops
 - [ ] Bind parameter zones directly instead of flattening (internal)
-- [ ] Move from Make to Bake
 - [ ] Simplify Closure Captures without performance penalty (internal)
+- [ ] Breaking Out of Nested Loops
 - [ ] Clean up builtin functions code (internal)
 - [ ] `Expr::involveName()` seems to be not exhastive, especially with Closure. Check it.
 - [ ] Fix builtin reset (value-reset, reset/name-reset) 
+- [ ] Move from Make to Bake
 - [ ] Add LLVM backend
 
 
 ---
 
 ### Done
+- [x] Add pattern matching against code!
 - [x] Positional-only and kw-only parameters
 - [x] Fix defer throwing (inside destructor) ((mostly));
 - [x] Add Tuples!

@@ -6453,8 +6453,8 @@ There are no mistakes with art.)";
 
 
     value::Value defer(const expr::Call *call, std::vector<expr::ExprPtr> args) {
-        if (args.empty()   ) util::error("`__builtin_defer` requires at least 1 argument: " + call->stringify());
-        if (args.size() > 2) util::error("`__builtin_defer` accepts at most 2 argument: " + call->stringify());
+        if (args.empty()    ) util::error("`__builtin_defer` requires at least 1 argument: " + call->stringify());
+        if (args.size () > 2) util::error("`__builtin_defer` accepts at most 2 argument: " + call->stringify());
 
         // 
         BigInt depth{};
