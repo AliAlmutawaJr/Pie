@@ -1,9 +1,17 @@
 
-PLEASE NOTE THAT THE SPEC IS NOT DONE YET!
+PLEASE NOTE THAT THE SPEC IS INCOMPLETE!
 ------------------------------------------
 
 # The Pie Programming Language Official Specification
 
+## Authors / Editors
+ - Pie :3 (Ali A. Jr.)
+ - DrkWithT ("Derk")
+
+## Change History
+ - **Pie :3 2025?**: Initial specification created?
+ - **DrkWithT 2026/11/12**: Added clarification to _Assignments_ section and fixed some typos.
+ - TBA
 
 ### Index:
 - [Chapter 1: Philosophy](#chapter-1-philosophy)
@@ -38,7 +46,7 @@ PLEASE NOTE THAT THE SPEC IS NOT DONE YET!
 
 
 ## Chapter 1: Philosophy
-Pie is an expression-only language with dynamic strong typing & user-defined operators.
+Pie is an expression-based language with dynamic, strong, gradual typing & user-defined operators aiming to be powerfully flexible and expressive.
 At its core, Pie is just a collection of features deemed "cool" by its creator, Ali Almutawa Jr.
 
 
@@ -72,7 +80,7 @@ Pie has 12 keywords:
 Punctuation may **not** be assigned to.
 
 
-Pie reserves 12 punctuation:
+Pie reserves 12 punctuators:
 - `(`
 - `)`
 - `{`
@@ -88,10 +96,9 @@ Pie reserves 12 punctuation:
 
 
 ### 2.3 Literal Values
-**Literal Values or Built-in Values** are values which need not any imports. They are readily available in the language. These values include numbers, strings, built-in types, and functions with names that start with `__builtin_`.
-These values may be assigned to.
+**Literal Values or Built-in Values** are values which do not need importing. They are readily available in the language. These values include numbers, strings, built-in types, and functions with names that start with `__builtin_`. These values may be [assigned](#45-assignments) to.
 
-Literal Values are summerized in the following list:
+Literal Values are summarized in the following list:
 <!-- since types are values, we'll add them here too! -->
 - `Any`
 - `Bool`
@@ -108,7 +115,8 @@ Literal Values are summerized in the following list:
 
 
 ### 2.4 Comments
-There 2 types of comments in Pie:
+There are 2 types of comments in Pie:
+
 #### 2.4.1 Line Comments
 Any text that is between `.:` and either a newline character `'\n'` or the end of file.
 
@@ -439,10 +447,9 @@ These identifiers cannot be annotated with a type.
 
 
 ### 4.5 Assignments
-When using the infix operator `=`, its LHS gets assigned to the value of the RHS.
-`x = y` will set `x` to the value of `y`.
+One can see the assignment operation as doing a _binding_ of the LHS item to the RHS once the assignment is done. Each scope is like a dictionary of LHS to RHS entries.
 
-Assignments yield their new value.
+Assignments yield their newly bound value. For example, `1 + 1 = 11` alone is like creating an entry relating `'1 + 1'` to constant Int `11`. `(Int) 11` is yielded.
 
 #### 4.5.1 Order Of Evaluation
 Assignments evaluate their RHS before evaluating the LHS.
