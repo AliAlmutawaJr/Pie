@@ -424,9 +424,10 @@ Pie booleans have 2 literals: `true` and `false`.
 Anything that starts and ends with quotes (`"`) is considered a string.
 
 ### 4.4 Identifiers
-Identifiers are names that bind to values. What you know as "variables".
+Identifiers are names that bind to values. In other words, these practically behave like variables.
 
-Identifier names can either be proper or improper.
+Identifier names can either be proper or improper as explained below.
+
 #### 4.4.1 Proper Names
 A name is proper if it has these three properties:
 - Contain **NO** spaces
@@ -449,7 +450,23 @@ These identifiers cannot be annotated with a type.
 ### 4.5 Assignments
 One can see the assignment operation as doing a _binding_ of the LHS item to the RHS once the assignment is done. Each scope is like a dictionary of LHS to RHS entries.
 
-Assignments yield their newly bound value. For example, `1 + 1 = 11` alone is like creating an entry relating `'1 + 1'` to constant Int `11`. `(Int) 11` is yielded.
+Assignments yield their newly bound value. For example, `1 + 1 = 11` is like creating an entry relating `'1 + 1'` to the _original_ value behind `11`. An original value comes from recursively following the mappings from LHS to RHS in the scopes until a value is found that has not been assigned to.
+
+For example, if `11` has not been assigned to:
+```
+1 + 1 = 11;
+.:: this gives 11 ::.
+__builtin_print(1 + 1);
+```
+
+Otherwise, if `11` has been assigned to, including if `11` itself is assigned and so on:
+```
+.:: (other code before) ::.
+11 = something;
+1 + 1 = 11;
+.:: this gives something's original value ::.
+__builtin_print(1 + 1);
+```
 
 #### 4.5.1 Order Of Evaluation
 Assignments evaluate their RHS before evaluating the LHS.
@@ -584,7 +601,7 @@ someOtherFunc(1, 2, 3);          .: returns 3
 someOtherFunc(1, 2, 3, 4, 5, 6); .: returns 6
 ```
 
-For more information about packs, check out the [section 4.8 Packs](#48-packs)
+For more information about packs, check out [section 4.8 Packs](#48-packs).
 
 #### 4.7.3 Auto Currying
 Functions in Pie will be curried if the number of arguments is less than the number of parameters.
@@ -827,7 +844,7 @@ object3 = C(10, "hi", true);
 
 
 ### 4.10 Unions
-Unions allow for a varibale to have multiple types:
+Unions allow for a variable's data to have one of multiple possible types:
 
 ```pie
 U: Type = union {
@@ -956,7 +973,7 @@ See [4.10 Unions](#410-unions).
 
 
 ### 5.4 Values as Types
-Values can be used as types in Pie. A varaible with a given type that is a value will only be able to be assigned to that value itself:
+Values can be used as types in Pie. A variable with a given type that is a value will only be able to be assigned to that value itself. This can be used to imitate constants.
 ```pie
 x: 1 = 1;
 y: "hi" = "hi";
@@ -972,7 +989,7 @@ x = 3;
 ```
 
 ### 5.5 Concepts
-Concepts are unary predicate functions which are used as types. The value assigned to a variable with such type is checked by the unary function in order to type check.
+Concepts are unary predicate functions which are used as type constraints. The value assigned to a variable with a concept type is type checked by the unary function.
 
 This program is ill-formed:
 ```pie
