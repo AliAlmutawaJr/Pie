@@ -32,6 +32,7 @@ namespace except {
     DefineError(InvalidArgument    );
     DefineError(OpeningDyLib       );
     DefineError(DyLibSymbolLookup  );
+    DefineError(ThreadError        );
 
 
 class Error : public std::runtime_error, public LocatedError {

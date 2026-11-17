@@ -3,4 +3,5 @@ space std {
     abs  = __builtin_abs ;
     pow  = __builtin_pow ;
     .: sqrt = __builtin_sqrt;
+    rand = __builtin_rand_int;
 };

@@ -91,8 +91,8 @@ struct Any { };
 
 std::string errMsg(const std::vector<value::Value>& args, const auto& that) {
     std::string msg = "Wrong type passed to builtin function:\n";
-    for (size_t i = 1; const auto& arg : args) {
-        msg +=  "Arg " + std::to_string(i) + ": " + that->stringify(arg);
+    for (size_t i{}; const auto& arg : args) {
+        msg +=  "Arg " + std::to_string(++i) + ": " + that->stringify(arg) + '\n';
     }
 
     return msg;

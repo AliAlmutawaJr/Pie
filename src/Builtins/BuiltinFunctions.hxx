@@ -3,14 +3,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
-#include <cstdio>
-#include <limits>
-#include <random>
+// #include <cstdio>
+// #include <limits>
+// #include <random>
 #include <ranges>
 #include <ffi.h>
 #include <string>
 #include <type_traits>
-#include <variant>
 
 #include <dlfcn.h>
 
@@ -24,8 +23,8 @@
 #include "Declarations.hxx"
 #include "ConstexprLookup.hxx"
 #include "../Utils/utils.hxx"
-#include "../Diagnostic/Exceptions.hxx"
 #include "../Value/Value.hxx"
+#include "../Http/Http.hxx"
 
 
 // for libffi
@@ -233,6 +232,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     >{},
 
 
+    //* File IO
     MapEntry<
         S<"open_file">,
         Func<
@@ -270,8 +270,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
             decltype([](const auto& stream, const auto&) {
                 auto file = reinterpret_cast<std::fstream*>(stream.pointer);
                 file->close();
-
                 delete file;
+
                 return stream;
             }),
             TypeList<value::Address>
@@ -351,6 +351,75 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 if(not file->get(c)) util::error("Tried to read EOF");
 
                 return std::string{c};
+            }),
+            TypeList<value::Address>
+        >
+    >{},
+
+
+
+    //* ASIO
+    MapEntry<
+        S<"server">,
+        Func<
+            decltype([](const auto&) -> value::Address {
+                return value::Address{
+                    "server",
+                    new http::Server
+                };
+            }),
+            TypeList<>
+        >
+    >{},
+
+    MapEntry<
+        S<"listen">,
+        Func<
+            decltype([](const auto& server, const auto& host, const auto& port, const auto&) {
+                auto server_ptr = reinterpret_cast<http::Server*>(server.pointer);
+                server_ptr->listen(host, int(port));
+
+                return server;
+            }),
+            TypeList<value::Address, std::string, BigInt>
+        >
+    >{},
+
+    MapEntry<
+        S<"next">,
+        Func<
+            decltype([](const auto& server, const auto&) {
+                auto server_ptr = reinterpret_cast<http::Server*>(server.pointer);
+                auto [method, path, body] = server_ptr->getRequest();
+
+                return value::makeTuple({std::move(method), std::move(path), std::move(body)});
+            }),
+            TypeList<value::Address>
+        >
+    >{},
+
+    MapEntry<
+        S<"reply">,
+        Func<
+            decltype([](const auto& server, const auto& status, const auto& content, const auto&) {
+                auto server_ptr = reinterpret_cast<http::Server*>(server.pointer);
+
+                if (status < 0 or status > 600) util::error("Invalid Error code: " + status.str());
+
+                return server_ptr->reply(status.template convert_to<int>(), (content));
+            }),
+            TypeList<value::Address, BigInt, std::string>
+        >
+    >{},
+
+    MapEntry<
+        S<"close_server">,
+        Func<
+            decltype([](const auto& server, const auto&) {
+                auto server_ptr = reinterpret_cast<http::Server*>(server.pointer);
+                delete server_ptr;
+
+                return server;
             }),
             TypeList<value::Address>
         >

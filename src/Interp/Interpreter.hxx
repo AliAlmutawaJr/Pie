@@ -15,6 +15,7 @@
 #include <utility>
 #include <memory>
 #include <filesystem>
+#include <mutex>
 #include <concepts>
 
 
@@ -45,6 +46,7 @@
 #include "../Builtins/ConstexprLookup.hxx"
 #include "../Builtins/BuiltinFunctions.hxx"
 #include "TreeMaker.hxx"
+#include "../Http/Http.hxx"
 
 
 #define LIFT(expr) [&] { return expr; }
@@ -1022,7 +1024,7 @@ public:
         }
         else { // var already exists. Confirmed by static analysis
             auto var = getVar(name->var_ID, liftName(name));
-            if (not var) util::error();
+            if (not var) util::error(name->name + " not found [" + std::to_string(name->var_ID) + "] !!!");
 
             if (isRef(name->var_ID)) return refAssign(ass, name);
 
@@ -5728,7 +5730,7 @@ There are no mistakes with art.)";
 
 
     [[nodiscard]] bool isBuiltin(const std::string_view func) const {
-        const auto make_builtin = [] (const std::string& n) { return "__builtin_" + n; };
+        const auto makeBuiltin = [] (const std::string& n) { return "__builtin_" + n; };
 
         for(const auto& builtin : {
             //* variadic
@@ -5751,9 +5753,10 @@ There are no mistakes with art.)";
             "neg", "abs",
             "not",
             "to_int", "to_double", "to_string", "as_pack",
+            "pop", "pop_front",
 
             //* binary
-            "get", "push", "pop", "pop_front", "insert_at", "remove_at", "object_has",
+            "get", "push", "remove_at", "object_has",
             "add", "sub", "mul", "div", "mod",
             "pow",
             "gt", "geq", "eq", "leq", "lt",
@@ -5764,6 +5767,7 @@ There are no mistakes with art.)";
 
             //* trinary
             "set",
+            "insert_at",
             "conditional",
 
             //* quaternary 
@@ -5779,6 +5783,13 @@ There are no mistakes with art.)";
             "read_file",
             "read_line",
             "read_word",
+
+            //* ASIO
+            "server",
+            "listen",
+            "next",
+            "reply",
+            "close_server",
 
 
             //* FFI shit
@@ -5805,7 +5816,7 @@ There are no mistakes with art.)";
             "ffi_type_complex",
             "ptr_to_string",
         })
-            if (make_builtin(builtin) == func) return true;
+            if (makeBuiltin(builtin) == func) return true;
 
         return false;
     }
@@ -6037,6 +6048,8 @@ There are no mistakes with art.)";
 
 
         const auto nullary_funcs = {
+            "server"sv          ,
+
             "input_str"sv       ,
             "input_int"sv       ,
             "statement_span"sv  ,
@@ -6062,6 +6075,9 @@ There are no mistakes with art.)";
         if (std::ranges::find(nullary_funcs, name) != nullary_funcs.end()) {
             auto expanded = expandArgs(args, std::move(expand_at));
             arity_check(0, expanded);
+
+            if (name == "server"              ) return execute(stdx::get<S<"server"          >>(functions).value, {}, this);
+
             if (name == "input_str"           ) return execute(stdx::get<S<"input_str"       >>(functions).value, {}, this);
             if (name == "input_int"           ) return execute(stdx::get<S<"input_int"       >>(functions).value, {}, this);
             if (name == "statement_span"      ) return execute(stdx::get<S<"statement_span"  >>(functions).value, {}, this);
@@ -6102,6 +6118,9 @@ There are no mistakes with art.)";
 
 
         const auto unary_funcs = {
+            "next",
+            "close_server",
+
             "type"         ,
             "len"          ,
             "reverse"      ,
@@ -6164,7 +6183,7 @@ There are no mistakes with art.)";
             if (name == "to_string"    ) return execute(stdx::get<S<"to_string" >>(functions).value, {expanded[0]}, this);
             if (name == "as_pack"      ) return execute(stdx::get<S<"as_pack"   >>(functions).value, {expanded[0]}, this);
             if (name == "open_file"    ) {
-                std::clog << "name: " << name << std::endl;
+
                 // gotta normalize the file path first
                 if (not std::holds_alternative<std::string>(expanded[0]))
                     util::error<except::InvalidArgument>(
@@ -6184,15 +6203,16 @@ There are no mistakes with art.)";
             if (name == "read_line"   ) return execute(stdx::get<S<"read_line"   >>(functions).value, {expanded[0]}, this);
             if (name == "read_word"   ) return execute(stdx::get<S<"read_word"   >>(functions).value, {expanded[0]}, this);
 
-            #if not WEB_PIE
-            if (name == "dlopen"       ) return execute(stdx::get<S<"dlopen"    >>(functions).value, {expanded[0]}, this);
+            if (name == "dlopen"       ) return execute(stdx::get<S<"dlopen"       >>(functions).value, {expanded[0]}, this);
             if (name == "ptr_to_string") return execute(stdx::get<S<"ptr_to_string">>(functions).value, {expanded[0]}, this);
-            #endif
+
+            if (name == "next"        ) return execute(stdx::get<S<"next"        >>(functions).value, {expanded[0]}, this);
+            if (name == "close_server") return execute(stdx::get<S<"close_server">>(functions).value, {expanded[0]}, this);
         }
 
         // all the rest of those funcs expect 2 arguments
 
-        const auto eager = {
+        const auto binary_funcs = {
             "write_file"sv,
             "get"sv,
             "push"sv,
@@ -6217,7 +6237,7 @@ There are no mistakes with art.)";
             "dlsym"sv
         };
 
-        if (std::ranges::find(eager, name) != eager.end()) {
+        if (std::ranges::find(binary_funcs, name) != binary_funcs.end()) {
             auto expanded = expandArgs(args, std::move(expand_at));
             arity_check(2, expanded);
 
@@ -6254,6 +6274,27 @@ There are no mistakes with art.)";
 
             util::error();
         }
+
+        const auto trinary_funcs = {
+            "set"      ,
+            "insert_at",
+            "listen"   ,
+            "reply"    ,
+        };
+
+        if (std::ranges::find(trinary_funcs, name) != trinary_funcs.end()) {
+            auto expanded = expandArgs(args, std::move(expand_at));
+            arity_check(3, expanded);
+
+            if (name == "set"      ) return execute(stdx::get<S<"set"      >>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
+            if (name == "insert_at") return execute(stdx::get<S<"insert_at">>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
+            if (name == "listen"   ) return execute(stdx::get<S<"listen"   >>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
+            if (name == "reply"    ) return execute(stdx::get<S<"reply"    >>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
+
+            util::error();
+        }
+
+
 
 
         if (name == "and") {
@@ -6294,19 +6335,6 @@ There are no mistakes with art.)";
             return std::visit(*this, otherwise).value;
         }
 
-        if (name == "set") {
-            auto expanded = expandArgs(args, std::move(expand_at));
-            arity_check(3, expanded);
-
-            return execute(stdx::get<S<"set">>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
-        }
-
-        if (name == "insert_at") {
-            auto expanded = expandArgs(args, std::move(expand_at));
-            arity_check(3, expanded);
-
-            return execute(stdx::get<S<"insert_at">>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
-        }
 
         if (name == "str_slice") {
             auto expanded = expandArgs(args, std::move(expand_at));

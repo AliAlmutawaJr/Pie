@@ -72,6 +72,7 @@ inline constexpr auto NAMES = {
     "__builtin_str_split",
     "__builtin_as_pack",
 
+#ifndef WEB_PIE
     // //* File IO
     "__builtin_open_file",
     "__builtin_is_file_open",
@@ -80,6 +81,13 @@ inline constexpr auto NAMES = {
     "__builtin_read_file",
     "__builtin_read_line",
     "__builtin_read_word",
+
+    //* ASIO
+   "__builtin_server",
+   "__builtin_listen",
+   "__builtin_next",
+   "__builtin_reply",
+   "__builtin_close_server",
 
     //* FFI shit
     "__builtin_dlopen",
@@ -101,6 +109,7 @@ inline constexpr auto NAMES = {
     "__builtin_ffi_type_pointer",
     "__builtin_ffi_type_cstring",
     "__builtin_ffi_type_complex",
+#endif
 
     "__builtin_ptr_to_string",
 };

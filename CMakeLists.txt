@@ -16,6 +16,16 @@ include(ExternalProject)
 # Header-only dependencies
 # ============================================================================
 
+# for web servers
+FetchContent_Declare(
+    httplib
+    GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+    GIT_TAG v0.66.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR __pie_do_not_configure__
+)
+
+
 FetchContent_Declare(
     mp11
     GIT_REPOSITORY https://github.com/boostorg/mp11.git
@@ -94,6 +104,7 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(
+    httplib
     mp11
     boost_config
     boost_assert
@@ -250,6 +261,7 @@ file(GLOB PIE_SOURCES CONFIGURE_DEPENDS
 
 set(PIE_INCLUDE_DIRS
     "${PROJECT_SOURCE_DIR}/src"
+    "${httplib_SOURCE_DIR}"
     "${mp11_SOURCE_DIR}/include"
     "${boost_config_SOURCE_DIR}/include"
     "${boost_assert_SOURCE_DIR}/include"
