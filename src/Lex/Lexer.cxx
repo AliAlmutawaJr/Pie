@@ -59,8 +59,8 @@ bool validNameChar(const char c) noexcept {
         case '/':
         case '<':
         case '>':
-        case '[':
-        case ']':
+        // case '[':
+        // case ']':
         case '=': // validNameChar would only be used when checking chars that are not the first in the name
             return true;
     }
@@ -188,6 +188,11 @@ token::Tokens lex(const std::string& src, const bool check_for_semis, const std:
 
 
             case CC::NAME: {
+                if (src[index] == '[' or src[index] == ']') {
+                    emplace(NAME, std::string{src[index]});
+                    break;
+                }
+
                 if (src[index] == '-' and index + 1 < src.length() and src[index + 1] == '>') {
                     ++to_column;
                     emplace(THIN_ARROW, std::string{src[index], src[++index]});
