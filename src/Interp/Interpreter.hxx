@@ -15,7 +15,6 @@
 #include <utility>
 #include <memory>
 #include <filesystem>
-#include <mutex>
 #include <concepts>
 
 
@@ -78,6 +77,7 @@ struct NameSpace {
 class Visitor {
 
     const std::filesystem::path root;
+    const std::span<std::string_view> argv;
 
 
     // maintain invariant: these two vectors MUST be the same size!
@@ -110,8 +110,9 @@ public:
     const util::SourceSpan& getCurrentSpan() const { return curr_span; }
 
 
-    Visitor(std::vector<size_t> indices, std::filesystem::path r = ".") noexcept :
+    Visitor(std::vector<size_t> indices, std::filesystem::path r, std::span<std::string_view> arg_vec) noexcept :
     root{r.parent_path()},
+    argv{arg_vec},
     env{{std::make_shared<value::Env>()}},
     deferred{{}},
     import_indices{std::move(indices)}
@@ -2585,7 +2586,7 @@ There are no mistakes with art.)";
 
 
         value::Value value;
-        Visitor v{std::move(ls).indeces, "."};
+        Visitor v{std::move(ls).indeces, ".", argv};
 
         for (size_t i{}; i < builtins::NAMES.size(); ++i)
             // reference the same global
@@ -5730,93 +5731,8 @@ There are no mistakes with art.)";
 
 
     [[nodiscard]] bool isBuiltin(const std::string_view func) const {
-        const auto makeBuiltin = [] (const std::string& n) { return "__builtin_" + n; };
-
-        for(const auto& builtin : {
-            //* variadic
-            "print", "concat", "defer",
-            "create_class", "parse",
-
-            // debugging
-            "print_env",
-            "panic",
-            "id",
-
-            //* nullary
-            "input_str", "input_int", "statement_span",
-
-            //* unary
-            "run",
-            "type", "decltype",
-            "len", "reverse", "into_pack", "into_tuple",
-            "reset", "eval",
-            "neg", "abs",
-            "not",
-            "to_int", "to_double", "to_string", "as_pack",
-            "pop", "pop_front",
-
-            //* binary
-            "get", "push", "remove_at", "object_has",
-            "add", "sub", "mul", "div", "mod",
-            "pow",
-            "gt", "geq", "eq", "leq", "lt",
-            "and", "or",  
-            "bit_and", "bit_or", "xor",
-
-            "rand_int",
-
-            //* trinary
-            "set",
-            "insert_at",
-            "conditional",
-
-            //* quaternary 
-            "str_slice", // (str, start, end, step), should I add another overload for (str, start, length)??
-            "str_split",
-
-
-            //* File IO
-            "open_file",
-            "close_file",
-            "is_file_open",
-            "write_file",
-            "read_file",
-            "read_line",
-            "read_word",
-
-            //* ASIO
-            "server",
-            "listen",
-            "next",
-            "reply",
-            "close_server",
-
-
-            //* FFI shit
-            "dlopen",
-            "dlsym" ,
-            "ffi_call"  ,
-
-            "ffi_type_void"   ,
-            "ffi_type_int"    ,
-            "ffi_type_float"  ,
-            "ffi_type_double" ,
-            "ffi_type_long_double",
-            "ffi_type_uint8"  ,
-            "ffi_type_sint8"  ,
-            "ffi_type_uint16" ,
-            "ffi_type_sint16" ,
-            "ffi_type_uint32" ,
-            "ffi_type_sint32" ,
-            "ffi_type_uint64" ,
-            "ffi_type_sint64" ,
-            "ffi_type_struct" ,
-            "ffi_type_pointer",
-            "ffi_type_cstring",
-            "ffi_type_complex",
-            "ptr_to_string",
-        })
-            if (makeBuiltin(builtin) == func) return true;
+        for(const auto& builtin : builtins::NAMES | std::views::drop(7))
+            if (builtin == func) return true;
 
         return false;
     }
@@ -6048,39 +5964,46 @@ There are no mistakes with art.)";
 
 
         const auto nullary_funcs = {
-            "server"sv          ,
-
-            "input_str"sv       ,
-            "input_int"sv       ,
-            "statement_span"sv  ,
-            "ffi_type_void"sv   ,
-            "ffi_type_int"sv    ,
-            "ffi_type_float"sv  ,
-            "ffi_type_double"sv ,
-            "ffi_type_long_double"sv,
-            "ffi_type_uint8"sv  ,
-            "ffi_type_sint8"sv  ,
-            "ffi_type_uint16"sv ,
-            "ffi_type_sint16"sv ,
-            "ffi_type_uint32"sv ,
-            "ffi_type_sint32"sv ,
-            "ffi_type_uint64"sv ,
-            "ffi_type_sint64"sv ,
-            "ffi_type_struct"sv ,
-            "ffi_type_pointer"sv,
-            "ffi_type_cstring"sv,
-            "ffi_type_complex"sv,
+            "argv"                ,
+            "server"              ,
+            "input_str"           ,
+            "input_int"           ,
+            "statement_span"      ,
+            "ffi_type_void"       ,
+            "ffi_type_int"        ,
+            "ffi_type_float"      ,
+            "ffi_type_double"     ,
+            "ffi_type_long_double",
+            "ffi_type_uint8"      ,
+            "ffi_type_sint8"      ,
+            "ffi_type_uint16"     ,
+            "ffi_type_sint16"     ,
+            "ffi_type_uint32"     ,
+            "ffi_type_sint32"     ,
+            "ffi_type_uint64"     ,
+            "ffi_type_sint64"     ,
+            "ffi_type_struct"     ,
+            "ffi_type_pointer"    ,
+            "ffi_type_cstring"    ,
+            "ffi_type_complex"    ,
         };
 
         if (std::ranges::find(nullary_funcs, name) != nullary_funcs.end()) {
             auto expanded = expandArgs(args, std::move(expand_at));
             arity_check(0, expanded);
 
-            if (name == "server"              ) return execute(stdx::get<S<"server"          >>(functions).value, {}, this);
+            if (name == "argv") return value::makeList(
+                argv
+                | std::views::transform([] (const std::string_view sv) { return std::string{sv}; })
+                | std::ranges::to<std::vector<value::Value>>()
+            );
 
-            if (name == "input_str"           ) return execute(stdx::get<S<"input_str"       >>(functions).value, {}, this);
-            if (name == "input_int"           ) return execute(stdx::get<S<"input_int"       >>(functions).value, {}, this);
-            if (name == "statement_span"      ) return execute(stdx::get<S<"statement_span"  >>(functions).value, {}, this);
+            if (name == "server") return execute(stdx::get<S<"server">>(functions).value, {}, this);
+
+
+            if (name == "input_str"     ) return execute(stdx::get<S<"input_str"     >>(functions).value, {}, this);
+            if (name == "input_int"     ) return execute(stdx::get<S<"input_int"     >>(functions).value, {}, this);
+            if (name == "statement_span") return execute(stdx::get<S<"statement_span">>(functions).value, {}, this);
 
             #if not WEB_PIE
             if (name == "ffi_type_int"        ) return execute(stdx::get<S<"ffi_type_int"        >>(functions).value, {}, this);
@@ -7483,7 +7406,7 @@ There are no mistakes with art.)";
             }
         });
 
-        for (const auto& builtin : NAMES | std::views::drop(7)) // drop the first 6 names, which are the builtin types, not functions
+        for (const auto& builtin : NAMES | std::views::drop(7)) // drop the first 7 names, which are the builtin types, not functions
             globals.insert({
                 nextID(),
                 {

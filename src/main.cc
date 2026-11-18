@@ -1,6 +1,8 @@
 #include <print>
 #include <iostream>
 #include <exception>
+#include <span>
+#include <ranges>
 #include <string_view>
 #include <filesystem>
 
@@ -28,7 +30,7 @@ catch (...) {
 
 
 
-static int pieMain(int argc, char *argv[]) {
+static int pieMain(size_t argc, const char *argv[]) {
     constexpr auto VERSION = "1.14.0";
 
     using std::operator""s ;
@@ -49,7 +51,13 @@ static int pieMain(int argc, char *argv[]) {
     bool version            = false;
 
 
+
+    std::string_view views[128];
+    for (size_t i{}; i < argc; ++i) views[i] = argv[i];
+    const std::span<std::string_view> argument_vector{views, argc};
+
     std::string_view fname;
+
 
     try {
         // this would leave file name at argv[1]
@@ -67,22 +75,32 @@ static int pieMain(int argc, char *argv[]) {
             else fname = argv[1];
         }
 
-        if (version)
-            return std::println("Pie v{}", VERSION), 0;
+        if (version) {
+            std::println("Pie v{}", VERSION);
+            return 0;
+        }
 
-        if (command)
-            return pie::cli::run(std::string{fname}, print_tokens, print_parsed, norun), 0;
+        if (command) {
+            pie::cli::run(std::string{fname}, print_tokens, print_parsed, norun);
+            return 0;
+        }
 
-        if (print_help)
-            return pie::cli::help(), 0;
+
+        if (print_help) {
+            pie::cli::help();
+            return 0;
+        }
 
 
-        if (fname.empty() or repl)
-            return pie::cli::REPL(std::move(canonical_root), print_tokens, print_parsed, norun), 0;
+        if (fname.empty() or repl) {
+            pie::cli::REPL(std::move(canonical_root), argument_vector, print_tokens, print_parsed, norun);
+            return 0;
+        }
 
 
         pie::cli::runFile(
             std::filesystem::path(fname),
+            argument_vector,
             print_tokens,
             print_parsed,
             norun,
@@ -104,9 +122,9 @@ static int pieMain(int argc, char *argv[]) {
 
 
 
-int main(int argc, char *argv[]) {
+int main(const int argc, const char *argv[]) {
     // web pie manually hooks onto pieMain above ^
     #if not WEB_PIE
-        return pieMain(argc, argv);
+        return pieMain(static_cast<size_t>(argc), argv);
     #endif
 }

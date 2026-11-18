@@ -2,9 +2,10 @@
 
 #include <print>
 #include <iostream>
+#include <string_view>
+#include <span>
 
 #include "../Lex/Lexer.hxx"
-// #include "../Preprocessor/Preprocessor.hxx"
 #include "../Diagnostic/Sources.hxx"
 #include "../Diagnostic/Diagnostic.hxx"
 #include "../Parser/Parser.hxx"
@@ -28,13 +29,14 @@ namespace cli {
 
     void REPL(
         const std::filesystem::path canonical_root,
+        const std::span<std::string_view> argv,
         const bool print_tokens,
         const bool print_parsed,
         const bool norun
     ) {
         Parser parser{canonical_root};
         pie::analysis::LexicalAnalysis anal;
-        interp::Visitor visitor{{}};
+        interp::Visitor visitor{{}, ".", argv};
 
         for (;;) try {
             std::string line;
@@ -90,6 +92,7 @@ namespace cli {
 
     void runFile(
         const std::filesystem::path fname,
+        const std::span<std::string_view> argv,
         const bool print_tokens,
         const bool print_parsed,
         const bool norun,
@@ -145,7 +148,7 @@ namespace cli {
                 vm.execute();
             }
             else {
-                interp::Visitor visitor{std::move(anal).indeces, fname};
+                interp::Visitor visitor{std::move(anal).indeces, fname, argv};
                 for (const auto& expr : exprs) {
                     visitor.setCurrentSpan(expr->span);
                     std::visit(visitor, expr->variant());
@@ -187,7 +190,7 @@ namespace cli {
             for (auto& expr : exprs)
                 std::visit(anal, expr->variant());
 
-            interp::Visitor visitor{std::move(anal).indeces};
+            interp::Visitor visitor{std::move(anal).indeces, ".", {}};
             for (const auto& expr : exprs)
                 std::visit(visitor, expr->variant());
         }

@@ -27,6 +27,7 @@ inline constexpr auto NAMES = {
 
     "__builtin_print_env",
     "__builtin_panic",
+    "__builtin_argv",
     "__builtin_id",
     "__builtin_input_str",
     "__builtin_input_int",
