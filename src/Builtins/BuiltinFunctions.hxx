@@ -950,8 +950,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 auto dll = dlopen(path.data(), RTLD_NOW);
                 if (not dll) util::error<except::OpeningDyLib>(dlerror());
 
-                // return reinterpret_cast<BigInt>(dll);
-                return value::Address{"dynamic library", dll};
+                return value::Address{std::format("dynamic library '{}'", std::filesystem::absolute(path).string()), dll};
             }),
             TypeList<std::string>
         >
@@ -964,7 +963,7 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 auto sym = dlsym(dll.pointer, func_name.data());
                 if (not sym) util::error<except::DyLibSymbolLookup>(dlerror());
 
-                return value::Address{"dynamic library symbol", sym};
+                return value::Address{std::format("dynamic library symbol '{}'", func_name), sym};
             }),
             TypeList<value::Address, std::string>
         >
