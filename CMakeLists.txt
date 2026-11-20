@@ -388,6 +388,7 @@ if(EMCC_EXECUTABLE)
             -sNO_DISABLE_EXCEPTION_CATCHING
             -std=c++23
             "-I${PROJECT_SOURCE_DIR}/src"
+            "-I${httplib_SOURCE_DIR}"
             "-I${mp11_SOURCE_DIR}/include/"
             "-I${boost_config_SOURCE_DIR}/include/"
             "-I${boost_assert_SOURCE_DIR}/include/"

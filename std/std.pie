@@ -32,6 +32,7 @@ space std {
     toPack = __builtin_into_pack;
 
 
+    sleep = __builtin_wait;
     argv = __builtin_argv();
 
 
@@ -59,8 +60,8 @@ space std {
     };
     prefix ~ = (s: String) => (s);
 
-    infix(&&) and = (x, y) => __builtin_and(x, y);
-    infix(||) or  = (x, y) => __builtin_or (x, y);
+    infix(&&) and = (x, `y`) => __builtin_conditional(x, __builtin_eval(y), false);
+    infix(||) or  = (x, `y`) => __builtin_conditional(x, true,  __builtin_eval(y));
 
     infix == = (a, b) => __builtin_eq(a, b);
     .: infix != = (a, b) => __builtin_not(__builtin_eq(a, b));

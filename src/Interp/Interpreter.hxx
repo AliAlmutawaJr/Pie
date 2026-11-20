@@ -6044,6 +6044,7 @@ There are no mistakes with art.)";
             "next",
             "close_server",
 
+            "wait",
             "type"         ,
             "len"          ,
             "reverse"      ,
@@ -6090,6 +6091,7 @@ There are no mistakes with art.)";
             // evaluating arguments from left to right as needed
             // first argument is always evaluated
             // const value::Value value1 = std::visit(*this, args[0]->variant()).value;
+            if (name == "wait"         ) return execute(stdx::get<S<"wait"      >>(functions).value, {expanded[0]}, this);
             if (name == "type"         ) return execute(stdx::get<S<"type"      >>(functions).value, {expanded[0]}, this);
             if (name == "len"          ) return execute(stdx::get<S<"len"       >>(functions).value, {expanded[0]}, this);
             if (name == "reverse"      ) return execute(stdx::get<S<"reverse"   >>(functions).value, {expanded[0]}, this);
@@ -6105,6 +6107,9 @@ There are no mistakes with art.)";
             if (name == "to_double"    ) return execute(stdx::get<S<"to_double" >>(functions).value, {expanded[0]}, this);
             if (name == "to_string"    ) return execute(stdx::get<S<"to_string" >>(functions).value, {expanded[0]}, this);
             if (name == "as_pack"      ) return execute(stdx::get<S<"as_pack"   >>(functions).value, {expanded[0]}, this);
+
+
+            #if not WEB_PIE
             if (name == "open_file"    ) {
 
                 // gotta normalize the file path first
@@ -6128,6 +6133,7 @@ There are no mistakes with art.)";
 
             if (name == "dlopen"       ) return execute(stdx::get<S<"dlopen"       >>(functions).value, {expanded[0]}, this);
             if (name == "ptr_to_string") return execute(stdx::get<S<"ptr_to_string">>(functions).value, {expanded[0]}, this);
+            #endif
 
             if (name == "next"        ) return execute(stdx::get<S<"next"        >>(functions).value, {expanded[0]}, this);
             if (name == "close_server") return execute(stdx::get<S<"close_server">>(functions).value, {expanded[0]}, this);
@@ -6136,28 +6142,28 @@ There are no mistakes with art.)";
         // all the rest of those funcs expect 2 arguments
 
         const auto binary_funcs = {
-            "write_file"sv,
-            "get"sv,
-            "push"sv,
-            "remove_at"sv,
-            "object_has"sv,
-            "str_split"sv,
-            "add"sv,
-            "sub"sv,
-            "mul"sv,
-            "div"sv,
-            "bit_and"sv,
-            "bit_or"sv,
-            "xor"sv,
-            "rand_int"sv,
-            "mod"sv,
-            "pow"sv,
-            "gt"sv,
-            "geq"sv,
-            "eq"sv,
-            "leq"sv,
-            "lt"sv,
-            "dlsym"sv
+            "get",
+            "push",
+            "remove_at",
+            "object_has",
+            "str_split",
+            "add",
+            "sub",
+            "mul",
+            "div",
+            "bit_and",
+            "bit_or",
+            "xor",
+            "rand_int",
+            "mod",
+            "pow",
+            "gt",
+            "geq",
+            "eq",
+            "leq",
+            "lt",
+            "write_file",
+            "dlsym",
         };
 
         if (std::ranges::find(binary_funcs, name) != binary_funcs.end()) {
@@ -6168,7 +6174,6 @@ There are no mistakes with art.)";
             const auto& value2 = expanded[1];
 
             // this is disgusting..I know
-            if (name == "write_file") return execute(stdx::get<S<"write_file">>(functions).value, {value1, value2}, this);
 
             if (name == "get"       ) return execute(stdx::get<S<"get"       >>(functions).value, {value1, value2}, this);
             if (name == "push"      ) return execute(stdx::get<S<"push"      >>(functions).value, {value1, value2}, this);
@@ -6192,7 +6197,8 @@ There are no mistakes with art.)";
             if (name == "lt"        ) return execute(stdx::get<S<"lt"      >>(functions).value, {value1, value2}, this);
 
             #if not WEB_PIE
-            if (name == "dlsym"   ) return execute(stdx::get<S<"dlsym"   >>(functions).value, {value1, value2}, this);
+            if (name == "write_file") return execute(stdx::get<S<"write_file">>(functions).value, {value1, value2}, this);
+            if (name == "dlsym"     ) return execute(stdx::get<S<"dlsym"     >>(functions).value, {value1, value2}, this);
             #endif
 
             util::error();
@@ -6201,8 +6207,8 @@ There are no mistakes with art.)";
         const auto trinary_funcs = {
             "set"      ,
             "insert_at",
+            "mount"    ,
             "listen"   ,
-            "reply"    ,
         };
 
         if (std::ranges::find(trinary_funcs, name) != trinary_funcs.end()) {
@@ -6211,8 +6217,9 @@ There are no mistakes with art.)";
 
             if (name == "set"      ) return execute(stdx::get<S<"set"      >>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
             if (name == "insert_at") return execute(stdx::get<S<"insert_at">>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
+
+            if (name == "mount"    ) return execute(stdx::get<S<"mount"    >>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
             if (name == "listen"   ) return execute(stdx::get<S<"listen"   >>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
-            if (name == "reply"    ) return execute(stdx::get<S<"reply"    >>(functions).value, {expanded[0], expanded[1], expanded[2]}, this);
 
             util::error();
         }
@@ -6241,6 +6248,13 @@ There are no mistakes with art.)";
 
             if(get<bool>(value1)) return value1; // first truthy value
             return std::visit(*this, args[1]->variant()).value; // last falsey value
+        }
+
+
+        if (name == "reply") {
+            auto expanded = expandArgs(args, std::move(expand_at));
+            arity_check(4, expanded);
+            return execute(stdx::get<S<"reply"    >>(functions).value, {expanded[0], expanded[1], expanded[2], expanded[3]}, this);
         }
 
 

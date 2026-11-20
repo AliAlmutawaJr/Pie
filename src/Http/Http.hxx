@@ -16,8 +16,15 @@
 namespace pie::http {
 
 // A simpler and lightweight representation of httplib's Req and Res types
-struct Request { std::string method, path, body; };
-struct Response { std::string reply; int status; };
+struct Request {
+    std::string method, path, body;
+};
+
+struct Response {
+    int status;
+    std::string reply;
+    std::string content_type = "text/plain";
+};
 
 class Server {
     httplib::Server server;
@@ -50,7 +57,7 @@ public:
             }
 
             res.status = response.status;
-            res.set_content(response.reply, "text/plain");
+            res.set_content(response.reply, response.content_type);
         };
 
         server.Put(".*", handle);
@@ -86,14 +93,21 @@ public:
 
 
     // @answer is moved if true is returned
-    bool reply(const int status, const std::string& answer) {
+    bool reply(const int status, const std::string& answer, const std::string content_type) {
         if (not nexted) return false;
         nexted = false;
 
-        response = {answer, status};
+        response = {.status = status, .reply = answer, .content_type = content_type};
         done.release();
 
         return true;
+    }
+
+
+    bool mount(const std::string& prefix, const std::string& folder) {
+        if (thread.joinable()) return false; // util::error("Mount folders before the server starts listening");
+
+        return server.set_mount_point(prefix, folder);
     }
 
 };

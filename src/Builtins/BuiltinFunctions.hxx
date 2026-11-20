@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -8,7 +9,9 @@
 // #include <random>
 #include <ranges>
 #include <ffi.h>
+#include <ratio>
 #include <string>
+#include <thread>
 #include <type_traits>
 
 #include <dlfcn.h>
@@ -231,6 +234,24 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
         >
     >{},
 
+    MapEntry<
+        S<"wait">,
+        Func<
+            decltype([](const auto& ms, const auto&) {
+                if (ms < 0) util::error("`__builtin_wait` called with a negative value: " + ms.str());
+
+                #if WEB_PIE
+                    emscripten_sleep(ms.template convert_to<size_t>());
+                #else
+                    std::this_thread::sleep_for(std::chrono::duration<size_t, std::milli>(ms.template convert_to<size_t>()));
+                #endif
+
+                return ms;
+            }),
+            TypeList<BigInt>
+        >
+    >{},
+
 
     //* File IO
     MapEntry<
@@ -241,6 +262,8 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                     fname,
                     std::ios::in | std::ios::out | std::ios::app
                 };
+
+                file->seekg(0);
 
                 // if (not file->is_open()) util::error("Couldn't open file: " + fname);
 
@@ -401,14 +424,14 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
     MapEntry<
         S<"reply">,
         Func<
-            decltype([](const auto& server, const auto& status, const auto& content, const auto&) {
+            decltype([](const auto& server, const auto& status, const auto& content, const auto& content_type, const auto&) {
                 auto server_ptr = reinterpret_cast<http::Server*>(server.pointer);
 
                 if (status < 0 or status > 600) util::error("Invalid Error code: " + status.str());
 
-                return server_ptr->reply(status.template convert_to<int>(), (content));
+                return server_ptr->reply(status.template convert_to<int>(), content, content_type);
             }),
-            TypeList<value::Address, BigInt, std::string>
+            TypeList<value::Address, BigInt, std::string, std::string>
         >
     >{},
 
@@ -422,6 +445,17 @@ static constexpr auto functions = stdx::make_indexed_tuple<KeyFor>(
                 return server;
             }),
             TypeList<value::Address>
+        >
+    >{},
+
+    MapEntry<
+        S<"mount">,
+        Func<
+            decltype([](const auto& server, const auto& prefix, const auto& folder, const auto&) {
+                auto server_ptr = reinterpret_cast<http::Server*>(server.pointer);
+                return server_ptr->mount(prefix, folder);
+            }),
+            TypeList<value::Address, std::string, std::string>
         >
     >{},
 

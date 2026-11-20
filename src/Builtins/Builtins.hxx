@@ -73,6 +73,9 @@ inline constexpr auto NAMES = {
     "__builtin_str_split",
     "__builtin_as_pack",
 
+
+    "__builtin_wait",
+
 #ifndef WEB_PIE
     // //* File IO
     "__builtin_open_file",
@@ -88,6 +91,7 @@ inline constexpr auto NAMES = {
    "__builtin_listen",
    "__builtin_next",
    "__builtin_reply",
+   "__builtin_mount",
    "__builtin_close_server",
 
     //* FFI shit

@@ -63,14 +63,6 @@ inline std::string render(const std::exception& e) {
     if (const auto located = dynamic_cast<const except::LocatedError*>(&e)) {
         if (located->span.span.first.line != 0)
             out += renderSpan(located->span);
-
-
-        // for (const auto& note : located->notes) {
-        //     out += std::format("{}note:{} {}\n", BOLD, RESET, note.msg);
-
-        //     if (note.span and hasLocation(*note.span))
-        //         out += renderSpan(*note.span);
-        // }
     }
 
     while (not out.empty() and out.back() == '\n') out.pop_back();

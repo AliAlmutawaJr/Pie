@@ -88,7 +88,7 @@ struct Capture {
     {
         // forces visitor destructor to run
         // which intern forces the global defers
-        pie::interp::Visitor visitor{std::move(anal).indeces};
+        pie::interp::Visitor visitor{std::move(anal).indeces, ".", {}};
         for (const auto& expr : exprs)
             std::visit(visitor, expr->variant());
     }

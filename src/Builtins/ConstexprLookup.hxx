@@ -210,6 +210,62 @@ value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, co
     else pie::util::error(errMsg(args, that));
 }
 
+template <size_t SIZE, size_t N = 0, typename... Ts>
+requires (SIZE == 4)
+value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, const auto& that) {
+    if constexpr (N < decltype(func)::OVERLOAD_COUNT) {
+        using T1 = decltype(func.template get2<N, 0>());
+        using T2 = decltype(func.template get2<N, 1>());
+        using T3 = decltype(func.template get2<N, 2>());
+        using T4 = decltype(func.template get2<N, 3>());
+
+        if constexpr (not std::is_same_v<T1, Any>)
+            if (not std::holds_alternative<T1>(args[0])) 
+                return execute<SIZE, N + 1>(func, args, that); // try the next type list
+
+        if constexpr (not std::is_same_v<T2, Any>)
+            if (not std::holds_alternative<T2>(args[1])) 
+                return execute<SIZE, N + 1>(func, args, that);
+
+        if constexpr (not std::is_same_v<T3, Any>)
+            if (not std::holds_alternative<T3>(args[2])) 
+                return execute<SIZE, N + 1>(func, args, that);
+
+        if constexpr (not std::is_same_v<T4, Any>)
+            if (not std::holds_alternative<T4>(args[3])) 
+                return execute<SIZE, N + 1>(func, args, that);
+
+
+        constexpr bool is_any1 = std::is_same_v<T1, Any>;
+        std::conditional_t<is_any1, value::Value, T1> v1;
+        if constexpr (is_any1) v1 = args[0];
+        else v1 = std::get<T1>(args[0]);
+
+
+        constexpr bool is_any2 = std::is_same_v<T2, Any>;
+        std::conditional_t<is_any2, value::Value, T2> v2;
+        if constexpr (is_any2) v2 = args[1];
+        else v2 = std::get<T2>(args[1]);
+
+
+        constexpr bool is_any3 = std::is_same_v<T3, Any>;
+        std::conditional_t<is_any3, value::Value, T3> v3;
+        if constexpr (is_any3) v3 = args[2];
+        else v3 = std::get<T3>(args[2]);
+
+
+        constexpr bool is_any4 = std::is_same_v<T3, Any>;
+        std::conditional_t<is_any3, value::Value, T3> v4;
+        if constexpr (is_any4) v4 = args[3];
+        else v4 = std::get<T3>(args[3]);
+
+
+        return func.func(v1, v2, v3, v4, that);
+    }
+
+    else pie::util::error(errMsg(args, that));
+}
+
 
 template <typename... Ts>
 value::Value execute(Func<Ts...> func, const std::vector<value::Value>& args, const auto& that) {
